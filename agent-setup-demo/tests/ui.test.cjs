@@ -402,6 +402,48 @@ async function main() {
   const premiumEquippedAfter = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'PREMIUM').equippedEquipment.some((e) => e.name === 'sql-analysis' && e.level === 1));
   record('clicking an unequipped item in the bag equips it', premiumEquippedAfter === true);
 
+  // Scenario 1: wear get_order_status Lv1, then equip order-lookup Lv2 (carries Lv2) -> auto-upgrade with warning.
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.PREMIUM"]');
+  await page.click('[data-bag-gem="get_order_status"][data-bag-gem-level="1"]');
+  await page.click('[data-bag-equipment="order-lookup"][data-bag-equipment-level="2"]');
+  const scenario1Worn = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'PREMIUM').wornGems.find((g) => g.name === 'get_order_status'));
+  record('scenario 1: worn gem auto-upgrades to match the equipped item\'s carried level, no duplicate entry', !!scenario1Worn === false, JSON.stringify(scenario1Worn));
+  // (the gem is now carried by the equipment, not separately worn — wornGems should no longer list it)
+
+  await page.click('[data-unequip-equipment="order-lookup"]');
+
+  // Scenario 3: equip order-lookup Lv2 (carries Lv2) first, then try to wear get_order_status Lv1 -> blocked.
+  await page.click('[data-bag-equipment="order-lookup"][data-bag-equipment-level="2"]');
+  await page.click('[data-bag-gem="get_order_status"][data-bag-gem-level="1"]');
+  const scenario3Worn = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'PREMIUM').wornGems.some((g) => g.name === 'get_order_status'));
+  record('scenario 3: wearing a conflicting-level gem while the equipment already carries it is blocked', scenario3Worn === false);
+  const scenario3Error = await page.evaluate(() => window.appState.uiState.bagError);
+  record('scenario 3 blocking reason is shown', typeof scenario3Error === 'string' && scenario3Error.length > 0, scenario3Error);
+
+  await page.click('[data-unequip-equipment="order-lookup"]');
+
+  // Draft block: gem Lv4 is seeded as status:'draft'.
+  const draftAttempt = await page.evaluate(function () {
+    var variant = window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).variants.find(function (v) { return v.code === 'PREMIUM'; });
+    return wsWearGem(variant, 'get_order_status', 4);
+  });
+  record('wearing a draft-status gem is blocked by the pure rule function', draftAttempt.ok === false && draftAttempt.message.indexOf('公開版') !== -1, JSON.stringify(draftAttempt));
+
+  // Two-equipment conflict: equip order-lookup Lv1 (carries Lv1), then try sql-analysis would not conflict
+  // (different gem name) — instead prove the conflict with a second order-lookup-like equip attempt directly
+  // against the pure function, since the bag only ever shows one entry per equipment name.
+  const conflictResult = await page.evaluate(function () {
+    var variant = window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).variants.find(function (v) { return v.code === 'PREMIUM'; });
+    variant.equippedEquipment = [{ name: 'order-lookup', level: 1 }];
+    window.appState.data.equipment.push({ name: '__test_conflict_eq', displayName: '測試用衝突裝備', versions: [{ level: 1, status: 'published', gems: [{ gemName: 'get_order_status', level: 3 }] }] });
+    var result = wsEquipEquipment(variant, '__test_conflict_eq', 1);
+    window.appState.data.equipment.pop();
+    variant.equippedEquipment = [];
+    return result;
+  });
+  record('equipping a second item carrying the same gem at a different level is blocked', conflictResult.ok === false, JSON.stringify(conflictResult));
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

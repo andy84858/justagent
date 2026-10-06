@@ -785,13 +785,59 @@ function renderBagForVariant(state) {
 }
 
 function wsWearGem(variant, gemName, level) {
+  var already = variant.wornGems.find(function (g) { return g.name === gemName; });
+  if (already) {
+    return { ok: false, message: '這顆寶石已佩掛，請先卸下才能換等級' };
+  }
+  var gemDef = wsGemByName(gemName);
+  var ver = wsGemVersion(gemDef, level);
+  if (ver.status === 'draft') {
+    return { ok: false, message: '這個等級是草稿，人物卡只能引用公開版' };
+  }
+  var carried = wsCarriedGems(variant).find(function (cg) { return cg.gemName === gemName; });
+  if (carried) {
+    if (carried.level === level) {
+      return { ok: false, message: '目前穿著的裝備已鑲嵌同名同級寶石，無需另外佩掛' };
+    }
+    return { ok: false, message: '目前穿著的裝備已鑲嵌「' + gemDef.displayName + '」Lv' + carried.level + '，無法佩掛不同等級' };
+  }
   variant.wornGems.push({ name: gemName, level: level });
   return { ok: true };
 }
 
 function wsEquipEquipment(variant, eqName, level) {
+  var already = variant.equippedEquipment.find(function (e) { return e.name === eqName; });
+  if (already) {
+    return { ok: false, message: '這件裝備已穿上，請先卸下才能換等級' };
+  }
+  var eqDef = wsEquipmentByName(eqName);
+  var ver = wsEquipmentVersion(eqDef, level);
+  if (ver.status === 'draft') {
+    return { ok: false, message: '這個等級是草稿，人物卡只能引用公開版' };
+  }
+  var incomingGems = ver.gems || [];
+  for (var i = 0; i < incomingGems.length; i++) {
+    var ig = incomingGems[i];
+    var conflict = wsCarriedGems(variant).find(function (cg) { return cg.gemName === ig.gemName && cg.level !== ig.level; });
+    if (conflict) {
+      var conflictGemDef = wsGemByName(ig.gemName);
+      return { ok: false, message: '另一件裝備已鑲嵌「' + conflictGemDef.displayName + '」不同等級，請先卸下其中一件' };
+    }
+  }
   variant.equippedEquipment.push({ name: eqName, level: level });
-  return { ok: true };
+  var warnings = [];
+  incomingGems.forEach(function (ig2) {
+    var wornIdx = variant.wornGems.findIndex(function (wg) { return wg.name === ig2.gemName; });
+    if (wornIdx !== -1) {
+      var worn = variant.wornGems[wornIdx];
+      var gemDef2 = wsGemByName(ig2.gemName);
+      if (worn.level !== ig2.level) {
+        warnings.push('佩掛的「' + gemDef2.displayName + '」已從 Lv' + worn.level + ' 換成 Lv' + ig2.level);
+      }
+      variant.wornGems.splice(wornIdx, 1);
+    }
+  });
+  return { ok: true, warnings: warnings };
 }
 
 function wsBagWear(gemName, level) {
@@ -820,11 +866,8 @@ function wsBagEquip(eqName, level) {
     return;
   }
   var result = wsEquipEquipment(variant, eqName, level);
-  if (!result.ok) {
-    window.appState.uiState.bagError = result.message;
-  } else {
-    window.appState.uiState.bagError = null;
-  }
+  window.appState.uiState.bagError = result.ok ? null : result.message;
+  window.appState.uiState.bagWarning = (result.ok && result.warnings && result.warnings.length) ? result.warnings.join('；') : null;
   window.rerender();
 }
 

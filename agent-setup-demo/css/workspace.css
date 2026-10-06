@@ -65,3 +65,5 @@
 .ws-gem-chip { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--gem-bg); border: 1px solid var(--gem-border); }
 .ws-bag-item { padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; }
 .ws-bag-item--active { border-color: var(--accent); background: var(--accent-soft); }
+.ws-bag-warning { color: var(--warn); font-size: 11px; margin: 6px 0; }
+.ws-bag-error { color: var(--block); font-size: 11px; margin: 6px 0; }
