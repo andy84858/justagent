@@ -1,0 +1,29 @@
+.ws-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+.ws-pane {
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+}
+#ws-nav {
+  width: 220px;
+  flex-shrink: 0;
+  background: #fafafa;
+  border-right: 1px solid var(--line);
+  padding: var(--space-3);
+}
+#ws-center {
+  flex: 1;
+  background: var(--panel);
+  padding: var(--space-4);
+}
+#ws-bag {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--gem-bg);
+  border-left: 1px solid var(--gem-border);
+  padding: var(--space-3);
+}
