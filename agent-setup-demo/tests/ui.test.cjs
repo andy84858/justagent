@@ -152,6 +152,26 @@ async function main() {
   const backToReadOnly = await page.locator('[data-npc-name-input]').count();
   record('after commit, pane returns to read-only', backToReadOnly === 0);
 
+  await page.click('[data-npc-select="ORDER_ASSIST"]');
+  const noModelHint = await page.locator('#ws-npc-model-section').innerText();
+  record('ORDER_ASSIST shows no-chat-model state', noModelHint.indexOf('尚未設定對話模型') !== -1, noModelHint);
+
+  await page.click('[data-add-model="chatModel"]');
+  const templateSelectCount = await page.locator('[data-model-template-select="chatModel"]').count();
+  record('clicking 加入模型 shows a template dropdown', templateSelectCount === 1);
+
+  await page.selectOption('[data-model-template-select="chatModel"]', 'bedrock:claude-sonnet-5.5');
+  await page.click('[data-model-confirm="chatModel"]');
+  const chatModelKey = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).chatModel.key;
+  });
+  record('confirming attaches the chosen template', chatModelKey === 'bedrock:claude-sonnet-5.5', chatModelKey);
+
+  const chatModelParams = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).chatModel.params;
+  });
+  record('attached model gets default params from template', chatModelParams.temperature === 0.5 && chatModelParams.max_tokens === 2048, JSON.stringify(chatModelParams));
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

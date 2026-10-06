@@ -249,6 +249,88 @@ function wsCommitEditNpcBasics() {
   window.rerender();
 }
 
+function wsModelKindLabel(kind) {
+  return kind === 'chatModel' ? '對話模型' : '向量模型';
+}
+
+function wsTemplatesForKind(kind) {
+  var templates = window.appState.data.modelTemplates;
+  var wantType = kind === 'chatModel' ? 'chat' : 'vector';
+  return Object.keys(templates).filter(function (key) { return templates[key].type === wantType; });
+}
+
+function renderModelBlock(npc, kind) {
+  var model = npc[kind];
+  var label = wsModelKindLabel(kind);
+  var adding = window.appState.uiState.addingModelKind === kind;
+
+  if (model) {
+    var template = window.appState.data.modelTemplates[model.key];
+    return (
+      '<div class="ws-model-block">' +
+        '<div class="label">' + label + '</div>' +
+        '<div>' + escapeHtml(template ? template.label : model.key) + ' <span class="hint">v' + model.version + '</span></div>' +
+      '</div>'
+    );
+  }
+
+  if (adding) {
+    var options = wsTemplatesForKind(kind).map(function (key) {
+      return '<option value="' + key + '">' + escapeHtml(window.appState.data.modelTemplates[key].label) + '</option>';
+    }).join('');
+    return (
+      '<div class="ws-model-block">' +
+        '<div class="label">' + label + '</div>' +
+        '<select data-model-template-select="' + kind + '">' +
+          '<option value="">-- 選擇樣板 --</option>' +
+          options +
+        '</select>' +
+        '<button class="btn btn-primary" data-model-confirm="' + kind + '" onclick="wsConfirmAddModel(\'' + kind + '\')">確認加入</button>' +
+        '<button class="btn" onclick="wsCancelAddModel()">取消</button>' +
+      '</div>'
+    );
+  }
+
+  return (
+    '<div class="ws-model-block">' +
+      '<div class="label">' + label + '</div>' +
+      '<div class="hint">尚未設定' + label + '</div>' +
+      '<button class="btn" data-add-model="' + kind + '" onclick="wsStartAddModel(\'' + kind + '\')">＋ 加入模型</button>' +
+    '</div>'
+  );
+}
+
+function renderModelSection(state) {
+  var container = document.getElementById('ws-npc-model-section');
+  if (!container) return;
+  var npc = wsFindNpc(state);
+  if (!npc) { container.innerHTML = ''; return; }
+  container.innerHTML = renderModelBlock(npc, 'chatModel') + renderModelBlock(npc, 'vectorModel');
+}
+
+function wsStartAddModel(kind) {
+  window.appState.uiState.addingModelKind = kind;
+  window.rerender();
+}
+
+function wsCancelAddModel() {
+  window.appState.uiState.addingModelKind = null;
+  window.rerender();
+}
+
+function wsConfirmAddModel(kind) {
+  var select = document.querySelector('[data-model-template-select="' + kind + '"]');
+  var templateKey = select.value;
+  var template = window.appState.data.modelTemplates[templateKey];
+  if (!template) return;
+  var npc = wsFindNpc(window.appState);
+  var defaultParams = {};
+  template.params.forEach(function (p) { defaultParams[p.key] = p.default; });
+  npc[kind] = { key: templateKey, version: 1, params: defaultParams };
+  window.appState.uiState.addingModelKind = null;
+  window.rerender();
+}
+
 function renderCenterPane(state) {
   var sel = state.selection;
   if (!sel.npcCode) {
