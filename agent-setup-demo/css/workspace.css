@@ -40,3 +40,7 @@
 .ws-nav-form-input { padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; }
 .ws-nav-form-error { color: var(--block); font-size: 11px; }
 .ws-nav-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.ws-npc-header { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-3); }
+.ws-npc-avatar { font-size: 28px; }
+.ws-npc-name { font-size: 18px; font-weight: 600; }
+.ws-npc-field { margin-bottom: var(--space-2); font-size: 13px; }

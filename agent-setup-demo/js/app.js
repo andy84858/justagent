@@ -7,6 +7,7 @@ window.appState = {
 function render() {
   document.getElementById('ws-nav').innerHTML = renderNavTree(window.appState);
   document.getElementById('ws-center').innerHTML = renderCenterPane(window.appState);
+  renderNpcPane(window.appState);
 }
 
 window.rerender = render;

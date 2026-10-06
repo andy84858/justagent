@@ -188,6 +188,33 @@ function wsSubmitCreateVariant(npcCode) {
   window.rerender();
 }
 
+function wsFindNpc(state) {
+  return state.data.npcs.find(function (n) { return n.code === state.selection.npcCode; });
+}
+
+function renderNpcPane(state) {
+  var container = document.getElementById('ws-npc-pane');
+  if (!container) return;
+  var npc = wsFindNpc(state);
+  if (!npc) { container.innerHTML = ''; return; }
+
+  container.innerHTML =
+    '<div class="ws-npc-header">' +
+      '<span class="ws-npc-avatar">' + npc.avatar + '</span>' +
+      '<span class="ws-npc-name">' + escapeHtml(npc.displayName) + '</span>' +
+    '</div>' +
+    '<div class="ws-npc-field">' +
+      '<span class="badge badge-locked">🔒 代碼</span> ' + escapeHtml(npc.code) +
+    '</div>' +
+    '<div class="ws-npc-field">' +
+      '<span class="badge badge-locked">🔒 類型</span> ' + escapeHtml(npc.type) +
+    '</div>' +
+    '<div class="ws-npc-field">' +
+      '<span class="badge badge-locked">🔒 場域</span> ' + escapeHtml(npc.usedFor) +
+    '</div>' +
+    '<div id="ws-npc-model-section"></div>';
+}
+
 function renderCenterPane(state) {
   var sel = state.selection;
   if (!sel.npcCode) {

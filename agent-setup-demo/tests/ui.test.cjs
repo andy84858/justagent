@@ -123,6 +123,17 @@ async function main() {
   const switchCreateDisabled = await page.locator('[data-npc-row="INTENT_SWITCH"] + .ws-nav-variant.ws-nav-create').count();
   record('SWITCH-type NPC has no clickable + 新人物卡 trigger', switchCreateDisabled === 0);
 
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const npcPaneText = await page.locator('#ws-npc-pane').innerText();
+  record('NPC pane shows displayName', npcPaneText.indexOf('客服問答助手') !== -1);
+  record('NPC pane shows locked code as text', npcPaneText.indexOf('FAQ_ANSWER') !== -1);
+
+  const codeIsInput = await page.locator('#ws-npc-pane input[value="FAQ_ANSWER"]').count();
+  record('locked code field is not an input', codeIsInput === 0);
+
+  const lockIconCount = await page.locator('#ws-npc-pane .badge-locked').count();
+  record('locked fields show the lock badge (code, type, usedFor = 3)', lockIconCount === 3, 'found ' + lockIconCount);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
