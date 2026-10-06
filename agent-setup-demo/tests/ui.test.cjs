@@ -384,6 +384,24 @@ async function main() {
   const premiumGemCount = await page.locator('[data-unwear-gem="create_refund"]').count();
   record('PREMIUM variant shows its worn gem with an unequip control', premiumGemCount === 1);
 
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.PREMIUM"]');
+  const bagListText = await page.locator('#ws-bag').innerText();
+  record('bag in variant mode lists the equipment catalog', bagListText.indexOf('訂單查詢術') !== -1, bagListText);
+  record('bag in variant mode lists the gem catalog', bagListText.indexOf('查詢訂單狀態') !== -1, bagListText);
+
+  const sqlGemCount = await page.locator('[data-bag-gem="run_sql_query"][data-bag-gem-level="1"]').count();
+  record('bag shows run_sql_query Lv1 as a clickable entry', sqlGemCount === 1);
+  await page.click('[data-bag-gem="run_sql_query"][data-bag-gem-level="1"]');
+  const premiumWornAfter = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'PREMIUM').wornGems.some((g) => g.name === 'run_sql_query' && g.level === 1));
+  record('clicking an unworn gem in the bag wears it', premiumWornAfter === true);
+
+  const sqlAnalysisEqCount = await page.locator('[data-bag-equipment="sql-analysis"][data-bag-equipment-level="1"]').count();
+  record('bag shows sql-analysis Lv1 as a clickable entry', sqlAnalysisEqCount === 1);
+  await page.click('[data-bag-equipment="sql-analysis"][data-bag-equipment-level="1"]');
+  const premiumEquippedAfter = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'PREMIUM').equippedEquipment.some((e) => e.name === 'sql-analysis' && e.level === 1));
+  record('clicking an unequipped item in the bag equips it', premiumEquippedAfter === true);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

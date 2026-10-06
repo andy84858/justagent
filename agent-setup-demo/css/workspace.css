@@ -63,3 +63,5 @@
 .ws-equipped-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; font-size: 12px; }
 .ws-equipped-item .btn { margin-left: auto; padding: 2px 8px; height: auto; }
 .ws-gem-chip { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--gem-bg); border: 1px solid var(--gem-border); }
+.ws-bag-item { padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; }
+.ws-bag-item--active { border-color: var(--accent); background: var(--accent-soft); }

@@ -748,6 +748,86 @@ function wsUnwearGemClick(gemName) {
   window.rerender();
 }
 
+function wsPublishedVersions(catalogItem) {
+  return catalogItem.versions.filter(function (v) { return v.status === 'published'; });
+}
+
+function renderBagForVariant(state) {
+  var variant = wsFindVariant(state);
+  var gemRows = state.data.gems.map(function (gemDef) {
+    return wsPublishedVersions(gemDef).map(function (ver) {
+      var worn = variant.wornGems.some(function (g) { return g.name === gemDef.name && g.level === ver.level; });
+      return (
+        '<div class="ws-bag-item' + (worn ? ' ws-bag-item--active' : '') + '" data-bag-gem="' + gemDef.name + '" data-bag-gem-level="' + ver.level + '" onclick="wsBagWear(\'' + gemDef.name + '\', ' + ver.level + ')">' +
+          '<span class="ws-bag-item-name">' + escapeHtml(gemDef.displayName) + '</span>' +
+          '<span class="hint">Lv' + ver.level + (worn ? ' · 已佩掛' : '') + '</span>' +
+        '</div>'
+      );
+    }).join('');
+  }).join('');
+
+  var equipmentRows = state.data.equipment.map(function (eqDef) {
+    return wsPublishedVersions(eqDef).map(function (ver) {
+      var worn = variant.equippedEquipment.some(function (e) { return e.name === eqDef.name && e.level === ver.level; });
+      return (
+        '<div class="ws-bag-item' + (worn ? ' ws-bag-item--active' : '') + '" data-bag-equipment="' + eqDef.name + '" data-bag-equipment-level="' + ver.level + '" onclick="wsBagEquip(\'' + eqDef.name + '\', ' + ver.level + ')">' +
+          '<span class="ws-bag-item-name">' + escapeHtml(eqDef.displayName) + '</span>' +
+          '<span class="hint">Lv' + ver.level + (worn ? ' · 已穿上' : '') + '</span>' +
+        '</div>'
+      );
+    }).join('');
+  }).join('');
+
+  return (
+    '<div class="label">🎒 背包 — 寶石</div>' + gemRows +
+    '<div class="label" style="margin-top:var(--space-3);">🎒 背包 — 裝備</div>' + equipmentRows
+  );
+}
+
+function wsWearGem(variant, gemName, level) {
+  variant.wornGems.push({ name: gemName, level: level });
+  return { ok: true };
+}
+
+function wsEquipEquipment(variant, eqName, level) {
+  variant.equippedEquipment.push({ name: eqName, level: level });
+  return { ok: true };
+}
+
+function wsBagWear(gemName, level) {
+  var variant = wsFindVariant(window.appState);
+  var already = variant.wornGems.find(function (g) { return g.name === gemName; });
+  if (already && already.level === level) {
+    variant.wornGems = variant.wornGems.filter(function (g) { return g.name !== gemName; });
+    window.rerender();
+    return;
+  }
+  var result = wsWearGem(variant, gemName, level);
+  if (!result.ok) {
+    window.appState.uiState.bagError = result.message;
+  } else {
+    window.appState.uiState.bagError = null;
+  }
+  window.rerender();
+}
+
+function wsBagEquip(eqName, level) {
+  var variant = wsFindVariant(window.appState);
+  var already = variant.equippedEquipment.find(function (e) { return e.name === eqName; });
+  if (already && already.level === level) {
+    variant.equippedEquipment = variant.equippedEquipment.filter(function (e) { return e.name !== eqName; });
+    window.rerender();
+    return;
+  }
+  var result = wsEquipEquipment(variant, eqName, level);
+  if (!result.ok) {
+    window.appState.uiState.bagError = result.message;
+  } else {
+    window.appState.uiState.bagError = null;
+  }
+  window.rerender();
+}
+
 function renderCenterPane(state) {
   var sel = state.selection;
   if (!sel.npcCode) {
