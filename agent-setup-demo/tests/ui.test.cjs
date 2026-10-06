@@ -28,6 +28,15 @@ async function main() {
   const bagExists = await page.locator('#ws-bag').count();
   record('#ws-bag exists', bagExists === 1);
 
+  const npcCount = await page.evaluate(() => window.appState.data.npcs.length);
+  record('SEED has 3 NPCs loaded into appState', npcCount === 3, 'found ' + npcCount);
+
+  const faqNpc = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER'));
+  record('FAQ_ANSWER NPC present with 2 variants', !!faqNpc && faqNpc.variants.length === 2);
+
+  const switchNpc = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'INTENT_SWITCH'));
+  record('INTENT_SWITCH NPC is type SWITCH', !!switchNpc && switchNpc.type === 'SWITCH');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
