@@ -17,6 +17,7 @@ window.appState = {
 function render() {
   document.getElementById('ws-nav').innerHTML = renderNavTree(window.appState);
   document.getElementById('ws-center').innerHTML = renderCenterPane(window.appState);
+  document.getElementById('ws-bag').innerHTML = renderBagPlaceholder();
   renderNpcPane(window.appState);
   renderModelSection(window.appState);
 }

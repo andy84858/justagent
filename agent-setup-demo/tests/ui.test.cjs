@@ -240,6 +240,35 @@ async function main() {
   });
   record('version did not bump while empty-param publish was blocked', notPublishedWithEmptyParam === 1, notPublishedWithEmptyParam);
 
+  const bagPlaceholderText = await page.locator('#ws-bag').innerText();
+  record('right pane shows the Phase 2 placeholder', bagPlaceholderText.indexOf('背包功能將於 Phase') !== -1, bagPlaceholderText);
+
+  await page.click('[data-reset-data]');
+  const npcCountAfterReset = await page.evaluate(() => window.appState.data.npcs.length);
+  record('reset restores the original 3-NPC seed', npcCountAfterReset === 3, 'count=' + npcCountAfterReset);
+  const selectionAfterReset = await page.evaluate(() => window.appState.selection.npcCode);
+  record('reset clears the current selection', selectionAfterReset === null);
+
+  // Full-flow smoke test: create NPC -> create variant -> attach model -> edit params -> publish, all without a page reload.
+  await page.click('.ws-nav-create-npc');
+  await page.fill('[data-npc-form-code]', 'SMOKE_NPC');
+  await page.fill('[data-npc-form-name]', 'Smoke Test NPC');
+  await page.click('[data-npc-form-submit]');
+  await page.click('[data-npc-toggle="SMOKE_NPC"]');
+  await page.click('[data-create-variant="SMOKE_NPC"]');
+  await page.fill('[data-variant-form-code="SMOKE_NPC"]', 'V1');
+  await page.fill('[data-variant-form-name="SMOKE_NPC"]', 'V1 名稱');
+  await page.click('[data-variant-form-submit="SMOKE_NPC"]');
+  await page.click('[data-npc-select="SMOKE_NPC"]');
+  await page.click('[data-add-model="chatModel"]');
+  await page.selectOption('[data-model-template-select="chatModel"]', 'demo:chat-lite');
+  await page.click('[data-model-confirm="chatModel"]');
+  await page.click('[data-model-publish="chatModel"]');
+  const smokeVersion = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'SMOKE_NPC'; }).chatModel.version;
+  });
+  record('end-to-end smoke flow publishes without error', smokeVersion === 2, smokeVersion);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

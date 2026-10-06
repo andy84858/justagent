@@ -49,3 +49,4 @@
 .ws-param-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; font-size: 12px; }
 .ws-param-row input, .ws-param-row select { width: 100px; padding: 2px 6px; }
 .ws-param-error { color: var(--block); font-size: 11px; margin: 4px 0; }
+.ws-reset-btn { position: fixed; top: 8px; right: 8px; z-index: 10; }
