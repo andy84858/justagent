@@ -53,3 +53,9 @@
 .ws-variant-titlebar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
 .ws-variant-titlebar-name { font-size: 16px; font-weight: 600; }
 .ws-variant-titlebar-actions { margin-left: auto; display: flex; gap: 6px; }
+.ws-variant-tabs { display: flex; gap: var(--space-4); border-bottom: 1px solid var(--line); margin-bottom: var(--space-3); }
+.ws-variant-tab { padding-bottom: 6px; font-size: 13px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+.ws-variant-tab--active { color: var(--accent); border-bottom-color: var(--accent); }
+.ws-variant-tab-panel { min-height: 120px; }
+.ws-variant-field { margin-bottom: var(--space-2); font-size: 13px; }
+.ws-variant-field textarea, .ws-variant-field input { width: 100%; }

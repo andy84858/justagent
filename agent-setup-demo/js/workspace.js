@@ -548,6 +548,126 @@ function renderVariantPane(state) {
       '</div>' +
     '</div>' +
     '<div id="ws-variant-body"></div>';
+
+  renderVariantBody(state);
+}
+
+function wsSwitchVariantTab(tabName) {
+  window.appState.uiState.variantTab = tabName;
+  window.rerender();
+}
+
+function renderVariantBasicsTab(variant) {
+  var editing = window.appState.uiState.editingVariantBasics;
+  if (editing) {
+    return (
+      '<div class="ws-variant-field">' +
+        '<label class="label">名稱</label>' +
+        '<input class="ws-nav-form-input" data-variant-name-input value="' + escapeHtml(variant.name) + '">' +
+      '</div>' +
+      '<div class="ws-variant-field">' +
+        '<label class="label">說明</label>' +
+        '<textarea data-variant-description-input rows="3">' + escapeHtml(variant.description) + '</textarea>' +
+      '</div>' +
+      '<button class="btn btn-primary" data-variant-edit-commit onclick="wsCommitEditVariantBasics()">✓ 完成編輯</button> ' +
+      '<button class="btn" onclick="wsCancelEditVariantBasics()">取消</button>'
+    );
+  }
+  return (
+    '<div class="ws-variant-field"><span class="label">名稱</span>' + escapeHtml(variant.name) + '</div>' +
+    '<div class="ws-variant-field"><span class="label">說明</span>' + escapeHtml(variant.description) + '</div>' +
+    '<button class="btn" data-variant-edit-basics onclick="wsStartEditVariantBasics()">✎ 編輯</button>'
+  );
+}
+
+function renderVariantModelTab(npc) {
+  var chat = npc.chatModel ? (window.appState.data.modelTemplates[npc.chatModel.key].label + ' · v' + npc.chatModel.version) : '尚未設定對話模型';
+  var vector = npc.vectorModel ? (window.appState.data.modelTemplates[npc.vectorModel.key].label + ' · v' + npc.vectorModel.version) : '不使用向量模型';
+  return (
+    '<div class="ws-variant-field"><span class="label">對話模型</span>' + escapeHtml(chat) + '</div>' +
+    '<div class="ws-variant-field"><span class="label">向量模型</span>' + escapeHtml(vector) + '</div>' +
+    '<div class="hint">模型版本鎖定將於後續階段提供；目前人物卡沿用 NPC 目前生效的模型。</div>'
+  );
+}
+
+function renderVariantInstructionsTab(variant) {
+  var editing = window.appState.uiState.editingVariantInstructions;
+  if (editing) {
+    return (
+      '<textarea data-variant-instructions-input rows="8" style="width:100%;">' + escapeHtml(variant.baseInstructions) + '</textarea>' +
+      '<button class="btn btn-primary" data-variant-instructions-commit onclick="wsCommitEditVariantInstructions()">✓ 完成編輯</button> ' +
+      '<button class="btn" onclick="wsCancelEditVariantInstructions()">取消</button>'
+    );
+  }
+  return (
+    '<div class="ws-variant-field" style="white-space:pre-wrap;">' + escapeHtml(variant.baseInstructions) + '</div>' +
+    '<button class="btn" data-variant-edit-instructions onclick="wsStartEditVariantInstructions()">✎ 編輯</button>'
+  );
+}
+
+function renderVariantBody(state) {
+  var container = document.getElementById('ws-variant-body');
+  if (!container) return;
+  var npc = wsFindNpc(state);
+  var variant = wsFindVariant(state);
+  if (!npc || !variant) { container.innerHTML = ''; return; }
+
+  var tab = state.uiState.variantTab || 'basics';
+  var tabsBar =
+    '<div class="ws-variant-tabs">' +
+      '<span class="ws-variant-tab' + (tab === 'basics' ? ' ws-variant-tab--active' : '') + '" onclick="wsSwitchVariantTab(\'basics\')">基本資料</span>' +
+      '<span class="ws-variant-tab' + (tab === 'model' ? ' ws-variant-tab--active' : '') + '" onclick="wsSwitchVariantTab(\'model\')">模型</span>' +
+      '<span class="ws-variant-tab' + (tab === 'instructions' ? ' ws-variant-tab--active' : '') + '" onclick="wsSwitchVariantTab(\'instructions\')">基礎指令</span>' +
+    '</div>';
+
+  var panel;
+  if (tab === 'model') {
+    panel = '<div class="ws-variant-tab-panel" data-variant-tab-panel="model">' + renderVariantModelTab(npc) + '</div>';
+  } else if (tab === 'instructions') {
+    panel = '<div class="ws-variant-tab-panel" data-variant-tab-panel="instructions">' + renderVariantInstructionsTab(variant) + '</div>';
+  } else {
+    panel = '<div class="ws-variant-tab-panel" data-variant-tab-panel="basics">' + renderVariantBasicsTab(variant) + '</div>';
+  }
+
+  container.innerHTML = tabsBar + panel + '<div id="ws-ability-area"></div>';
+}
+
+function wsStartEditVariantBasics() {
+  window.appState.uiState.editingVariantBasics = true;
+  window.rerender();
+}
+
+function wsCancelEditVariantBasics() {
+  window.appState.uiState.editingVariantBasics = false;
+  window.rerender();
+}
+
+function wsCommitEditVariantBasics() {
+  var variant = wsFindVariant(window.appState);
+  var nameInput = document.querySelector('[data-variant-name-input]');
+  var descInput = document.querySelector('[data-variant-description-input]');
+  variant.name = nameInput.value.trim() || variant.name;
+  variant.description = descInput.value.trim();
+  window.appState.uiState.editingVariantBasics = false;
+  window.rerender();
+}
+
+function wsStartEditVariantInstructions() {
+  window.appState.uiState.editingVariantInstructions = true;
+  window.rerender();
+}
+
+function wsCancelEditVariantInstructions() {
+  window.appState.uiState.editingVariantInstructions = false;
+  window.rerender();
+}
+
+function wsCommitEditVariantInstructions() {
+  var variant = wsFindVariant(window.appState);
+  var input = document.querySelector('[data-variant-instructions-input]');
+  variant.baseInstructions = input.value;
+  window.appState.uiState.editingVariantInstructions = false;
+  window.rerender();
 }
 
 function renderCenterPane(state) {

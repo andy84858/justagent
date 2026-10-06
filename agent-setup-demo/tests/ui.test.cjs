@@ -347,6 +347,25 @@ async function main() {
   const publishEnabled = await page.locator('[data-variant-publish]').isDisabled();
   record('發布 is always clickable (not disabled by having no changes)', publishEnabled === false);
 
+  const tabsText = await page.locator('#ws-variant-body').innerText();
+  record('variant body shows the three tab labels', tabsText.indexOf('基本資料') !== -1 && tabsText.indexOf('模型') !== -1 && tabsText.indexOf('基礎指令') !== -1, tabsText);
+
+  const basicsText = await page.locator('[data-variant-tab-panel="basics"]').innerText();
+  record('basics tab shows description read-only', basicsText.indexOf('客服的一般版本，查得到訂單狀態。') !== -1, basicsText);
+
+  await page.click('[data-variant-edit-basics]');
+  const variantNameInputCount = await page.locator('[data-variant-name-input]').count();
+  record('pencil turns name into an input', variantNameInputCount === 1);
+
+  await page.fill('[data-variant-name-input]', '一般版（已更名）');
+  await page.fill('[data-variant-description-input]', '更新後的描述');
+  await page.click('[data-variant-edit-commit]');
+  const nameSaved = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'STANDARD').name);
+  record('committing basics edit persists the new name', nameSaved === '一般版（已更名）', nameSaved);
+
+  const nowDirty = await page.locator('[data-variant-save]').isDisabled();
+  record('editing basics marks the variant dirty (save becomes enabled)', nowDirty === false);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
