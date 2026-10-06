@@ -61,8 +61,8 @@ async function main() {
 
   await page.click('[data-npc-toggle="FAQ_ANSWER"]');
   await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
-  const variantStubCount = await page.locator('.ws-variant-stub').count();
-  record('selecting a variant renders the Phase 2 stub', variantStubCount === 1);
+  const variantPaneCountEarly = await page.locator('#ws-variant-pane').count();
+  record('selecting a variant renders #ws-variant-pane (Phase 2 superseded the Phase 1 stub)', variantPaneCountEarly === 1);
 
   await page.click('.ws-nav-create-npc');
   const formVisible = await page.locator('[data-npc-form]').count();
@@ -316,6 +316,25 @@ async function main() {
   await page.click('[data-npc-select="FAQ_ANSWER"]');
   const faqTempStillPending = await page.locator('[data-model-param-input="chatModel.temperature"]').inputValue();
   record('FAQ_ANSWER\'s own unsaved edit survives switching away and back', faqTempStillPending === '0.15', faqTempStillPending);
+
+  // --- Phase 2: catalog + variant fields + routing ---
+  const gemCount = await page.evaluate(() => window.appState.data.gems.length);
+  record('SEED has a gem catalog', gemCount >= 4, 'found ' + gemCount);
+  const equipmentCount = await page.evaluate(() => window.appState.data.equipment.length);
+  record('SEED has an equipment catalog', equipmentCount >= 2, 'found ' + equipmentCount);
+
+  const orderLookup = await page.evaluate(() => window.appState.data.equipment.find((e) => e.name === 'order-lookup'));
+  record('order-lookup equipment carries get_order_status at Lv1 and Lv2', !!orderLookup && orderLookup.versions.length === 2 && orderLookup.versions[0].gems[0].gemName === 'get_order_status');
+
+  const standardVariant = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'STANDARD'));
+  record('STANDARD variant seeds equippedEquipment/wornGems arrays', !!standardVariant && Array.isArray(standardVariant.equippedEquipment) && Array.isArray(standardVariant.wornGems));
+
+  await page.click('[data-npc-toggle="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  const variantPaneCount = await page.locator('#ws-variant-pane').count();
+  record('selecting a variant now renders #ws-variant-pane instead of the stub', variantPaneCount === 1);
+  const stubGoneCount = await page.locator('.ws-variant-stub').count();
+  record('the Phase 2 stub is gone', stubGoneCount === 0);
 
   await browser.close();
 

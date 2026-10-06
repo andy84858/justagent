@@ -11,8 +11,8 @@ var SEED = {
       retrieval: { topK: 5, scoreThreshold: 0.7, maxContext: 4000 },
       publishedVersion: 2,
       variants: [
-        { code: 'STANDARD', name: '一般版', publishedVersion: 2 },
-        { code: 'PREMIUM', name: '豪華版', publishedVersion: 1 }
+        { code: 'STANDARD', name: '一般版', publishedVersion: 2, description: '客服的一般版本，查得到訂單狀態。', baseInstructions: '請用親切的語氣回答客戶問題，優先查詢訂單狀態。', equippedEquipment: [{ name: 'order-lookup', level: 1 }], wornGems: [] },
+        { code: 'PREMIUM', name: '豪華版', publishedVersion: 1, description: '豪華版客服，可以直接幫客戶退款。', baseInstructions: '請用親切的語氣回答客戶問題，必要時可直接建立退款單。', equippedEquipment: [], wornGems: [{ name: 'create_refund', level: 1 }] }
       ]
     },
     {
@@ -74,7 +74,50 @@ var SEED = {
         { key: 'dimensions', label: 'Dimensions', kind: 'enum', enumValues: [512, 1536], default: 1536 }
       ]
     }
-  }
+  },
+  gems: [
+    {
+      name: 'get_order_status', displayName: '查詢訂單狀態', kind: 'API', protocol: 'REST',
+      versions: [
+        { level: 1, status: 'published' },
+        { level: 2, status: 'published' },
+        { level: 3, status: 'published' },
+        { level: 4, status: 'draft' }
+      ]
+    },
+    {
+      name: 'create_refund', displayName: '建立退款單', kind: 'API', protocol: 'REST',
+      versions: [{ level: 1, status: 'published' }]
+    },
+    {
+      name: 'run_sql_query', displayName: 'SQL 查詢', kind: 'API', protocol: 'REST',
+      versions: [{ level: 1, status: 'published' }, { level: 2, status: 'published' }]
+    },
+    {
+      name: 'render_chart', displayName: '產生圖表', kind: 'API', protocol: 'REST',
+      versions: [{ level: 1, status: 'published' }]
+    }
+  ],
+  equipment: [
+    {
+      name: 'order-lookup', displayName: '訂單查詢術',
+      versions: [
+        { level: 1, status: 'published', gems: [{ gemName: 'get_order_status', level: 1 }] },
+        { level: 2, status: 'published', gems: [{ gemName: 'get_order_status', level: 2 }] }
+      ]
+    },
+    {
+      name: 'refund-helper', displayName: '退款小幫手',
+      versions: [{ level: 1, status: 'published', gems: [{ gemName: 'create_refund', level: 1 }] }]
+    },
+    {
+      name: 'sql-analysis', displayName: 'SQL 分析術',
+      versions: [
+        { level: 1, status: 'published', gems: [{ gemName: 'run_sql_query', level: 1 }] },
+        { level: 2, status: 'published', gems: [{ gemName: 'run_sql_query', level: 2 }] }
+      ]
+    }
+  ]
 };
 
 function cloneSeed() {

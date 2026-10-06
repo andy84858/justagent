@@ -196,6 +196,12 @@ function wsFindNpc(state) {
   return state.data.npcs.find(function (n) { return n.code === state.selection.npcCode; });
 }
 
+function wsFindVariant(state) {
+  var npc = wsFindNpc(state);
+  if (!npc) return undefined;
+  return npc.variants.find(function (v) { return v.code === state.selection.variantCode; });
+}
+
 function renderNpcPane(state) {
   var container = document.getElementById('ws-npc-pane');
   if (!container) return;
@@ -472,7 +478,7 @@ function renderCenterPane(state) {
     return '<div class="hint">請從左側選擇一個 NPC 或人物卡開始編輯。</div>';
   }
   if (sel.variantCode) {
-    return '<div class="ws-variant-stub hint">人物卡編輯將於 Phase 2 提供。</div>';
+    return '<div id="ws-variant-pane"></div>';
   }
   return '<div id="ws-npc-pane"></div>';
 }
