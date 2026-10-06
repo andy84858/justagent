@@ -88,6 +88,41 @@ async function main() {
   });
   record('duplicate code+usedFor is rejected by validator', typeof dupError === 'string' && dupError.length > 0, dupError);
 
+  await page.click('[data-npc-toggle="ORDER_ASSIST"]');
+  await page.click('[data-create-variant="ORDER_ASSIST"]');
+  const variantFormVisible = await page.locator('[data-variant-form="ORDER_ASSIST"]').count();
+  record('clicking + 新人物卡 opens inline form', variantFormVisible === 1);
+
+  await page.fill('[data-variant-form-code="ORDER_ASSIST"]', 'bad-code');
+  await page.click('[data-variant-form-submit="ORDER_ASSIST"]');
+  const variantErrorText = await page.locator('[data-variant-form-error="ORDER_ASSIST"]').innerText();
+  record('invalid variant code shows error', variantErrorText.length > 0, variantErrorText);
+
+  await page.fill('[data-variant-form-code="ORDER_ASSIST"]', 'BASIC');
+  await page.fill('[data-variant-form-name="ORDER_ASSIST"]', '基本版');
+  await page.click('[data-variant-form-submit="ORDER_ASSIST"]');
+  const orderAssistVariantCount = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).variants.length;
+  });
+  record('valid code creates the variant', orderAssistVariantCount === 1, 'count=' + orderAssistVariantCount);
+  const selectedVariant = await page.evaluate(() => window.appState.selection.variantCode);
+  record('newly created variant is auto-selected', selectedVariant === 'BASIC');
+
+  await page.click('[data-create-variant="ORDER_ASSIST"]');
+  await page.fill('[data-variant-form-code="ORDER_ASSIST"]', 'BASIC');
+  await page.fill('[data-variant-form-name="ORDER_ASSIST"]', '重複版');
+  await page.click('[data-variant-form-submit="ORDER_ASSIST"]');
+  const dupVariantError = await page.locator('[data-variant-form-error="ORDER_ASSIST"]').innerText();
+  record('duplicate variant code within the same NPC is rejected', dupVariantError.length > 0, dupVariantError);
+  const stillOneVariant = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).variants.length;
+  });
+  record('duplicate variant submission did not add a second variant', stillOneVariant === 1, stillOneVariant);
+
+  await page.click('[data-npc-toggle="INTENT_SWITCH"]');
+  const switchCreateDisabled = await page.locator('[data-npc-row="INTENT_SWITCH"] + .ws-nav-variant.ws-nav-create').count();
+  record('SWITCH-type NPC has no clickable + 新人物卡 trigger', switchCreateDisabled === 0);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

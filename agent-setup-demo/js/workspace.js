@@ -35,9 +35,23 @@ function renderNavTree(state) {
         );
       }).join('');
 
-      variantRows += isSwitchType
-        ? '<div class="ws-nav-variant ws-nav-variant--disabled hint">只有 AGENT 型才能建立人物卡</div>'
-        : '<div class="ws-nav-variant ws-nav-create" data-create-variant="' + npc.code + '">＋ 新人物卡</div>';
+      if (isSwitchType) {
+        variantRows += '<div class="ws-nav-variant ws-nav-variant--disabled hint">只有 AGENT 型才能建立人物卡</div>';
+      } else if (state.uiState.creatingVariantFor === npc.code) {
+        var vErr = state.uiState.variantFormError;
+        variantRows +=
+          '<div class="ws-nav-form" data-variant-form="' + npc.code + '">' +
+            '<input class="ws-nav-form-input" data-variant-form-code="' + npc.code + '" placeholder="代碼 e.g. BASIC">' +
+            '<input class="ws-nav-form-input" data-variant-form-name="' + npc.code + '" placeholder="名稱">' +
+            (vErr ? '<div class="ws-nav-form-error" data-variant-form-error="' + npc.code + '">' + escapeHtml(vErr) + '</div>' : '') +
+            '<div class="ws-nav-form-actions">' +
+              '<button class="btn" onclick="wsCancelCreateVariantForm()">取消</button>' +
+              '<button class="btn btn-primary" data-variant-form-submit="' + npc.code + '" onclick="wsSubmitCreateVariant(\'' + npc.code + '\')">建立</button>' +
+            '</div>' +
+          '</div>';
+      } else {
+        variantRows += '<div class="ws-nav-variant ws-nav-create" data-create-variant="' + npc.code + '" onclick="wsShowCreateVariantForm(\'' + npc.code + '\')">＋ 新人物卡</div>';
+      }
     }
 
     return '<div class="ws-nav-group">' + npcRow + variantRows + '</div>';
@@ -131,6 +145,46 @@ function wsSelectNpc(code) {
 
 function wsSelectVariant(npcCode, variantCode) {
   window.appState.selection = { npcCode: npcCode, variantCode: variantCode };
+  window.rerender();
+}
+
+function wsValidateVariantCode(code, npc) {
+  if (!/^[A-Z0-9_]{1,40}$/.test(code)) {
+    return '代碼只能是大寫英數字與底線，長度 1–40';
+  }
+  var duplicate = npc.variants.some(function (v) { return v.code === code; });
+  if (duplicate) {
+    return '這個 NPC 底下已有相同代碼的人物卡';
+  }
+  return null;
+}
+
+function wsShowCreateVariantForm(npcCode) {
+  window.appState.uiState.creatingVariantFor = npcCode;
+  window.rerender();
+}
+
+function wsCancelCreateVariantForm() {
+  window.appState.uiState.creatingVariantFor = null;
+  window.rerender();
+}
+
+function wsSubmitCreateVariant(npcCode) {
+  var npc = window.appState.data.npcs.find(function (n) { return n.code === npcCode; });
+  var codeInput = document.querySelector('[data-variant-form-code="' + npcCode + '"]');
+  var nameInput = document.querySelector('[data-variant-form-name="' + npcCode + '"]');
+  var code = codeInput.value.trim();
+  var name = nameInput.value.trim();
+  var error = wsValidateVariantCode(code, npc);
+  if (error) {
+    window.appState.uiState.variantFormError = error;
+    window.rerender();
+    return;
+  }
+  npc.variants.push({ code: code, name: name || code, publishedVersion: null });
+  window.appState.uiState.creatingVariantFor = null;
+  window.appState.uiState.variantFormError = null;
+  window.appState.selection = { npcCode: npcCode, variantCode: code };
   window.rerender();
 }
 
