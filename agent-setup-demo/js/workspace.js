@@ -85,9 +85,13 @@ function wsValidateNpcCode(code, usedFor, npcs) {
   if (!/^[A-Z0-9_]{1,80}$/.test(code)) {
     return '代碼只能是大寫英數字與底線，長度 1–80';
   }
-  var duplicate = npcs.some(function (n) { return n.code === code && n.usedFor === usedFor; });
+  // Every lookup in this app (wsFindNpc, nav selection, expand state, model-param
+  // scoping) keys on `code` alone, so uniqueness must be checked on `code` alone too
+  // — scoping the check to `usedFor` let two NPCs share a code and both render under
+  // the same [data-npc-row], with clicks on either opening whichever was created first.
+  var duplicate = npcs.some(function (n) { return n.code === code; });
   if (duplicate) {
-    return '同一場域內已有相同代碼的 NPC';
+    return '已有相同代碼的 NPC';
   }
   return null;
 }
@@ -259,6 +263,14 @@ function wsTemplatesForKind(kind) {
   return Object.keys(templates).filter(function (key) { return templates[key].type === wantType; });
 }
 
+function wsParamStateKey(npcCode, kind, paramKey) {
+  return npcCode + '.' + kind + '.' + paramKey;
+}
+
+function wsParamErrorStateKey(npcCode, kind) {
+  return npcCode + '.' + kind;
+}
+
 function renderModelBlock(npc, kind) {
   var model = npc[kind];
   var label = wsModelKindLabel(kind);
@@ -267,9 +279,10 @@ function renderModelBlock(npc, kind) {
   if (model) {
     var template = window.appState.data.modelTemplates[model.key];
     var paramsHtml = (template ? template.params : []).map(function (p) {
-      var pendingKey = kind + '.' + p.key;
-      var currentValue = window.appState.uiState.modelParamEdits[pendingKey] !== undefined
-        ? window.appState.uiState.modelParamEdits[pendingKey]
+      var domKey = kind + '.' + p.key;
+      var stateKey = wsParamStateKey(npc.code, kind, p.key);
+      var currentValue = window.appState.uiState.modelParamEdits[stateKey] !== undefined
+        ? window.appState.uiState.modelParamEdits[stateKey]
         : model.params[p.key];
       if (p.kind === 'enum') {
         var opts = p.enumValues.map(function (v) {
@@ -278,20 +291,20 @@ function renderModelBlock(npc, kind) {
         return (
           '<div class="ws-param-row">' +
             '<span class="label">' + escapeHtml(p.label) + '</span>' +
-            '<select data-model-param-input="' + pendingKey + '" onchange="wsEditModelParam(\'' + kind + '\', \'' + p.key + '\', this.value)">' + opts + '</select>' +
+            '<select data-model-param-input="' + domKey + '" onchange="wsEditModelParam(\'' + kind + '\', \'' + p.key + '\', this.value)">' + opts + '</select>' +
           '</div>'
         );
       }
       return (
         '<div class="ws-param-row">' +
           '<span class="label">' + escapeHtml(p.label) + '</span>' +
-          '<input data-model-param-input="' + pendingKey + '" value="' + escapeHtml(currentValue) + '" ' +
+          '<input data-model-param-input="' + domKey + '" value="' + escapeHtml(currentValue) + '" ' +
             'oninput="wsEditModelParam(\'' + kind + '\', \'' + p.key + '\', this.value)">' +
         '</div>'
       );
     }).join('');
 
-    var paramError = window.appState.uiState.modelParamErrors[kind];
+    var paramError = window.appState.uiState.modelParamErrors[wsParamErrorStateKey(npc.code, kind)];
 
     return (
       '<div class="ws-model-block">' +
@@ -385,7 +398,8 @@ function wsValidateParamValue(paramDef, rawValue) {
 }
 
 function wsEditModelParam(kind, paramKey, rawValue) {
-  window.appState.uiState.modelParamEdits[kind + '.' + paramKey] = rawValue;
+  var npc = wsFindNpc(window.appState);
+  window.appState.uiState.modelParamEdits[wsParamStateKey(npc.code, kind, paramKey)] = rawValue;
 }
 
 function wsSaveModelParams(kind) {
@@ -395,34 +409,35 @@ function wsSaveModelParams(kind) {
   var newParams = {};
   for (var i = 0; i < template.params.length; i++) {
     var p = template.params[i];
-    var pendingKey = kind + '.' + p.key;
-    var raw = window.appState.uiState.modelParamEdits[pendingKey];
+    var stateKey = wsParamStateKey(npc.code, kind, p.key);
+    var raw = window.appState.uiState.modelParamEdits[stateKey];
     var rawValue = raw !== undefined ? raw : model.params[p.key];
     var result = wsValidateParamValue(p, rawValue);
     if (!result.ok) {
-      window.appState.uiState.modelParamErrors[kind] = result.message;
+      window.appState.uiState.modelParamErrors[wsParamErrorStateKey(npc.code, kind)] = result.message;
       window.rerender();
       return;
     }
     newParams[p.key] = result.value;
   }
   model.params = newParams;
-  window.appState.uiState.modelParamErrors[kind] = null;
-  template.params.forEach(function (p) { delete window.appState.uiState.modelParamEdits[kind + '.' + p.key]; });
+  window.appState.uiState.modelParamErrors[wsParamErrorStateKey(npc.code, kind)] = null;
+  template.params.forEach(function (p) { delete window.appState.uiState.modelParamEdits[wsParamStateKey(npc.code, kind, p.key)]; });
   window.rerender();
 }
 
-function wsHasUnsavedModelEdits(kind) {
-  var template = window.appState.data.modelTemplates[wsFindNpc(window.appState)[kind].key];
+function wsHasUnsavedModelEdits(npcCode, kind) {
+  var npc = window.appState.data.npcs.find(function (n) { return n.code === npcCode; });
+  var template = window.appState.data.modelTemplates[npc[kind].key];
   return template.params.some(function (p) {
-    return window.appState.uiState.modelParamEdits[kind + '.' + p.key] !== undefined;
+    return window.appState.uiState.modelParamEdits[wsParamStateKey(npcCode, kind, p.key)] !== undefined;
   });
 }
 
 function wsPublishModelErrors(npc, kind) {
   var model = npc[kind];
   var errors = [];
-  if (wsHasUnsavedModelEdits(kind)) {
+  if (wsHasUnsavedModelEdits(npc.code, kind)) {
     errors.push('有未儲存的參數修改，請先儲存參數');
   }
   var template = window.appState.data.modelTemplates[model.key];
@@ -438,12 +453,12 @@ function wsPublishModel(kind) {
   var npc = wsFindNpc(window.appState);
   var errors = wsPublishModelErrors(npc, kind);
   if (errors.length > 0) {
-    window.appState.uiState.modelParamErrors[kind] = errors.join('；');
+    window.appState.uiState.modelParamErrors[wsParamErrorStateKey(npc.code, kind)] = errors.join('；');
     window.rerender();
     return;
   }
   npc[kind].version += 1;
-  window.appState.uiState.modelParamErrors[kind] = null;
+  window.appState.uiState.modelParamErrors[wsParamErrorStateKey(npc.code, kind)] = null;
   window.rerender();
 }
 

@@ -269,6 +269,54 @@ async function main() {
   });
   record('end-to-end smoke flow publishes without error', smokeVersion === 2, smokeVersion);
 
+  // --- Final-review fix verification: duplicate NPC code across different usedFor (Review Focus #2) ---
+  const npcCountBeforeDup = await page.evaluate(() => window.appState.data.npcs.length);
+  await page.click('.ws-nav-create-npc');
+  await page.fill('[data-npc-form-code]', 'FAQ_ANSWER');
+  await page.fill('[data-npc-form-name]', 'Duplicate Attempt');
+  await page.click('[data-npc-form-submit]');
+  const dupNpcErrorText = await page.locator('[data-npc-form-error]').innerText();
+  record('duplicate NPC code is rejected through the actual create form', dupNpcErrorText.length > 0, dupNpcErrorText);
+  const npcCountAfterDup = await page.evaluate(() => window.appState.data.npcs.length);
+  record('rejected duplicate NPC code did not add a new NPC', npcCountAfterDup === npcCountBeforeDup, 'before=' + npcCountBeforeDup + ' after=' + npcCountAfterDup);
+  const faqRowCount = await page.locator('[data-npc-row="FAQ_ANSWER"]').count();
+  record('only one FAQ_ANSWER row exists in the nav tree', faqRowCount === 1, 'found ' + faqRowCount);
+  await page.evaluate(() => wsCancelCreateNpcForm());
+
+  // --- Final-review fix verification: unsaved model-param edits must not leak across NPCs ---
+  // Note: the reset-data step above (Task 12's test) restored SEED, so ORDER_ASSIST no
+  // longer has the chatModel it was given back in Task 9's test — attach a fresh one here.
+  await page.click('[data-npc-select="ORDER_ASSIST"]');
+  await page.click('[data-add-model="chatModel"]');
+  await page.selectOption('[data-model-template-select="chatModel"]', 'bedrock:claude-sonnet-5.5');
+  await page.click('[data-model-confirm="chatModel"]');
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.fill('[data-model-param-input="chatModel.temperature"]', '0.15');
+  // Deliberately do NOT save — switch away with an unsaved edit pending.
+  await page.click('[data-npc-select="ORDER_ASSIST"]');
+  const orderAssistTempShown = await page.locator('[data-model-param-input="chatModel.temperature"]').inputValue();
+  record('switching NPCs does not leak an unsaved value into the next NPC\'s input', orderAssistTempShown === '0.5', orderAssistTempShown);
+
+  const orderAssistVersionBeforePublish = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).chatModel.version;
+  });
+  await page.click('[data-model-publish="chatModel"]');
+  const orderAssistVersionAfterPublish = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).chatModel.version;
+  });
+  record('publishing an untouched NPC is not blocked by another NPC\'s unsaved edit', orderAssistVersionAfterPublish === orderAssistVersionBeforePublish + 1, 'before=' + orderAssistVersionBeforePublish + ' after=' + orderAssistVersionAfterPublish);
+
+  await page.click('[data-model-param-save="chatModel"]');
+  const orderAssistTempAfterSave = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).chatModel.params.temperature;
+  });
+  record('saving an untouched NPC does not write another NPC\'s pending value onto it', orderAssistTempAfterSave === 0.5, orderAssistTempAfterSave);
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const faqTempStillPending = await page.locator('[data-model-param-input="chatModel.temperature"]').inputValue();
+  record('FAQ_ANSWER\'s own unsaved edit survives switching away and back', faqTempStillPending === '0.15', faqTempStillPending);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
