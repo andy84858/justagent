@@ -52,6 +52,18 @@ async function main() {
   const navText3 = await page.locator('#ws-nav').innerText();
   record('collapsing FAQ_ANSWER hides its variants again', navText3.indexOf('一般版') === -1);
 
+  const centerEmptyText = await page.locator('#ws-center').innerText();
+  record('center pane shows empty-state hint before any selection', centerEmptyText.indexOf('請從左側選擇') !== -1, centerEmptyText);
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const npcPaneCount = await page.locator('#ws-npc-pane').count();
+  record('selecting an NPC renders #ws-npc-pane', npcPaneCount === 1);
+
+  await page.click('[data-npc-toggle="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  const variantStubCount = await page.locator('.ws-variant-stub').count();
+  record('selecting a variant renders the Phase 2 stub', variantStubCount === 1);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

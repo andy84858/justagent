@@ -65,3 +65,14 @@ function wsSelectVariant(npcCode, variantCode) {
   window.appState.selection = { npcCode: npcCode, variantCode: variantCode };
   window.rerender();
 }
+
+function renderCenterPane(state) {
+  var sel = state.selection;
+  if (!sel.npcCode) {
+    return '<div class="hint">請從左側選擇一個 NPC 或人物卡開始編輯。</div>';
+  }
+  if (sel.variantCode) {
+    return '<div class="ws-variant-stub hint">人物卡編輯將於 Phase 2 提供。</div>';
+  }
+  return '<div id="ws-npc-pane"></div>';
+}
