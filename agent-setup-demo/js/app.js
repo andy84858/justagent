@@ -22,6 +22,7 @@ function render() {
   renderNpcPane(window.appState);
   renderModelSection(window.appState);
   renderVariantPane(window.appState);
+  renderAbilityArea(window.appState);
 }
 
 window.rerender = render;

@@ -366,6 +366,24 @@ async function main() {
   const nowDirty = await page.locator('[data-variant-save]').isDisabled();
   record('editing basics marks the variant dirty (save becomes enabled)', nowDirty === false);
 
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.evaluate(() => { window.appState.uiState.expandedNpcs['FAQ_ANSWER'] = true; window.rerender(); });
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  const abilityText = await page.locator('#ws-ability-area').innerText();
+  record('ability area shows the equipped order-lookup', abilityText.indexOf('order-lookup') !== -1 || abilityText.indexOf('訂單查詢術') !== -1, abilityText);
+  record('ability area shows the carried gem under the equipment', abilityText.indexOf('get_order_status') !== -1 || abilityText.indexOf('查詢訂單狀態') !== -1, abilityText);
+
+  const unequipBtnCount = await page.locator('[data-unequip-equipment="order-lookup"]').count();
+  record('equipped item has an unequip control', unequipBtnCount === 1);
+  await page.click('[data-unequip-equipment="order-lookup"]');
+  const stillEquipped = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'STANDARD').equippedEquipment.length);
+  record('clicking ⊖ unequips the equipment', stillEquipped === 0, 'remaining=' + stillEquipped);
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.PREMIUM"]');
+  const premiumGemCount = await page.locator('[data-unwear-gem="create_refund"]').count();
+  record('PREMIUM variant shows its worn gem with an unequip control', premiumGemCount === 1);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

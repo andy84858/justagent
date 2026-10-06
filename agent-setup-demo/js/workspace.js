@@ -670,6 +670,84 @@ function wsCommitEditVariantInstructions() {
   window.rerender();
 }
 
+function wsGemByName(gemName) {
+  return window.appState.data.gems.find(function (g) { return g.name === gemName; });
+}
+
+function wsEquipmentByName(eqName) {
+  return window.appState.data.equipment.find(function (e) { return e.name === eqName; });
+}
+
+function wsEquipmentVersion(eqDef, level) {
+  return eqDef.versions.find(function (v) { return v.level === level; });
+}
+
+function wsGemVersion(gemDef, level) {
+  return gemDef.versions.find(function (v) { return v.level === level; });
+}
+
+function wsCarriedGems(variant) {
+  var carried = [];
+  variant.equippedEquipment.forEach(function (eq) {
+    var eqDef = wsEquipmentByName(eq.name);
+    var ver = wsEquipmentVersion(eqDef, eq.level);
+    (ver.gems || []).forEach(function (g) { carried.push(g); });
+  });
+  return carried;
+}
+
+function renderAbilityArea(state) {
+  var container = document.getElementById('ws-ability-area');
+  if (!container) return;
+  var variant = wsFindVariant(state);
+  if (!variant) { container.innerHTML = ''; return; }
+
+  var equipmentHtml = variant.equippedEquipment.map(function (eq) {
+    var eqDef = wsEquipmentByName(eq.name);
+    var ver = wsEquipmentVersion(eqDef, eq.level);
+    var gemChips = (ver.gems || []).map(function (g) {
+      var gemDef = wsGemByName(g.gemName);
+      return '<span class="ws-gem-chip">' + escapeHtml(gemDef.displayName) + ' Lv' + g.level + '</span>';
+    }).join('');
+    return (
+      '<div class="ws-equipped-item">' +
+        '<span>' + escapeHtml(eqDef.displayName) + ' Lv' + eq.level + '</span>' +
+        gemChips +
+        '<button class="btn" data-unequip-equipment="' + eq.name + '" onclick="wsUnequipEquipmentClick(\'' + eq.name + '\')">⊖</button>' +
+      '</div>'
+    );
+  }).join('') || '<div class="hint">尚未穿上任何裝備</div>';
+
+  var gemHtml = variant.wornGems.map(function (g) {
+    var gemDef = wsGemByName(g.name);
+    return (
+      '<div class="ws-equipped-item">' +
+        '<span>' + escapeHtml(gemDef.displayName) + ' Lv' + g.level + '</span>' +
+        '<button class="btn" data-unwear-gem="' + g.name + '" onclick="wsUnwearGemClick(\'' + g.name + '\')">⊖</button>' +
+      '</div>'
+    );
+  }).join('') || '<div class="hint">尚未佩掛任何寶石</div>';
+
+  container.innerHTML =
+    '<div class="label">🎒 能力</div>' +
+    '<div class="ws-ability-section"><div class="label">裝備欄</div>' + equipmentHtml + '</div>' +
+    '<div class="ws-ability-section"><div class="label">佩掛寶石</div>' + gemHtml + '</div>';
+}
+
+function wsUnequipEquipmentClick(eqName) {
+  var variant = wsFindVariant(window.appState);
+  var idx = variant.equippedEquipment.findIndex(function (e) { return e.name === eqName; });
+  if (idx !== -1) variant.equippedEquipment.splice(idx, 1);
+  window.rerender();
+}
+
+function wsUnwearGemClick(gemName) {
+  var variant = wsFindVariant(window.appState);
+  var idx = variant.wornGems.findIndex(function (g) { return g.name === gemName; });
+  if (idx !== -1) variant.wornGems.splice(idx, 1);
+  window.rerender();
+}
+
 function renderCenterPane(state) {
   var sel = state.selection;
   if (!sel.npcCode) {
