@@ -453,6 +453,32 @@ async function main() {
   record('bag error from a blocked wear is visible in the DOM, not just state', errorVisible.length > 0, errorVisible);
   await page.click('[data-unequip-equipment="order-lookup"]');
 
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.PREMIUM"]');
+  await page.click('[data-variant-edit-basics]');
+  await page.fill('[data-variant-name-input]', '');
+  await page.click('[data-variant-edit-commit]');
+  // Empty name falls back to the previous name inside wsCommitEditVariantBasics (Task 3's `|| variant.name`),
+  // so directly exercise the pure validator instead of relying on a reachable empty-name UI path.
+  const emptyNameErrors = await page.evaluate(function () {
+    return wsSaveVariantErrors({ name: '', description: '', baseInstructions: 'x', equippedEquipment: [], wornGems: [] });
+  });
+  record('an empty name is a save-blocking error', emptyNameErrors.length > 0 && emptyNameErrors.join('').indexOf('名稱') !== -1, JSON.stringify(emptyNameErrors));
+
+  const okErrors = await page.evaluate(function () {
+    return wsSaveVariantErrors({ name: '一般版', description: '', baseInstructions: '', equippedEquipment: [], wornGems: [] });
+  });
+  record('a variant with a name has no save-blocking errors', okErrors.length === 0, JSON.stringify(okErrors));
+
+  await page.click('[data-variant-edit-basics]');
+  await page.fill('[data-variant-name-input]', '豪華版 v2');
+  await page.click('[data-variant-edit-commit]');
+  await page.click('[data-variant-save]');
+  const savedDirty = await page.locator('[data-variant-save]').isDisabled();
+  record('saving clears the dirty state (save button disables again)', savedDirty === true);
+  const snapshotName = await page.evaluate(() => window.appState.uiState.variantSnapshots['FAQ_ANSWER.PREMIUM'].name);
+  record('saving updates the snapshot to the new name', snapshotName === '豪華版 v2', snapshotName);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

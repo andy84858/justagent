@@ -875,6 +875,34 @@ function wsBagEquip(eqName, level) {
   window.rerender();
 }
 
+function wsSaveVariantErrors(variant) {
+  var errors = [];
+  if (!variant.name || !variant.name.trim()) {
+    errors.push('名稱為必填');
+  }
+  return errors;
+}
+
+function wsSaveVariant() {
+  var npc = wsFindNpc(window.appState);
+  var variant = wsFindVariant(window.appState);
+  var errors = wsSaveVariantErrors(variant);
+  if (errors.length > 0) {
+    window.appState.uiState.bagError = errors.join('；');
+    window.rerender();
+    return;
+  }
+  var key = wsVariantSnapshotKey(npc.code, variant.code);
+  window.appState.uiState.variantSnapshots[key] = {
+    name: variant.name,
+    description: variant.description,
+    baseInstructions: variant.baseInstructions,
+    equippedEquipment: JSON.parse(JSON.stringify(variant.equippedEquipment)),
+    wornGems: JSON.parse(JSON.stringify(variant.wornGems))
+  };
+  window.rerender();
+}
+
 function renderCenterPane(state) {
   var sel = state.selection;
   if (!sel.npcCode) {
