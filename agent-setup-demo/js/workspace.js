@@ -198,11 +198,27 @@ function renderNpcPane(state) {
   var npc = wsFindNpc(state);
   if (!npc) { container.innerHTML = ''; return; }
 
+  var editing = state.uiState.editingNpcBasics;
+  var headerBlock;
+  if (editing) {
+    headerBlock =
+      '<div class="ws-npc-header">' +
+        '<span class="ws-npc-avatar">' + npc.avatar + '</span>' +
+        '<input class="ws-npc-name-input" data-npc-name-input value="' + escapeHtml(npc.displayName) + '">' +
+        '<button class="btn btn-primary" data-npc-edit-commit onclick="wsCommitEditNpcBasics()">✓</button>' +
+        '<button class="btn" onclick="wsCancelEditNpcBasics()">取消</button>' +
+      '</div>';
+  } else {
+    headerBlock =
+      '<div class="ws-npc-header">' +
+        '<span class="ws-npc-avatar">' + npc.avatar + '</span>' +
+        '<span class="ws-npc-name">' + escapeHtml(npc.displayName) + '</span>' +
+        '<button class="btn" data-npc-edit-pencil onclick="wsStartEditNpcBasics()">✎</button>' +
+      '</div>';
+  }
+
   container.innerHTML =
-    '<div class="ws-npc-header">' +
-      '<span class="ws-npc-avatar">' + npc.avatar + '</span>' +
-      '<span class="ws-npc-name">' + escapeHtml(npc.displayName) + '</span>' +
-    '</div>' +
+    headerBlock +
     '<div class="ws-npc-field">' +
       '<span class="badge badge-locked">🔒 代碼</span> ' + escapeHtml(npc.code) +
     '</div>' +
@@ -213,6 +229,24 @@ function renderNpcPane(state) {
       '<span class="badge badge-locked">🔒 場域</span> ' + escapeHtml(npc.usedFor) +
     '</div>' +
     '<div id="ws-npc-model-section"></div>';
+}
+
+function wsStartEditNpcBasics() {
+  window.appState.uiState.editingNpcBasics = true;
+  window.rerender();
+}
+
+function wsCancelEditNpcBasics() {
+  window.appState.uiState.editingNpcBasics = false;
+  window.rerender();
+}
+
+function wsCommitEditNpcBasics() {
+  var npc = wsFindNpc(window.appState);
+  var nameInput = document.querySelector('[data-npc-name-input]');
+  npc.displayName = nameInput.value.trim() || npc.displayName;
+  window.appState.uiState.editingNpcBasics = false;
+  window.rerender();
 }
 
 function renderCenterPane(state) {

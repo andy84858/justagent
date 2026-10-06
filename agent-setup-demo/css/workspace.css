@@ -44,3 +44,4 @@
 .ws-npc-avatar { font-size: 28px; }
 .ws-npc-name { font-size: 18px; font-weight: 600; }
 .ws-npc-field { margin-bottom: var(--space-2); font-size: 13px; }
+.ws-npc-name-input { font-size: 16px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 4px; }

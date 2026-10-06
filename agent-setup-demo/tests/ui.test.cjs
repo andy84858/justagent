@@ -134,6 +134,24 @@ async function main() {
   const lockIconCount = await page.locator('#ws-npc-pane .badge-locked').count();
   record('locked fields show the lock badge (code, type, usedFor = 3)', lockIconCount === 3, 'found ' + lockIconCount);
 
+  const pencilCount = await page.locator('[data-npc-edit-pencil]').count();
+  record('NPC pane has an edit pencil', pencilCount === 1);
+
+  await page.click('[data-npc-edit-pencil]');
+  const nameInputCount = await page.locator('[data-npc-name-input]').count();
+  record('clicking pencil turns displayName into an input', nameInputCount === 1);
+  const codeStillLocked = await page.locator('#ws-npc-pane input[value="FAQ_ANSWER"]').count();
+  record('code stays locked text even in edit mode', codeStillLocked === 0);
+
+  await page.fill('[data-npc-name-input]', '客服智慧助手');
+  await page.click('[data-npc-edit-commit]');
+  const savedName = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).displayName;
+  });
+  record('committing edit persists the new displayName', savedName === '客服智慧助手', savedName);
+  const backToReadOnly = await page.locator('[data-npc-name-input]').count();
+  record('after commit, pane returns to read-only', backToReadOnly === 0);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
