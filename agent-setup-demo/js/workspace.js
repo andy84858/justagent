@@ -43,11 +43,79 @@ function renderNavTree(state) {
     return '<div class="ws-nav-group">' + npcRow + variantRows + '</div>';
   }).join('');
 
+  var createNpcBlock;
+  if (state.uiState.creatingNpc) {
+    var err = state.uiState.npcFormError;
+    createNpcBlock =
+      '<div class="ws-nav-form" data-npc-form>' +
+        '<input class="ws-nav-form-input" data-npc-form-code placeholder="代碼 e.g. DATA_ANALYST">' +
+        '<input class="ws-nav-form-input" data-npc-form-name placeholder="顯示名稱">' +
+        (err ? '<div class="ws-nav-form-error" data-npc-form-error>' + escapeHtml(err) + '</div>' : '') +
+        '<div class="ws-nav-form-actions">' +
+          '<button class="btn" onclick="wsCancelCreateNpcForm()">取消</button>' +
+          '<button class="btn btn-primary" data-npc-form-submit onclick="wsSubmitCreateNpc()">建立</button>' +
+        '</div>' +
+      '</div>';
+  } else {
+    createNpcBlock = '<div class="ws-nav-create-npc hint" onclick="wsShowCreateNpcForm()">＋ 新增 NPC</div>';
+  }
+
   return (
     '<div class="label">NPC／人物卡</div>' +
     rows +
-    '<div class="ws-nav-create-npc hint">＋ 新增 NPC</div>'
+    createNpcBlock
   );
+}
+
+function wsValidateNpcCode(code, usedFor, npcs) {
+  if (!/^[A-Z0-9_]{1,80}$/.test(code)) {
+    return '代碼只能是大寫英數字與底線，長度 1–80';
+  }
+  var duplicate = npcs.some(function (n) { return n.code === code && n.usedFor === usedFor; });
+  if (duplicate) {
+    return '同一場域內已有相同代碼的 NPC';
+  }
+  return null;
+}
+
+function wsShowCreateNpcForm() {
+  window.appState.uiState.creatingNpc = true;
+  window.rerender();
+}
+
+function wsCancelCreateNpcForm() {
+  window.appState.uiState.creatingNpc = false;
+  window.rerender();
+}
+
+function wsSubmitCreateNpc() {
+  var codeInput = document.querySelector('[data-npc-form-code]');
+  var nameInput = document.querySelector('[data-npc-form-name]');
+  var code = codeInput.value.trim();
+  var name = nameInput.value.trim();
+  var usedFor = 'general';
+  var error = wsValidateNpcCode(code, usedFor, window.appState.data.npcs);
+  if (error) {
+    window.appState.uiState.npcFormError = error;
+    window.rerender();
+    return;
+  }
+  window.appState.data.npcs.push({
+    code: code,
+    type: 'AGENT',
+    usedFor: usedFor,
+    displayName: name || code,
+    avatar: '🧑‍🔧',
+    chatModel: null,
+    vectorModel: null,
+    retrieval: null,
+    publishedVersion: null,
+    variants: []
+  });
+  window.appState.uiState.creatingNpc = false;
+  window.appState.uiState.npcFormError = null;
+  window.appState.selection = { npcCode: code, variantCode: null };
+  window.rerender();
 }
 
 function wsToggleNpcExpand(code) {

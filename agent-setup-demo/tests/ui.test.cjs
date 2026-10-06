@@ -64,6 +64,30 @@ async function main() {
   const variantStubCount = await page.locator('.ws-variant-stub').count();
   record('selecting a variant renders the Phase 2 stub', variantStubCount === 1);
 
+  await page.click('.ws-nav-create-npc');
+  const formVisible = await page.locator('[data-npc-form]').count();
+  record('clicking + 新增 NPC opens the create form', formVisible === 1);
+
+  await page.fill('[data-npc-form-code]', 'bad code!');
+  await page.click('[data-npc-form-submit]');
+  const errorText1 = await page.locator('[data-npc-form-error]').innerText();
+  record('invalid code shows a validation error and does not create', errorText1.length > 0, errorText1);
+  const npcCountAfterBad = await page.evaluate(() => window.appState.data.npcs.length);
+  record('invalid code did not add an NPC', npcCountAfterBad === 3, 'count=' + npcCountAfterBad);
+
+  await page.fill('[data-npc-form-code]', 'DATA_ANALYST');
+  await page.fill('[data-npc-form-name]', '數據分析助手');
+  await page.click('[data-npc-form-submit]');
+  const npcCountAfterGood = await page.evaluate(() => window.appState.data.npcs.length);
+  record('valid code creates a new NPC', npcCountAfterGood === 4, 'count=' + npcCountAfterGood);
+  const selectedCode = await page.evaluate(() => window.appState.selection.npcCode);
+  record('newly created NPC is auto-selected', selectedCode === 'DATA_ANALYST');
+
+  const dupError = await page.evaluate(function () {
+    return wsValidateNpcCode('FAQ_ANSWER', 'customer_service', window.appState.data.npcs);
+  });
+  record('duplicate code+usedFor is rejected by validator', typeof dupError === 'string' && dupError.length > 0, dupError);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
