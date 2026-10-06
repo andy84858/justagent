@@ -1,0 +1,85 @@
+/* Scoped embed of agent-setup-demo's css/style.css + css/workspace.css under #page-agents,
+   so its generic class names (.btn/.label/.hint/.badge) never bleed into the rest of
+   skill-admin.html and vice versa. Source JS (data.js/workspace.js/app.js) is reused as-is
+   from agent-setup-demo/js/ — only the CSS needed this scoping pass. */
+
+#page-agents, #page-agents * { box-sizing: border-box; }
+#page-agents .ws-embed-root {
+  position: relative;
+  font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+}
+#page-agents .btn {
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+}
+#page-agents .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+#page-agents .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+#page-agents .btn-primary:disabled { background: var(--accent); opacity: 0.4; }
+#page-agents .btn-danger { background: var(--block-soft); color: var(--block); border-color: var(--block); }
+#page-agents .label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+#page-agents .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+#page-agents .badge-locked { background: var(--accent-soft); color: var(--accent); }
+#page-agents .hint { font-size: 12px; color: var(--muted); }
+
+#page-agents .ws-shell {
+  display: flex;
+  height: calc(100vh - 110px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+#page-agents .ws-pane {
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+}
+#page-agents #ws-nav {
+  width: 220px;
+  flex-shrink: 0;
+  background: #fafafa;
+  border-right: 1px solid var(--line);
+  padding: var(--space-3);
+}
+#page-agents #ws-center {
+  flex: 1;
+  background: var(--panel);
+  padding: var(--space-4);
+}
+#page-agents #ws-bag {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--gem-bg);
+  border-left: 1px solid var(--gem-border);
+  padding: var(--space-3);
+}
+#page-agents .ws-nav-group { margin-bottom: var(--space-2); }
+#page-agents .ws-nav-npc { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; }
+#page-agents .ws-nav-toggle { width: 14px; text-align: center; color: var(--muted); }
+#page-agents .ws-nav-label { font-size: 13px; }
+#page-agents .ws-nav-label--dim { color: var(--muted); }
+#page-agents .ws-nav-variant { padding: 4px 0 4px 28px; font-size: 12px; display: flex; justify-content: space-between; cursor: pointer; }
+#page-agents .ws-nav-variant--disabled { cursor: not-allowed; }
+#page-agents .ws-nav-create { color: var(--accent); cursor: pointer; }
+#page-agents .ws-nav-create-npc { margin-top: var(--space-3); color: var(--accent); cursor: pointer; font-size: 13px; }
+#page-agents .ws-nav-form { margin-top: var(--space-2); display: flex; flex-direction: column; gap: 6px; }
+#page-agents .ws-nav-form-input { padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; }
+#page-agents .ws-nav-form-error { color: var(--block); font-size: 11px; }
+#page-agents .ws-nav-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
+#page-agents .ws-npc-header { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-3); }
+#page-agents .ws-npc-avatar { font-size: 28px; }
+#page-agents .ws-npc-name { font-size: 18px; font-weight: 600; }
+#page-agents .ws-npc-field { margin-bottom: var(--space-2); font-size: 13px; }
+#page-agents .ws-npc-name-input { font-size: 16px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 4px; }
+#page-agents .ws-model-block { margin-bottom: var(--space-3); padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); }
+#page-agents .ws-param-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; font-size: 12px; }
+#page-agents .ws-param-row input, #page-agents .ws-param-row select { width: 100px; padding: 2px 6px; }
+#page-agents .ws-param-error { color: var(--block); font-size: 11px; margin: 4px 0; }
+#page-agents .ws-reset-btn { position: absolute; top: 8px; right: 8px; z-index: 10; }
