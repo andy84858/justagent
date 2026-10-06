@@ -1,0 +1,328 @@
+const path = require('path');
+const { chromium } = require('playwright-core');
+
+const results = [];
+function record(name, passed, detail) {
+  results.push({ name, passed, detail });
+  console.log((passed ? 'PASS' : 'FAIL') + ' - ' + name + (detail ? ' (' + detail + ')' : ''));
+}
+
+async function main() {
+  const executablePath = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  const browser = await chromium.launch({ executablePath });
+  const page = await browser.newPage();
+  const jsErrors = [];
+  page.on('pageerror', (err) => jsErrors.push(String(err)));
+
+  await page.goto('file://' + path.resolve(__dirname, '../index.html'));
+
+  const paneCount = await page.locator('.ws-pane').count();
+  record('three pane containers exist', paneCount === 3, 'found ' + paneCount);
+
+  const navExists = await page.locator('#ws-nav').count();
+  record('#ws-nav exists', navExists === 1);
+
+  const centerExists = await page.locator('#ws-center').count();
+  record('#ws-center exists', centerExists === 1);
+
+  const bagExists = await page.locator('#ws-bag').count();
+  record('#ws-bag exists', bagExists === 1);
+
+  const npcCount = await page.evaluate(() => window.appState.data.npcs.length);
+  record('SEED has 3 NPCs loaded into appState', npcCount === 3, 'found ' + npcCount);
+
+  const faqNpc = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER'));
+  record('FAQ_ANSWER NPC present with 2 variants', !!faqNpc && faqNpc.variants.length === 2);
+
+  const switchNpc = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'INTENT_SWITCH'));
+  record('INTENT_SWITCH NPC is type SWITCH', !!switchNpc && switchNpc.type === 'SWITCH');
+
+  const navText1 = await page.locator('#ws-nav').innerText();
+  record('nav tree lists FAQ_ANSWER display name', navText1.indexOf('客服問答助手') !== -1);
+  record('nav tree lists ORDER_ASSIST display name', navText1.indexOf('訂單助手') !== -1);
+
+  // Collapsed by default: variant names not visible yet.
+  record('variants hidden before expand', navText1.indexOf('一般版') === -1);
+
+  await page.click('[data-npc-toggle="FAQ_ANSWER"]');
+  const navText2 = await page.locator('#ws-nav').innerText();
+  record('expanding FAQ_ANSWER reveals its variants', navText2.indexOf('一般版') !== -1 && navText2.indexOf('豪華版') !== -1);
+
+  await page.click('[data-npc-toggle="FAQ_ANSWER"]');
+  const navText3 = await page.locator('#ws-nav').innerText();
+  record('collapsing FAQ_ANSWER hides its variants again', navText3.indexOf('一般版') === -1);
+
+  const centerEmptyText = await page.locator('#ws-center').innerText();
+  record('center pane shows empty-state hint before any selection', centerEmptyText.indexOf('請從左側選擇') !== -1, centerEmptyText);
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const npcPaneCount = await page.locator('#ws-npc-pane').count();
+  record('selecting an NPC renders #ws-npc-pane', npcPaneCount === 1);
+
+  await page.click('[data-npc-toggle="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  const variantStubCount = await page.locator('.ws-variant-stub').count();
+  record('selecting a variant renders the Phase 2 stub', variantStubCount === 1);
+
+  await page.click('.ws-nav-create-npc');
+  const formVisible = await page.locator('[data-npc-form]').count();
+  record('clicking + 新增 NPC opens the create form', formVisible === 1);
+
+  await page.fill('[data-npc-form-code]', 'bad code!');
+  await page.click('[data-npc-form-submit]');
+  const errorText1 = await page.locator('[data-npc-form-error]').innerText();
+  record('invalid code shows a validation error and does not create', errorText1.length > 0, errorText1);
+  const npcCountAfterBad = await page.evaluate(() => window.appState.data.npcs.length);
+  record('invalid code did not add an NPC', npcCountAfterBad === 3, 'count=' + npcCountAfterBad);
+
+  await page.fill('[data-npc-form-code]', 'DATA_ANALYST');
+  await page.fill('[data-npc-form-name]', '數據分析助手');
+  await page.click('[data-npc-form-submit]');
+  const npcCountAfterGood = await page.evaluate(() => window.appState.data.npcs.length);
+  record('valid code creates a new NPC', npcCountAfterGood === 4, 'count=' + npcCountAfterGood);
+  const selectedCode = await page.evaluate(() => window.appState.selection.npcCode);
+  record('newly created NPC is auto-selected', selectedCode === 'DATA_ANALYST');
+
+  const dupError = await page.evaluate(function () {
+    return wsValidateNpcCode('FAQ_ANSWER', 'customer_service', window.appState.data.npcs);
+  });
+  record('duplicate code+usedFor is rejected by validator', typeof dupError === 'string' && dupError.length > 0, dupError);
+
+  await page.click('[data-npc-toggle="ORDER_ASSIST"]');
+  await page.click('[data-create-variant="ORDER_ASSIST"]');
+  const variantFormVisible = await page.locator('[data-variant-form="ORDER_ASSIST"]').count();
+  record('clicking + 新人物卡 opens inline form', variantFormVisible === 1);
+
+  await page.fill('[data-variant-form-code="ORDER_ASSIST"]', 'bad-code');
+  await page.click('[data-variant-form-submit="ORDER_ASSIST"]');
+  const variantErrorText = await page.locator('[data-variant-form-error="ORDER_ASSIST"]').innerText();
+  record('invalid variant code shows error', variantErrorText.length > 0, variantErrorText);
+
+  await page.fill('[data-variant-form-code="ORDER_ASSIST"]', 'BASIC');
+  await page.fill('[data-variant-form-name="ORDER_ASSIST"]', '基本版');
+  await page.click('[data-variant-form-submit="ORDER_ASSIST"]');
+  const orderAssistVariantCount = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).variants.length;
+  });
+  record('valid code creates the variant', orderAssistVariantCount === 1, 'count=' + orderAssistVariantCount);
+  const selectedVariant = await page.evaluate(() => window.appState.selection.variantCode);
+  record('newly created variant is auto-selected', selectedVariant === 'BASIC');
+
+  await page.click('[data-create-variant="ORDER_ASSIST"]');
+  await page.fill('[data-variant-form-code="ORDER_ASSIST"]', 'BASIC');
+  await page.fill('[data-variant-form-name="ORDER_ASSIST"]', '重複版');
+  await page.click('[data-variant-form-submit="ORDER_ASSIST"]');
+  const dupVariantError = await page.locator('[data-variant-form-error="ORDER_ASSIST"]').innerText();
+  record('duplicate variant code within the same NPC is rejected', dupVariantError.length > 0, dupVariantError);
+  const stillOneVariant = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).variants.length;
+  });
+  record('duplicate variant submission did not add a second variant', stillOneVariant === 1, stillOneVariant);
+
+  await page.click('[data-npc-toggle="INTENT_SWITCH"]');
+  const switchCreateDisabled = await page.locator('[data-npc-row="INTENT_SWITCH"] + .ws-nav-variant.ws-nav-create').count();
+  record('SWITCH-type NPC has no clickable + 新人物卡 trigger', switchCreateDisabled === 0);
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const npcPaneText = await page.locator('#ws-npc-pane').innerText();
+  record('NPC pane shows displayName', npcPaneText.indexOf('客服問答助手') !== -1);
+  record('NPC pane shows locked code as text', npcPaneText.indexOf('FAQ_ANSWER') !== -1);
+
+  const codeIsInput = await page.locator('#ws-npc-pane input[value="FAQ_ANSWER"]').count();
+  record('locked code field is not an input', codeIsInput === 0);
+
+  const lockIconCount = await page.locator('#ws-npc-pane .badge-locked').count();
+  record('locked fields show the lock badge (code, type, usedFor = 3)', lockIconCount === 3, 'found ' + lockIconCount);
+
+  const pencilCount = await page.locator('[data-npc-edit-pencil]').count();
+  record('NPC pane has an edit pencil', pencilCount === 1);
+
+  await page.click('[data-npc-edit-pencil]');
+  const nameInputCount = await page.locator('[data-npc-name-input]').count();
+  record('clicking pencil turns displayName into an input', nameInputCount === 1);
+  const codeStillLocked = await page.locator('#ws-npc-pane input[value="FAQ_ANSWER"]').count();
+  record('code stays locked text even in edit mode', codeStillLocked === 0);
+
+  await page.fill('[data-npc-name-input]', '客服智慧助手');
+  await page.click('[data-npc-edit-commit]');
+  const savedName = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).displayName;
+  });
+  record('committing edit persists the new displayName', savedName === '客服智慧助手', savedName);
+  const backToReadOnly = await page.locator('[data-npc-name-input]').count();
+  record('after commit, pane returns to read-only', backToReadOnly === 0);
+
+  await page.click('[data-npc-select="ORDER_ASSIST"]');
+  const noModelHint = await page.locator('#ws-npc-model-section').innerText();
+  record('ORDER_ASSIST shows no-chat-model state', noModelHint.indexOf('尚未設定對話模型') !== -1, noModelHint);
+
+  await page.click('[data-add-model="chatModel"]');
+  const templateSelectCount = await page.locator('[data-model-template-select="chatModel"]').count();
+  record('clicking 加入模型 shows a template dropdown', templateSelectCount === 1);
+
+  await page.selectOption('[data-model-template-select="chatModel"]', 'bedrock:claude-sonnet-5.5');
+  await page.click('[data-model-confirm="chatModel"]');
+  const chatModelKey = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).chatModel.key;
+  });
+  record('confirming attaches the chosen template', chatModelKey === 'bedrock:claude-sonnet-5.5', chatModelKey);
+
+  const chatModelParams = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).chatModel.params;
+  });
+  record('attached model gets default params from template', chatModelParams.temperature === 0.5 && chatModelParams.max_tokens === 2048, JSON.stringify(chatModelParams));
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const tempValue = await page.locator('[data-model-param-input="chatModel.temperature"]').inputValue();
+  record('chat model temperature param shows current value', tempValue === '0.7', tempValue);
+
+  await page.fill('[data-model-param-input="chatModel.temperature"]', '5');
+  await page.click('[data-model-param-save="chatModel"]');
+  const rangeError = await page.locator('[data-model-param-error="chatModel"]').innerText();
+  record('out-of-range number is rejected with a message', rangeError.length > 0, rangeError);
+  const unchangedTemp = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).chatModel.params.temperature;
+  });
+  record('out-of-range value is not persisted', unchangedTemp === 0.7, unchangedTemp);
+
+  await page.fill('[data-model-param-input="chatModel.temperature"]', '0.9');
+  await page.click('[data-model-param-save="chatModel"]');
+  const savedTemp = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).chatModel.params.temperature;
+  });
+  record('in-range value is saved', savedTemp === 0.9, savedTemp);
+
+  const dimensionsSelectValue = await page.locator('[data-model-param-input="vectorModel.dimensions"]').inputValue();
+  record('enum param renders as a select with current value', dimensionsSelectValue === '1536', dimensionsSelectValue);
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const publishBtnCount = await page.locator('[data-model-publish="chatModel"]').count();
+  record('attached chat model shows a publish button', publishBtnCount === 1);
+
+  // Unsaved edit should block publish.
+  await page.fill('[data-model-param-input="chatModel.temperature"]', '0.3');
+  await page.click('[data-model-publish="chatModel"]');
+  const unsavedBlock = await page.locator('[data-model-param-error="chatModel"]').innerText();
+  record('publishing with unsaved param edits is blocked', unsavedBlock.indexOf('未儲存') !== -1, unsavedBlock);
+  const versionUnchanged1 = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).chatModel.version;
+  });
+  // SEED (Task 2) seeds FAQ_ANSWER's chatModel at version 3, not 1 — asserting against the
+  // actual seed value rather than an assumed fresh version. See ledger Task 11 ruling.
+  record('version did not bump while blocked', versionUnchanged1 === 3, versionUnchanged1);
+
+  // Save first, then publish should succeed.
+  await page.click('[data-model-param-save="chatModel"]');
+  await page.click('[data-model-publish="chatModel"]');
+  const versionBumped = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).chatModel.version;
+  });
+  record('publish bumps the version by 1', versionBumped === 4, versionBumped);
+
+  // DATA_ANALYST (created earlier in Task 5's test) has no chatModel yet, unlike
+  // ORDER_ASSIST which already got one attached during Task 9's test in this same run.
+  await page.click('[data-npc-select="DATA_ANALYST"]');
+  await page.click('[data-add-model="chatModel"]');
+  await page.selectOption('[data-model-template-select="chatModel"]', 'demo:chat-lite');
+  await page.click('[data-model-confirm="chatModel"]');
+  await page.fill('[data-model-param-input="chatModel.temperature"]', '');
+  await page.click('[data-model-param-save="chatModel"]');
+  await page.click('[data-model-publish="chatModel"]');
+  // The failed save (empty value rejected by wsValidateParamValue's guard) never commits,
+  // so the pending edit is still in modelParamEdits — publish blocks on "unsaved edits",
+  // not "required", because an empty value can never reach committed model.params through
+  // the UI once the empty-string guard exists. Either blocking reason satisfies the Review
+  // Focus requirement (publish refuses to proceed and explains why); see ledger Task 11 ruling.
+  const blockedByEmptyRequired = await page.locator('[data-model-param-error="chatModel"]').innerText();
+  record('publishing with an empty required param is blocked', blockedByEmptyRequired.length > 0, blockedByEmptyRequired);
+  const notPublishedWithEmptyParam = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'DATA_ANALYST'; }).chatModel.version;
+  });
+  record('version did not bump while empty-param publish was blocked', notPublishedWithEmptyParam === 1, notPublishedWithEmptyParam);
+
+  const bagPlaceholderText = await page.locator('#ws-bag').innerText();
+  record('right pane shows the Phase 2 placeholder', bagPlaceholderText.indexOf('背包功能將於 Phase') !== -1, bagPlaceholderText);
+
+  await page.click('[data-reset-data]');
+  const npcCountAfterReset = await page.evaluate(() => window.appState.data.npcs.length);
+  record('reset restores the original 3-NPC seed', npcCountAfterReset === 3, 'count=' + npcCountAfterReset);
+  const selectionAfterReset = await page.evaluate(() => window.appState.selection.npcCode);
+  record('reset clears the current selection', selectionAfterReset === null);
+
+  // Full-flow smoke test: create NPC -> create variant -> attach model -> edit params -> publish, all without a page reload.
+  await page.click('.ws-nav-create-npc');
+  await page.fill('[data-npc-form-code]', 'SMOKE_NPC');
+  await page.fill('[data-npc-form-name]', 'Smoke Test NPC');
+  await page.click('[data-npc-form-submit]');
+  await page.click('[data-npc-toggle="SMOKE_NPC"]');
+  await page.click('[data-create-variant="SMOKE_NPC"]');
+  await page.fill('[data-variant-form-code="SMOKE_NPC"]', 'V1');
+  await page.fill('[data-variant-form-name="SMOKE_NPC"]', 'V1 名稱');
+  await page.click('[data-variant-form-submit="SMOKE_NPC"]');
+  await page.click('[data-npc-select="SMOKE_NPC"]');
+  await page.click('[data-add-model="chatModel"]');
+  await page.selectOption('[data-model-template-select="chatModel"]', 'demo:chat-lite');
+  await page.click('[data-model-confirm="chatModel"]');
+  await page.click('[data-model-publish="chatModel"]');
+  const smokeVersion = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'SMOKE_NPC'; }).chatModel.version;
+  });
+  record('end-to-end smoke flow publishes without error', smokeVersion === 2, smokeVersion);
+
+  // --- Final-review fix verification: duplicate NPC code across different usedFor (Review Focus #2) ---
+  const npcCountBeforeDup = await page.evaluate(() => window.appState.data.npcs.length);
+  await page.click('.ws-nav-create-npc');
+  await page.fill('[data-npc-form-code]', 'FAQ_ANSWER');
+  await page.fill('[data-npc-form-name]', 'Duplicate Attempt');
+  await page.click('[data-npc-form-submit]');
+  const dupNpcErrorText = await page.locator('[data-npc-form-error]').innerText();
+  record('duplicate NPC code is rejected through the actual create form', dupNpcErrorText.length > 0, dupNpcErrorText);
+  const npcCountAfterDup = await page.evaluate(() => window.appState.data.npcs.length);
+  record('rejected duplicate NPC code did not add a new NPC', npcCountAfterDup === npcCountBeforeDup, 'before=' + npcCountBeforeDup + ' after=' + npcCountAfterDup);
+  const faqRowCount = await page.locator('[data-npc-row="FAQ_ANSWER"]').count();
+  record('only one FAQ_ANSWER row exists in the nav tree', faqRowCount === 1, 'found ' + faqRowCount);
+  await page.evaluate(() => wsCancelCreateNpcForm());
+
+  // --- Final-review fix verification: unsaved model-param edits must not leak across NPCs ---
+  // Note: the reset-data step above (Task 12's test) restored SEED, so ORDER_ASSIST no
+  // longer has the chatModel it was given back in Task 9's test — attach a fresh one here.
+  await page.click('[data-npc-select="ORDER_ASSIST"]');
+  await page.click('[data-add-model="chatModel"]');
+  await page.selectOption('[data-model-template-select="chatModel"]', 'bedrock:claude-sonnet-5.5');
+  await page.click('[data-model-confirm="chatModel"]');
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.fill('[data-model-param-input="chatModel.temperature"]', '0.15');
+  // Deliberately do NOT save — switch away with an unsaved edit pending.
+  await page.click('[data-npc-select="ORDER_ASSIST"]');
+  const orderAssistTempShown = await page.locator('[data-model-param-input="chatModel.temperature"]').inputValue();
+  record('switching NPCs does not leak an unsaved value into the next NPC\'s input', orderAssistTempShown === '0.5', orderAssistTempShown);
+
+  const orderAssistVersionBeforePublish = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).chatModel.version;
+  });
+  await page.click('[data-model-publish="chatModel"]');
+  const orderAssistVersionAfterPublish = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).chatModel.version;
+  });
+  record('publishing an untouched NPC is not blocked by another NPC\'s unsaved edit', orderAssistVersionAfterPublish === orderAssistVersionBeforePublish + 1, 'before=' + orderAssistVersionBeforePublish + ' after=' + orderAssistVersionAfterPublish);
+
+  await page.click('[data-model-param-save="chatModel"]');
+  const orderAssistTempAfterSave = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'ORDER_ASSIST'; }).chatModel.params.temperature;
+  });
+  record('saving an untouched NPC does not write another NPC\'s pending value onto it', orderAssistTempAfterSave === 0.5, orderAssistTempAfterSave);
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const faqTempStillPending = await page.locator('[data-model-param-input="chatModel.temperature"]').inputValue();
+  record('FAQ_ANSWER\'s own unsaved edit survives switching away and back', faqTempStillPending === '0.15', faqTempStillPending);
+
+  await browser.close();
+
+  const failed = results.filter((r) => !r.passed).length;
+  console.log('\n' + results.length + ' checks, ' + failed + ' failed, ' + jsErrors.length + ' JS errors');
+  if (jsErrors.length) console.log('JS errors:', jsErrors);
+  process.exit(failed > 0 || jsErrors.length > 0 ? 1 : 0);
+}
+
+main();

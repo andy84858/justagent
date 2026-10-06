@@ -1,0 +1,26 @@
+:root {
+  --bg: #f4f5f8;
+  --panel: #ffffff;
+  --ink: #1d2330;
+  --muted: #6b7280;
+  --line: #e3e6ec;
+  --accent: #4f46e5;
+  --accent-soft: #eef0ff;
+  --ok: #15803d;
+  --ok-soft: #e8f6ec;
+  --warn: #b45309;
+  --warn-soft: #fff4e0;
+  --block: #c62828;
+  --block-soft: #fdecec;
+  --info: #1d4ed8;
+  --info-soft: #e8f0ff;
+  --api: #0284c7;
+  --mcp: #9333ea;
+  --gem-bg: #fffaf0;
+  --gem-border: #ecd9a8;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --radius: 6px;
+}
