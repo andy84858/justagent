@@ -1,7 +1,17 @@
 window.appState = {
   data: cloneSeed(),
   selection: { npcCode: null, variantCode: null },
-  uiState: { expandedNpcs: {} }
+  uiState: {
+    expandedNpcs: {},
+    creatingNpc: false,
+    npcFormError: null,
+    creatingVariantFor: null,
+    variantFormError: null,
+    editingNpcBasics: false,
+    addingModelKind: null,
+    modelParamEdits: {},
+    modelParamErrors: {}
+  }
 };
 
 function render() {
@@ -16,7 +26,17 @@ window.rerender = render;
 window.resetData = function resetData() {
   window.appState.data = cloneSeed();
   window.appState.selection = { npcCode: null, variantCode: null };
-  window.appState.uiState = { expandedNpcs: {} };
+  window.appState.uiState = {
+    expandedNpcs: {},
+    creatingNpc: false,
+    npcFormError: null,
+    creatingVariantFor: null,
+    variantFormError: null,
+    editingNpcBasics: false,
+    addingModelKind: null,
+    modelParamEdits: {},
+    modelParamErrors: {}
+  };
   render();
 };
 

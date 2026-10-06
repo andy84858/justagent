@@ -172,6 +172,29 @@ async function main() {
   });
   record('attached model gets default params from template', chatModelParams.temperature === 0.5 && chatModelParams.max_tokens === 2048, JSON.stringify(chatModelParams));
 
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const tempValue = await page.locator('[data-model-param-input="chatModel.temperature"]').inputValue();
+  record('chat model temperature param shows current value', tempValue === '0.7', tempValue);
+
+  await page.fill('[data-model-param-input="chatModel.temperature"]', '5');
+  await page.click('[data-model-param-save="chatModel"]');
+  const rangeError = await page.locator('[data-model-param-error="chatModel"]').innerText();
+  record('out-of-range number is rejected with a message', rangeError.length > 0, rangeError);
+  const unchangedTemp = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).chatModel.params.temperature;
+  });
+  record('out-of-range value is not persisted', unchangedTemp === 0.7, unchangedTemp);
+
+  await page.fill('[data-model-param-input="chatModel.temperature"]', '0.9');
+  await page.click('[data-model-param-save="chatModel"]');
+  const savedTemp = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).chatModel.params.temperature;
+  });
+  record('in-range value is saved', savedTemp === 0.9, savedTemp);
+
+  const dimensionsSelectValue = await page.locator('[data-model-param-input="vectorModel.dimensions"]').inputValue();
+  record('enum param renders as a select with current value', dimensionsSelectValue === '1536', dimensionsSelectValue);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

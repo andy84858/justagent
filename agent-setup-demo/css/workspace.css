@@ -46,3 +46,6 @@
 .ws-npc-field { margin-bottom: var(--space-2); font-size: 13px; }
 .ws-npc-name-input { font-size: 16px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 4px; }
 .ws-model-block { margin-bottom: var(--space-3); padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.ws-param-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; font-size: 12px; }
+.ws-param-row input, .ws-param-row select { width: 100px; padding: 2px 6px; }
+.ws-param-error { color: var(--block); font-size: 11px; margin: 4px 0; }

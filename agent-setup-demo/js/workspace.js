@@ -266,10 +266,40 @@ function renderModelBlock(npc, kind) {
 
   if (model) {
     var template = window.appState.data.modelTemplates[model.key];
+    var paramsHtml = (template ? template.params : []).map(function (p) {
+      var pendingKey = kind + '.' + p.key;
+      var currentValue = window.appState.uiState.modelParamEdits[pendingKey] !== undefined
+        ? window.appState.uiState.modelParamEdits[pendingKey]
+        : model.params[p.key];
+      if (p.kind === 'enum') {
+        var opts = p.enumValues.map(function (v) {
+          return '<option value="' + v + '"' + (String(v) === String(currentValue) ? ' selected' : '') + '>' + v + '</option>';
+        }).join('');
+        return (
+          '<div class="ws-param-row">' +
+            '<span class="label">' + escapeHtml(p.label) + '</span>' +
+            '<select data-model-param-input="' + pendingKey + '" onchange="wsEditModelParam(\'' + kind + '\', \'' + p.key + '\', this.value)">' + opts + '</select>' +
+          '</div>'
+        );
+      }
+      return (
+        '<div class="ws-param-row">' +
+          '<span class="label">' + escapeHtml(p.label) + '</span>' +
+          '<input data-model-param-input="' + pendingKey + '" value="' + escapeHtml(currentValue) + '" ' +
+            'oninput="wsEditModelParam(\'' + kind + '\', \'' + p.key + '\', this.value)">' +
+        '</div>'
+      );
+    }).join('');
+
+    var paramError = window.appState.uiState.modelParamErrors[kind];
+
     return (
       '<div class="ws-model-block">' +
         '<div class="label">' + label + '</div>' +
         '<div>' + escapeHtml(template ? template.label : model.key) + ' <span class="hint">v' + model.version + '</span></div>' +
+        paramsHtml +
+        (paramError ? '<div class="ws-param-error" data-model-param-error="' + kind + '">' + escapeHtml(paramError) + '</div>' : '') +
+        '<button class="btn btn-primary" data-model-param-save="' + kind + '" onclick="wsSaveModelParams(\'' + kind + '\')">儲存參數</button>' +
       '</div>'
     );
   }
@@ -328,6 +358,56 @@ function wsConfirmAddModel(kind) {
   template.params.forEach(function (p) { defaultParams[p.key] = p.default; });
   npc[kind] = { key: templateKey, version: 1, params: defaultParams };
   window.appState.uiState.addingModelKind = null;
+  window.rerender();
+}
+
+function wsValidateParamValue(paramDef, rawValue) {
+  if (paramDef.kind === 'number') {
+    if (rawValue === '' || rawValue === null || rawValue === undefined) {
+      return { ok: false, message: paramDef.label + ' 不能留空' };
+    }
+    var num = Number(rawValue);
+    if (isNaN(num)) return { ok: false, message: paramDef.label + ' 必須是數字' };
+    if (num < paramDef.min || num > paramDef.max) {
+      return { ok: false, message: paramDef.label + ' 必須介於 ' + paramDef.min + ' 到 ' + paramDef.max + ' 之間' };
+    }
+    return { ok: true, value: num };
+  }
+  if (paramDef.kind === 'enum') {
+    var matches = paramDef.enumValues.some(function (v) { return String(v) === String(rawValue); });
+    if (!matches) {
+      return { ok: true, value: rawValue, message: paramDef.label + ' 不是建議值，執行時會忽略' };
+    }
+    return { ok: true, value: paramDef.enumValues.filter(function (v) { return String(v) === String(rawValue); })[0] };
+  }
+  return { ok: true, value: rawValue };
+}
+
+function wsEditModelParam(kind, paramKey, rawValue) {
+  window.appState.uiState.modelParamEdits[kind + '.' + paramKey] = rawValue;
+}
+
+function wsSaveModelParams(kind) {
+  var npc = wsFindNpc(window.appState);
+  var model = npc[kind];
+  var template = window.appState.data.modelTemplates[model.key];
+  var newParams = {};
+  for (var i = 0; i < template.params.length; i++) {
+    var p = template.params[i];
+    var pendingKey = kind + '.' + p.key;
+    var raw = window.appState.uiState.modelParamEdits[pendingKey];
+    var rawValue = raw !== undefined ? raw : model.params[p.key];
+    var result = wsValidateParamValue(p, rawValue);
+    if (!result.ok) {
+      window.appState.uiState.modelParamErrors[kind] = result.message;
+      window.rerender();
+      return;
+    }
+    newParams[p.key] = result.value;
+  }
+  model.params = newParams;
+  window.appState.uiState.modelParamErrors[kind] = null;
+  template.params.forEach(function (p) { delete window.appState.uiState.modelParamEdits[kind + '.' + p.key]; });
   window.rerender();
 }
 
