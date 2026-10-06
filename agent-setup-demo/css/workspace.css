@@ -67,3 +67,6 @@
 .ws-bag-item--active { border-color: var(--accent); background: var(--accent-soft); }
 .ws-bag-warning { color: var(--warn); font-size: 11px; margin: 6px 0; }
 .ws-bag-error { color: var(--block); font-size: 11px; margin: 6px 0; }
+.ws-modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 50; }
+.ws-modal-mask.ws-modal--active { display: flex; }
+.ws-modal-box { background: var(--panel); border-radius: 8px; padding: var(--space-4); width: 360px; }

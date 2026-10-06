@@ -903,6 +903,66 @@ function wsSaveVariant() {
   window.rerender();
 }
 
+function wsPublishVariantErrors(npc, variant) {
+  var errors = [];
+  if (wsVariantIsDirty(npc.code, variant)) {
+    errors.push('有未儲存的修改，請先儲存');
+  }
+  if (!variant.name || !variant.name.trim()) {
+    errors.push('名稱為必填');
+  }
+  var allCapabilityRefs = variant.equippedEquipment.map(function (e) {
+    return { kind: 'equipment', def: wsEquipmentByName(e.name), level: e.level };
+  }).concat(variant.wornGems.map(function (g) {
+    return { kind: 'gem', def: wsGemByName(g.name), level: g.level };
+  }));
+  allCapabilityRefs.forEach(function (ref) {
+    var ver = ref.kind === 'equipment' ? wsEquipmentVersion(ref.def, ref.level) : wsGemVersion(ref.def, ref.level);
+    if (ver.status === 'draft') {
+      errors.push('能力含草稿版本（' + ref.def.displayName + '），不能發布');
+    }
+  });
+  return errors;
+}
+
+function renderPublishVariantModalBody() {
+  var npc = wsFindNpc(window.appState);
+  var variant = wsFindVariant(window.appState);
+  var errors = wsPublishVariantErrors(npc, variant);
+  var modal = document.getElementById('modal-publish-variant-body');
+  if (!modal) return;
+  modal.innerHTML =
+    '<div>發布「' + escapeHtml(variant.name) + '」？目前版本：' + (variant.publishedVersion ? ('v' + variant.publishedVersion) : '尚未發布') + '</div>' +
+    (errors.length > 0
+      ? '<div class="ws-bag-error" data-publish-variant-error>' + escapeHtml(errors.join('；')) + '</div>'
+      : '<div class="hint" data-publish-variant-error></div>') +
+    '<div class="ws-variant-titlebar-actions" style="margin-top:12px;">' +
+      '<button class="btn" data-publish-variant-close onclick="wsClosePublishVariantModal()">取消</button>' +
+      '<button class="btn btn-primary" data-publish-variant-confirm ' + (errors.length > 0 ? 'disabled' : '') + ' onclick="wsConfirmPublishVariant()">確認發布</button>' +
+    '</div>';
+}
+
+function wsOpenPublishVariantModal() {
+  document.getElementById('modal-publish-variant').classList.add('ws-modal--active');
+  renderPublishVariantModalBody();
+}
+
+function wsClosePublishVariantModal() {
+  document.getElementById('modal-publish-variant').classList.remove('ws-modal--active');
+}
+
+function wsConfirmPublishVariant() {
+  var npc = wsFindNpc(window.appState);
+  var variant = wsFindVariant(window.appState);
+  var errors = wsPublishVariantErrors(npc, variant);
+  if (errors.length > 0) return;
+  variant.publishedVersion = (variant.publishedVersion || 0) + 1;
+  variant.publishHistory = variant.publishHistory || [];
+  variant.publishHistory.unshift({ version: variant.publishedVersion, publishedAt: new Date().toISOString() });
+  document.getElementById('modal-publish-variant').classList.remove('ws-modal--active');
+  window.rerender();
+}
+
 function renderCenterPane(state) {
   var sel = state.selection;
   if (!sel.npcCode) {

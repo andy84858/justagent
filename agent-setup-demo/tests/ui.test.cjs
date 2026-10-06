@@ -479,6 +479,40 @@ async function main() {
   const snapshotName = await page.evaluate(() => window.appState.uiState.variantSnapshots['FAQ_ANSWER.PREMIUM'].name);
   record('saving updates the snapshot to the new name', snapshotName === '豪華版 v2', snapshotName);
 
+  const unsavedPublishErrors = await page.evaluate(function () {
+    var npc = window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; });
+    var variant = npc.variants.find(function (v) { return v.code === 'PREMIUM'; });
+    return wsPublishVariantErrors(npc, variant);
+  });
+  // PREMIUM has no unsaved edits and no draft capability at this point in the suite, so this should be empty;
+  // prove the *mechanism* by forcing a draft-capability variant into the check instead.
+  const draftCapabilityErrors = await page.evaluate(function () {
+    var npc = window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; });
+    var fakeVariant = { name: 'x', equippedEquipment: [{ name: 'order-lookup', level: 1 }], wornGems: [] };
+    npc.equipment_backup_for_test = window.appState.data.equipment.find(function (e) { return e.name === 'order-lookup'; }).versions[0].status;
+    window.appState.data.equipment.find(function (e) { return e.name === 'order-lookup'; }).versions[0].status = 'draft';
+    var errors = wsPublishVariantErrors(npc, fakeVariant);
+    window.appState.data.equipment.find(function (e) { return e.name === 'order-lookup'; }).versions[0].status = npc.equipment_backup_for_test;
+    return errors;
+  });
+  record('publishing a variant whose equipped item is now a draft version is blocked', draftCapabilityErrors.length > 0 && draftCapabilityErrors.join('').indexOf('草稿') !== -1, JSON.stringify(draftCapabilityErrors));
+
+  await page.click('[data-variant-edit-basics]');
+  await page.fill('[data-variant-name-input]', '豪華版 未儲存');
+  await page.click('[data-variant-edit-commit]');
+  await page.click('[data-variant-publish]');
+  const modalVisible = await page.locator('#modal-publish-variant.ws-modal--active').count();
+  record('發布 opens the publish modal', modalVisible === 1);
+  const blockedHint = await page.locator('[data-publish-variant-error]').innerText();
+  record('modal shows the unsaved-changes block before confirming', blockedHint.indexOf('未儲存') !== -1, blockedHint);
+
+  await page.click('[data-publish-variant-close]');
+  await page.click('[data-variant-save]');
+  await page.click('[data-variant-publish]');
+  await page.click('[data-publish-variant-confirm]');
+  const versionAfterPublish = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'PREMIUM').publishedVersion);
+  record('confirming publish bumps publishedVersion by 1', versionAfterPublish === 2, versionAfterPublish);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
