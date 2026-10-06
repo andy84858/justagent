@@ -336,6 +336,17 @@ async function main() {
   const stubGoneCount = await page.locator('.ws-variant-stub').count();
   record('the Phase 2 stub is gone', stubGoneCount === 0);
 
+  const variantPaneText = await page.locator('#ws-variant-pane').innerText();
+  record('variant pane shows published-version status', variantPaneText.indexOf('已發布 v2') !== -1, variantPaneText);
+  record('variant pane shows saved status', variantPaneText.indexOf('已儲存') !== -1, variantPaneText);
+
+  const discardDisabled = await page.locator('[data-variant-discard]').isDisabled();
+  record('放棄修改 starts disabled (nothing to discard yet)', discardDisabled === true);
+  const saveDisabled = await page.locator('[data-variant-save]').isDisabled();
+  record('儲存 starts disabled (nothing to save yet)', saveDisabled === true);
+  const publishEnabled = await page.locator('[data-variant-publish]').isDisabled();
+  record('發布 is always clickable (not disabled by having no changes)', publishEnabled === false);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

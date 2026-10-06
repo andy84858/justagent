@@ -10,7 +10,8 @@ window.appState = {
     editingNpcBasics: false,
     addingModelKind: null,
     modelParamEdits: {},
-    modelParamErrors: {}
+    modelParamErrors: {},
+    variantSnapshots: {}
   }
 };
 
@@ -20,6 +21,7 @@ function render() {
   document.getElementById('ws-bag').innerHTML = renderBagPlaceholder();
   renderNpcPane(window.appState);
   renderModelSection(window.appState);
+  renderVariantPane(window.appState);
 }
 
 window.rerender = render;
@@ -36,7 +38,8 @@ window.resetData = function resetData() {
     editingNpcBasics: false,
     addingModelKind: null,
     modelParamEdits: {},
-    modelParamErrors: {}
+    modelParamErrors: {},
+    variantSnapshots: {}
   };
   render();
 };

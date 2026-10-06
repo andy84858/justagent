@@ -50,3 +50,6 @@
 .ws-param-row input, .ws-param-row select { width: 100px; padding: 2px 6px; }
 .ws-param-error { color: var(--block); font-size: 11px; margin: 4px 0; }
 .ws-reset-btn { position: fixed; top: 8px; right: 8px; z-index: 10; }
+.ws-variant-titlebar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.ws-variant-titlebar-name { font-size: 16px; font-weight: 600; }
+.ws-variant-titlebar-actions { margin-left: auto; display: flex; gap: 6px; }

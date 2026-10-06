@@ -185,7 +185,15 @@ function wsSubmitCreateVariant(npcCode) {
     window.rerender();
     return;
   }
-  npc.variants.push({ code: code, name: name || code, publishedVersion: null });
+  npc.variants.push({
+    code: code,
+    name: name || code,
+    publishedVersion: null,
+    description: '',
+    baseInstructions: '',
+    equippedEquipment: [],
+    wornGems: []
+  });
   window.appState.uiState.creatingVariantFor = null;
   window.appState.uiState.variantFormError = null;
   window.appState.selection = { npcCode: npcCode, variantCode: code };
@@ -470,6 +478,76 @@ function wsPublishModel(kind) {
 
 function renderBagPlaceholder() {
   return '<div class="hint">背包功能將於 Phase 2／3 開發，這裡先保留版位。</div>';
+}
+
+function wsVariantSnapshotKey(npcCode, variantCode) {
+  return npcCode + '.' + variantCode;
+}
+
+function wsVariantIsDirty(npcCode, variant) {
+  var key = wsVariantSnapshotKey(npcCode, variant.code);
+  var snapshot = window.appState.uiState.variantSnapshots[key];
+  if (!snapshot) return false;
+  return JSON.stringify(snapshot) !== JSON.stringify({
+    name: variant.name,
+    description: variant.description,
+    baseInstructions: variant.baseInstructions,
+    equippedEquipment: variant.equippedEquipment,
+    wornGems: variant.wornGems
+  });
+}
+
+function wsEnsureVariantSnapshot(npcCode, variant) {
+  var key = wsVariantSnapshotKey(npcCode, variant.code);
+  if (!window.appState.uiState.variantSnapshots[key]) {
+    window.appState.uiState.variantSnapshots[key] = {
+      name: variant.name,
+      description: variant.description,
+      baseInstructions: variant.baseInstructions,
+      equippedEquipment: JSON.parse(JSON.stringify(variant.equippedEquipment)),
+      wornGems: JSON.parse(JSON.stringify(variant.wornGems))
+    };
+  }
+}
+
+function wsDiscardVariantChanges() {
+  var npc = wsFindNpc(window.appState);
+  var variant = wsFindVariant(window.appState);
+  var key = wsVariantSnapshotKey(npc.code, variant.code);
+  var snapshot = window.appState.uiState.variantSnapshots[key];
+  if (!snapshot) { window.rerender(); return; }
+  variant.name = snapshot.name;
+  variant.description = snapshot.description;
+  variant.baseInstructions = snapshot.baseInstructions;
+  variant.equippedEquipment = JSON.parse(JSON.stringify(snapshot.equippedEquipment));
+  variant.wornGems = JSON.parse(JSON.stringify(snapshot.wornGems));
+  window.rerender();
+}
+
+function renderVariantPane(state) {
+  var container = document.getElementById('ws-variant-pane');
+  if (!container) return;
+  var npc = wsFindNpc(state);
+  var variant = wsFindVariant(state);
+  if (!npc || !variant) { container.innerHTML = ''; return; }
+
+  wsEnsureVariantSnapshot(npc.code, variant);
+  var dirty = wsVariantIsDirty(npc.code, variant);
+  var publishLabel = variant.publishedVersion ? ('已發布 v' + variant.publishedVersion) : '尚未發布';
+  var savedLabel = dirty ? '有未儲存的修改' : '已儲存';
+
+  container.innerHTML =
+    '<div class="ws-variant-titlebar">' +
+      '<span class="ws-variant-titlebar-name">' + escapeHtml(variant.name) + '</span>' +
+      '<span class="hint">' + publishLabel + '</span>' +
+      '<span class="hint">' + savedLabel + '</span>' +
+      '<div class="ws-variant-titlebar-actions">' +
+        '<button class="btn" data-variant-discard ' + (dirty ? '' : 'disabled') + ' onclick="wsDiscardVariantChanges()">放棄修改</button>' +
+        '<button class="btn btn-primary" data-variant-save ' + (dirty ? '' : 'disabled') + ' onclick="wsSaveVariant()">💾 儲存</button>' +
+        '<button class="btn" data-variant-publish onclick="wsOpenPublishVariantModal()">🚀 發布</button>' +
+      '</div>' +
+    '</div>' +
+    '<div id="ws-variant-body"></div>';
 }
 
 function renderCenterPane(state) {
