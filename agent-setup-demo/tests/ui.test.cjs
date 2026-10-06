@@ -444,6 +444,15 @@ async function main() {
   });
   record('equipping a second item carrying the same gem at a different level is blocked', conflictResult.ok === false, JSON.stringify(conflictResult));
 
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.PREMIUM"]');
+  // PREMIUM currently has no equipment (unequipped during Task 6's test); wear a conflicting-level gem path.
+  await page.click('[data-bag-equipment="order-lookup"][data-bag-equipment-level="2"]');
+  await page.click('[data-bag-gem="get_order_status"][data-bag-gem-level="1"]');
+  const errorVisible = await page.locator('[data-bag-error]').innerText();
+  record('bag error from a blocked wear is visible in the DOM, not just state', errorVisible.length > 0, errorVisible);
+  await page.click('[data-unequip-equipment="order-lookup"]');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

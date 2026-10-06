@@ -778,7 +778,11 @@ function renderBagForVariant(state) {
     }).join('');
   }).join('');
 
+  var error = state.uiState.bagError;
+  var warning = state.uiState.bagWarning;
   return (
+    (error ? '<div class="ws-bag-error" data-bag-error>' + escapeHtml(error) + '</div>' : '') +
+    (warning ? '<div class="ws-bag-warning" data-bag-warning>' + escapeHtml(warning) + '</div>' : '') +
     '<div class="label">🎒 背包 — 寶石</div>' + gemRows +
     '<div class="label" style="margin-top:var(--space-3);">🎒 背包 — 裝備</div>' + equipmentRows
   );
