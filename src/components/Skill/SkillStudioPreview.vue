@@ -124,7 +124,6 @@
           <i class="material-symbols-outlined">info</i>
           內容已變更，建議重新生成測試情境
         </div>
-        <SkillSampleOutputTest v-if="props.draft.method === 'blocks'" :section-ids="props.draft.sectionIds" />
         <SkillTestAI
           :skill-id="effectiveTestId!"
           :draft-context="testDraftContext"
@@ -151,7 +150,6 @@ import { useSkillStore } from '@/stores/skillStore'
 import type { SkillFile, TriggerEdgeSource } from '@/stores/skillStore'
 import type { SkillDraft, StudioMode } from '@/composables/useSkillStudioConversation'
 import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
-import SkillSampleOutputTest from '@/components/Skill/SkillSampleOutputTest.vue'
 import SkillFileUpload from '@/components/Skill/SkillFileUpload.vue'
 
 const store = useSkillStore()

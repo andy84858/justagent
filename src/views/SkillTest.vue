@@ -88,7 +88,9 @@
               </div>
             </div>
 
-            <SkillSampleOutputTest v-if="selectedSkill.composition" :section-ids="selectedSkill.composition.sectionIds" />
+            <!-- 積木組裝的技能：對話模擬在這裡沒有意義（見 SkillTestChat 的既有行為），
+                 改用跟 SkillStudio 工作區一致的是非題 AI 快速測試 -->
+            <SkillTestAI v-if="selectedSkill.composition" :skill-id="selectedSkill.id" />
             <SkillTestChat v-else :skill-id="selectedSkill.id" />
           </template>
 
@@ -137,7 +139,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppBreadcrumb from '@/components/AppBreadcrumb.vue'
 import SkillTestChat from '@/components/Skill/SkillTestChat.vue'
-import SkillSampleOutputTest from '@/components/Skill/SkillSampleOutputTest.vue'
+import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
 import SkillVersionPicker from '@/components/Skill/SkillVersionPicker.vue'
 import { useSkillStore } from '@/stores/skillStore'
 import type { Skill } from '@/stores/skillStore'

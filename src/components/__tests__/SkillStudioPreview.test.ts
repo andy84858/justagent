@@ -207,17 +207,18 @@ describe('SkillStudioPreview', () => {
     expect(filled.findAll('.ssp-agent-chip').map(c => c.text())).toContain('通用助理')
   })
 
-  it('積木方式的測試 tab：多顯示「一鍵產生範例成果」；對話方式不顯示', () => {
+  it('測試 tab：積木方式、對話方式都只顯示 SkillTestAI，沒有額外的範例成果區塊', () => {
     const blocks = mountPreview({
       draft: { ...emptyDraft(), method: 'blocks', sectionIds: ['promo_kpi'] },
       activeTab: 'test', savedSkillId: 'p1', mode: 'edit',
     })
-    expect(blocks.findComponent({ name: 'SkillSampleOutputTest' }).exists()).toBe(true)
+    expect(blocks.findComponent({ name: 'SkillTestAI' }).exists()).toBe(true)
+    expect(blocks.find('.SkillSampleOutputTest').exists()).toBe(false)
 
     const chat = mountPreview({
       draft: { ...emptyDraft(), method: 'chat' },
       activeTab: 'test', savedSkillId: 'p1', mode: 'edit',
     })
-    expect(chat.findComponent({ name: 'SkillSampleOutputTest' }).exists()).toBe(false)
+    expect(chat.findComponent({ name: 'SkillTestAI' }).exists()).toBe(true)
   })
 })
