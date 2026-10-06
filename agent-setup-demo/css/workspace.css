@@ -27,3 +27,12 @@
   border-left: 1px solid var(--gem-border);
   padding: var(--space-3);
 }
+.ws-nav-group { margin-bottom: var(--space-2); }
+.ws-nav-npc { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; }
+.ws-nav-toggle { width: 14px; text-align: center; color: var(--muted); }
+.ws-nav-label { font-size: 13px; }
+.ws-nav-label--dim { color: var(--muted); }
+.ws-nav-variant { padding: 4px 0 4px 28px; font-size: 12px; display: flex; justify-content: space-between; cursor: pointer; }
+.ws-nav-variant--disabled { cursor: not-allowed; }
+.ws-nav-create { color: var(--accent); cursor: pointer; }
+.ws-nav-create-npc { margin-top: var(--space-3); color: var(--accent); cursor: pointer; font-size: 13px; }

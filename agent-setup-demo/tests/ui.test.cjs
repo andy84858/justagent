@@ -37,6 +37,21 @@ async function main() {
   const switchNpc = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'INTENT_SWITCH'));
   record('INTENT_SWITCH NPC is type SWITCH', !!switchNpc && switchNpc.type === 'SWITCH');
 
+  const navText1 = await page.locator('#ws-nav').innerText();
+  record('nav tree lists FAQ_ANSWER display name', navText1.indexOf('客服問答助手') !== -1);
+  record('nav tree lists ORDER_ASSIST display name', navText1.indexOf('訂單助手') !== -1);
+
+  // Collapsed by default: variant names not visible yet.
+  record('variants hidden before expand', navText1.indexOf('一般版') === -1);
+
+  await page.click('[data-npc-toggle="FAQ_ANSWER"]');
+  const navText2 = await page.locator('#ws-nav').innerText();
+  record('expanding FAQ_ANSWER reveals its variants', navText2.indexOf('一般版') !== -1 && navText2.indexOf('豪華版') !== -1);
+
+  await page.click('[data-npc-toggle="FAQ_ANSWER"]');
+  const navText3 = await page.locator('#ws-nav').innerText();
+  record('collapsing FAQ_ANSWER hides its variants again', navText3.indexOf('一般版') === -1);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

@@ -1,10 +1,11 @@
 window.appState = {
   data: cloneSeed(),
-  selection: { npcCode: null, variantCode: null }
+  selection: { npcCode: null, variantCode: null },
+  uiState: { expandedNpcs: {} }
 };
 
 function render() {
-  // Expanded in Task 3 (nav tree) and Task 5 (center pane routing).
+  document.getElementById('ws-nav').innerHTML = renderNavTree(window.appState);
 }
 
 window.rerender = render;
@@ -12,6 +13,7 @@ window.rerender = render;
 window.resetData = function resetData() {
   window.appState.data = cloneSeed();
   window.appState.selection = { npcCode: null, variantCode: null };
+  window.appState.uiState = { expandedNpcs: {} };
   render();
 };
 
