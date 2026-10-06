@@ -195,6 +195,51 @@ async function main() {
   const dimensionsSelectValue = await page.locator('[data-model-param-input="vectorModel.dimensions"]').inputValue();
   record('enum param renders as a select with current value', dimensionsSelectValue === '1536', dimensionsSelectValue);
 
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const publishBtnCount = await page.locator('[data-model-publish="chatModel"]').count();
+  record('attached chat model shows a publish button', publishBtnCount === 1);
+
+  // Unsaved edit should block publish.
+  await page.fill('[data-model-param-input="chatModel.temperature"]', '0.3');
+  await page.click('[data-model-publish="chatModel"]');
+  const unsavedBlock = await page.locator('[data-model-param-error="chatModel"]').innerText();
+  record('publishing with unsaved param edits is blocked', unsavedBlock.indexOf('未儲存') !== -1, unsavedBlock);
+  const versionUnchanged1 = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).chatModel.version;
+  });
+  // SEED (Task 2) seeds FAQ_ANSWER's chatModel at version 3, not 1 — asserting against the
+  // actual seed value rather than an assumed fresh version. See ledger Task 11 ruling.
+  record('version did not bump while blocked', versionUnchanged1 === 3, versionUnchanged1);
+
+  // Save first, then publish should succeed.
+  await page.click('[data-model-param-save="chatModel"]');
+  await page.click('[data-model-publish="chatModel"]');
+  const versionBumped = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).chatModel.version;
+  });
+  record('publish bumps the version by 1', versionBumped === 4, versionBumped);
+
+  // DATA_ANALYST (created earlier in Task 5's test) has no chatModel yet, unlike
+  // ORDER_ASSIST which already got one attached during Task 9's test in this same run.
+  await page.click('[data-npc-select="DATA_ANALYST"]');
+  await page.click('[data-add-model="chatModel"]');
+  await page.selectOption('[data-model-template-select="chatModel"]', 'demo:chat-lite');
+  await page.click('[data-model-confirm="chatModel"]');
+  await page.fill('[data-model-param-input="chatModel.temperature"]', '');
+  await page.click('[data-model-param-save="chatModel"]');
+  await page.click('[data-model-publish="chatModel"]');
+  // The failed save (empty value rejected by wsValidateParamValue's guard) never commits,
+  // so the pending edit is still in modelParamEdits — publish blocks on "unsaved edits",
+  // not "required", because an empty value can never reach committed model.params through
+  // the UI once the empty-string guard exists. Either blocking reason satisfies the Review
+  // Focus requirement (publish refuses to proceed and explains why); see ledger Task 11 ruling.
+  const blockedByEmptyRequired = await page.locator('[data-model-param-error="chatModel"]').innerText();
+  record('publishing with an empty required param is blocked', blockedByEmptyRequired.length > 0, blockedByEmptyRequired);
+  const notPublishedWithEmptyParam = await page.evaluate(function () {
+    return window.appState.data.npcs.find(function (n) { return n.code === 'DATA_ANALYST'; }).chatModel.version;
+  });
+  record('version did not bump while empty-param publish was blocked', notPublishedWithEmptyParam === 1, notPublishedWithEmptyParam);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

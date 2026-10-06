@@ -300,6 +300,7 @@ function renderModelBlock(npc, kind) {
         paramsHtml +
         (paramError ? '<div class="ws-param-error" data-model-param-error="' + kind + '">' + escapeHtml(paramError) + '</div>' : '') +
         '<button class="btn btn-primary" data-model-param-save="' + kind + '" onclick="wsSaveModelParams(\'' + kind + '\')">儲存參數</button>' +
+        '<button class="btn" data-model-publish="' + kind + '" onclick="wsPublishModel(\'' + kind + '\')">🚀 發布</button>' +
       '</div>'
     );
   }
@@ -408,6 +409,41 @@ function wsSaveModelParams(kind) {
   model.params = newParams;
   window.appState.uiState.modelParamErrors[kind] = null;
   template.params.forEach(function (p) { delete window.appState.uiState.modelParamEdits[kind + '.' + p.key]; });
+  window.rerender();
+}
+
+function wsHasUnsavedModelEdits(kind) {
+  var template = window.appState.data.modelTemplates[wsFindNpc(window.appState)[kind].key];
+  return template.params.some(function (p) {
+    return window.appState.uiState.modelParamEdits[kind + '.' + p.key] !== undefined;
+  });
+}
+
+function wsPublishModelErrors(npc, kind) {
+  var model = npc[kind];
+  var errors = [];
+  if (wsHasUnsavedModelEdits(kind)) {
+    errors.push('有未儲存的參數修改，請先儲存參數');
+  }
+  var template = window.appState.data.modelTemplates[model.key];
+  template.params.forEach(function (p) {
+    if (p.kind === 'number' && (model.params[p.key] === '' || model.params[p.key] === null || model.params[p.key] === undefined)) {
+      errors.push(p.label + ' 為必填');
+    }
+  });
+  return errors;
+}
+
+function wsPublishModel(kind) {
+  var npc = wsFindNpc(window.appState);
+  var errors = wsPublishModelErrors(npc, kind);
+  if (errors.length > 0) {
+    window.appState.uiState.modelParamErrors[kind] = errors.join('；');
+    window.rerender();
+    return;
+  }
+  npc[kind].version += 1;
+  window.appState.uiState.modelParamErrors[kind] = null;
   window.rerender();
 }
 
