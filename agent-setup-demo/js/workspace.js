@@ -1367,6 +1367,30 @@ function wsPackDef(detail) {
   return catalogList.find(function (p) { return p.code === detail.code; });
 }
 
+function wsPackNextStatuses(status) {
+  var table = {
+    DRAFT: ['PUBLISHED', 'EOS'],
+    PUBLISHED: ['MAINTENANCE', 'EOS'],
+    MAINTENANCE: ['PUBLISHED', 'EOS'],
+    EOS: []
+  };
+  return table[status] || [];
+}
+
+function wsTransitionPackStatus(newStatus) {
+  var detail = window.appState.uiState.packDetail;
+  var def = wsPackDef(detail);
+  if (wsPackNextStatuses(def.status).indexOf(newStatus) === -1) return;
+  def.status = newStatus;
+  window.rerender();
+}
+
+var WS_PACK_TRANSITION_LABELS = {
+  PUBLISHED: '🚀 發布',
+  MAINTENANCE: '🛠 進入維護',
+  EOS: '⏹ 結束'
+};
+
 function wsStartEditPackDetailField(field) {
   window.appState.uiState.packDetailEditing = field;
   window.rerender();
@@ -1446,8 +1470,16 @@ function renderPackDetailViewBody(state) {
     '<div class="ws-flyout-field"><span class="label">狀態</span> <span data-pack-status>' + escapeHtml(def.status) + '</span></div>' +
     '<div class="ws-flyout-field"><span class="label">說明</span></div>' +
     descriptionBlock +
-    '<div class="ws-flyout-field"><span class="label">' + (detail.kind === 'bundle' ? '成員人物卡' : '成員能力') + '</span></div>' +
-    renderPackMembersList(detail, def)
+    '<div class="ws-flyout-field"><span class="label">' + (detail.kind === 'bundle' ? '成員人物卡' : '成員能力') + '</span>' +
+      (def.status === 'DRAFT' ? '<button class="btn" data-pack-members-pencil onclick="wsStartEditPackDetailField(\'members\')">✎</button>' : '') +
+    '</div>' +
+    renderPackMembersList(detail, def) +
+    '<div class="ws-flyout-actions">' +
+      wsPackNextStatuses(def.status).map(function (next) {
+        var label = (next === 'PUBLISHED' && def.status === 'MAINTENANCE') ? '▶ 恢復發布' : WS_PACK_TRANSITION_LABELS[next];
+        return '<button class="btn' + (next === 'EOS' ? ' btn-danger' : ' btn-primary') + '" data-pack-transition="' + next + '" onclick="wsTransitionPackStatus(\'' + next + '\')">' + label + '</button>';
+      }).join(' ') +
+    '</div>'
   );
 }
 

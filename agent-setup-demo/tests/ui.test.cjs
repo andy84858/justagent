@@ -1133,6 +1133,52 @@ async function main() {
   const packDetailNullAfterNpcSwitch = await page.evaluate(() => window.appState.uiState.packDetail);
   record('switching the NPC selection also clears packDetail, not just the visual bagMode', packDetailNullAfterNpcSwitch === null, packDetailNullAfterNpcSwitch);
 
+  // --- Phase 4 Task 6: lifecycle action bar ---
+  // Task 5's last test left selection at FAQ_ANSWER (no variant) / bagMode 'bag'; re-enter
+  // pack mode on STANDARD and the bundle list to reach CS_BUNDLE_1's row again.
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  await page.click('[data-variant-pack-toggle]');
+  await page.click('[data-pack-list-kind="bundle"]');
+  await page.click('[data-pack-row="bundle.CS_BUNDLE_1"]');
+  const publishBtnOnDraftPack = await page.locator('[data-pack-transition="PUBLISHED"]').count();
+  record('DRAFT pack shows a 發布 (→PUBLISHED) button', publishBtnOnDraftPack === 1);
+  const eosBtnOnDraftPack = await page.locator('[data-pack-transition="EOS"]').count();
+  record('DRAFT pack shows an 結束(EOS) button (DRAFT can jump straight to EOS)', eosBtnOnDraftPack === 1);
+  const maintenanceBtnOnDraftPack = await page.locator('[data-pack-transition="MAINTENANCE"]').count();
+  record('DRAFT pack does NOT show a 進入維護 button (not a legal jump from DRAFT)', maintenanceBtnOnDraftPack === 0);
+
+  await page.click('[data-pack-transition="PUBLISHED"]');
+  const packStatusAfterPublish = await page.evaluate(() => window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_1').status);
+  record('publishing a DRAFT pack sets status to PUBLISHED', packStatusAfterPublish === 'PUBLISHED', packStatusAfterPublish);
+  const maintenanceBtnOnPublished = await page.locator('[data-pack-transition="MAINTENANCE"]').count();
+  record('PUBLISHED pack shows a 進入維護 button', maintenanceBtnOnPublished === 1);
+  const publishBtnGoneOnPublished = await page.locator('[data-pack-transition="PUBLISHED"]').count();
+  record('PUBLISHED pack no longer shows a 發布 button (can\'t publish an already-published pack)', publishBtnGoneOnPublished === 0);
+
+  await page.click('[data-pack-transition="MAINTENANCE"]');
+  const packStatusAfterMaintenance = await page.evaluate(() => window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_1').status);
+  record('entering maintenance sets status to MAINTENANCE', packStatusAfterMaintenance === 'MAINTENANCE', packStatusAfterMaintenance);
+  const resumePublishBtnOnMaintenance = await page.locator('[data-pack-transition="PUBLISHED"]').count();
+  record('MAINTENANCE pack can resume to PUBLISHED', resumePublishBtnOnMaintenance === 1);
+
+  await page.click('[data-pack-transition="EOS"]');
+  const packStatusAfterEos = await page.evaluate(() => window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_1').status);
+  record('ending a pack sets status to EOS', packStatusAfterEos === 'EOS', packStatusAfterEos);
+  const noButtonsOnEos = await page.locator('[data-pack-transition]').count();
+  record('EOS is terminal — no lifecycle buttons render', noButtonsOnEos === 0);
+
+  // defense in depth: calling the transition function directly for a disallowed jump is a no-op
+  await page.evaluate(() => { wsTransitionPackStatus('PUBLISHED'); });
+  const packStatusStillEos = await page.evaluate(() => window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_1').status);
+  record('wsTransitionPackStatus refuses an illegal jump (EOS → PUBLISHED) even when called directly', packStatusStillEos === 'EOS', packStatusStillEos);
+
+  // fields other than displayName/description are locked once a pack leaves DRAFT
+  const membershipEditorPencilGone = await page.locator('[data-pack-members-pencil]').count();
+  record('the membership editor pencil is gone for a non-DRAFT pack', membershipEditorPencilGone === 0);
+  const displayNamePencilStillThere = await page.locator('[data-pack-displayname-pencil]').count();
+  record('displayName pencil remains available even on an EOS pack', displayNamePencilStillThere === 1);
+  await page.click('[data-flyout-close]');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
