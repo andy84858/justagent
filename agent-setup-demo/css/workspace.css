@@ -72,3 +72,23 @@
 .ws-modal-mask.ws-modal--active { display: flex; }
 .ws-modal-box { background: var(--panel); border-radius: 8px; padding: var(--space-4); width: 360px; }
 .ws-history-row { padding: 4px 0; font-size: 13px; display: flex; justify-content: space-between; }
+.ws-shell { position: relative; }
+.ws-bag-item-detail-btn { margin-left: 6px; cursor: pointer; background: none; border: none; color: var(--muted); font-size: 12px; }
+#ws-bag-detail-flyout { display: none; position: absolute; top: 0; bottom: 0; right: 300px; width: 460px; background: var(--panel); border-left: 1px solid var(--line); box-shadow: -4px 0 12px rgba(0,0,0,0.15); z-index: 40; overflow-y: auto; padding: var(--space-4); }
+#ws-bag-detail-flyout.ws-flyout--active { display: block; }
+.ws-center--dim { opacity: 0.4; }
+.ws-flyout-close { float: right; }
+.ws-flyout-header { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-3); clear: both; }
+.ws-flyout-icon { font-size: 24px; }
+.ws-flyout-type-label { font-size: 11px; color: var(--muted); }
+.ws-flyout-name { font-size: 16px; font-weight: 600; }
+.ws-flyout-level-row { display: flex; gap: 6px; margin-bottom: var(--space-3); flex-wrap: wrap; }
+.ws-flyout-level-btn { padding: 4px 10px; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; font-size: 12px; background: var(--panel); }
+.ws-flyout-level-btn--active { border-color: var(--accent); color: var(--accent); }
+.ws-flyout-level-btn--draft { border-style: dashed; }
+.ws-flyout-field { margin-bottom: var(--space-2); font-size: 13px; }
+.ws-flyout-ref-list { font-size: 12px; color: var(--muted); }
+.ws-flyout-ref-item { padding: 2px 0; }
+.ws-flyout-error { color: var(--block); font-size: 12px; margin: 6px 0; }
+.ws-flyout-actions { margin-top: var(--space-4); display: flex; gap: 8px; }
+.ws-flyout-gem-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; }

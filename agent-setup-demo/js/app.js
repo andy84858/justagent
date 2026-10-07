@@ -11,7 +11,12 @@ window.appState = {
     addingModelKind: null,
     modelParamEdits: {},
     modelParamErrors: {},
-    variantSnapshots: {}
+    variantSnapshots: {},
+    bagDetail: null,
+    bagDetailEditing: null,
+    bagDetailGemsDraft: null,
+    bagDetailError: null,
+    bagDetailCreateForm: null
   }
 };
 
@@ -25,9 +30,16 @@ function render() {
   renderModelSection(window.appState);
   renderVariantPane(window.appState);
   renderAbilityArea(window.appState);
+  renderBagDetailFlyout(window.appState);
 }
 
 window.rerender = render;
+
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && window.appState.uiState.bagDetail) {
+    wsCloseBagDetail();
+  }
+});
 
 window.resetData = function resetData() {
   window.appState.data = cloneSeed();
@@ -42,7 +54,12 @@ window.resetData = function resetData() {
     addingModelKind: null,
     modelParamEdits: {},
     modelParamErrors: {},
-    variantSnapshots: {}
+    variantSnapshots: {},
+    bagDetail: null,
+    bagDetailEditing: null,
+    bagDetailGemsDraft: null,
+    bagDetailError: null,
+    bagDetailCreateForm: null
   };
   render();
 };

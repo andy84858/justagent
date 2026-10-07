@@ -744,6 +744,128 @@ function wsEquipmentReferences(eqName, level) {
   return { variants: variantRefs };
 }
 
+function wsGemEverPublished(gemDef) {
+  return gemDef.versions.some(function (v) { return v.status === 'published'; });
+}
+
+function wsBagDetailDef(detail) {
+  return detail.kind === 'gem' ? wsGemByName(detail.name) : wsEquipmentByName(detail.name);
+}
+
+function wsBagDetailMaxLevel(def) {
+  return Math.max.apply(null, def.versions.map(function (v) { return v.level; }));
+}
+
+function wsOpenBagDetail(kind, name, level) {
+  window.appState.uiState.bagDetail = { kind: kind, name: name, level: level, mode: 'view' };
+  window.appState.uiState.bagDetailEditing = null;
+  window.appState.uiState.bagDetailGemsDraft = null;
+  window.appState.uiState.bagDetailError = null;
+  window.appState.uiState.bagDetailCreateForm = null;
+  window.rerender();
+}
+
+function wsCloseBagDetail() {
+  window.appState.uiState.bagDetail = null;
+  window.appState.uiState.bagDetailEditing = null;
+  window.appState.uiState.bagDetailGemsDraft = null;
+  window.appState.uiState.bagDetailError = null;
+  window.appState.uiState.bagDetailCreateForm = null;
+  window.rerender();
+}
+
+function wsSwitchBagDetailLevel(level) {
+  var detail = window.appState.uiState.bagDetail;
+  window.appState.uiState.bagDetail = { kind: detail.kind, name: detail.name, level: level, mode: 'view' };
+  window.appState.uiState.bagDetailEditing = null;
+  window.appState.uiState.bagDetailGemsDraft = null;
+  window.appState.uiState.bagDetailError = null;
+  window.rerender();
+}
+
+function renderBagDetailGemFields(gemDef, ver) {
+  var refs = wsGemReferences(gemDef.name, ver.level);
+  var refList = (refs.equipment.length === 0 && refs.variants.length === 0)
+    ? '<div class="ws-flyout-ref-list hint">尚未被任何裝備或人物卡引用</div>'
+    : (
+      '<div class="ws-flyout-ref-list">' +
+        refs.equipment.map(function (e) { return '<div class="ws-flyout-ref-item">裝備：' + escapeHtml(e.displayName) + ' Lv' + e.level + '</div>'; }).join('') +
+        refs.variants.map(function (v) { return '<div class="ws-flyout-ref-item">人物卡：' + escapeHtml(v.variantName) + '</div>'; }).join('') +
+      '</div>'
+    );
+  return (
+    '<div class="ws-flyout-field"><span class="label">種類／協定</span> ' + escapeHtml(gemDef.kind) + ' / ' + escapeHtml(gemDef.protocol) + '</div>' +
+    '<div class="ws-flyout-field"><span class="label">從哪一級複製</span> ' + (ver.copiedFromLevel ? ('Lv' + ver.copiedFromLevel) : '（原始建立）') + '</div>' +
+    '<div class="ws-flyout-field"><span class="label">被引用清單</span></div>' +
+    refList
+  );
+}
+
+function renderBagDetailEquipmentFields(eqDef, ver) {
+  var refs = wsEquipmentReferences(eqDef.name, ver.level);
+  var gemsHtml = (ver.gems || []).map(function (g) {
+    var gemDef = wsGemByName(g.gemName);
+    return '<span class="ws-gem-chip">' + escapeHtml(gemDef.displayName) + ' Lv' + g.level + '</span>';
+  }).join('') || '<span class="hint">尚未鑲嵌任何寶石</span>';
+  var refList = refs.variants.length === 0
+    ? '<div class="ws-flyout-ref-list hint">尚未被任何人物卡掛載</div>'
+    : '<div class="ws-flyout-ref-list">' + refs.variants.map(function (v) { return '<div class="ws-flyout-ref-item">人物卡：' + escapeHtml(v.variantName) + '</div>'; }).join('') + '</div>';
+  return (
+    '<div class="ws-flyout-field"><span class="label">鑲嵌寶石</span> ' + gemsHtml + '</div>' +
+    '<div class="ws-flyout-field"><span class="label">從哪一級複製</span> ' + (ver.copiedFromLevel ? ('Lv' + ver.copiedFromLevel) : '（原始建立）') + '</div>' +
+    '<div class="ws-flyout-field"><span class="label">被哪些人物卡掛載</span></div>' +
+    refList
+  );
+}
+
+function renderBagDetailViewBody(state) {
+  var detail = state.uiState.bagDetail;
+  var def = wsBagDetailDef(detail);
+  var ver = def.versions.find(function (v) { return v.level === detail.level; });
+  var icon = detail.kind === 'gem' ? '💎' : '🛡️';
+  var typeLabel = detail.kind === 'gem' ? '寶石' : '裝備';
+
+  var levelButtons = def.versions.slice().sort(function (a, b) { return a.level - b.level; }).map(function (v) {
+    return (
+      '<button class="ws-flyout-level-btn' + (v.level === detail.level ? ' ws-flyout-level-btn--active' : '') + (v.status === 'draft' ? ' ws-flyout-level-btn--draft' : '') + '" ' +
+        'data-flyout-level-btn="' + v.level + '" onclick="wsSwitchBagDetailLevel(' + v.level + ')">' +
+        'Lv' + v.level + (v.status === 'draft' ? ' 草稿' : '') +
+      '</button>'
+    );
+  }).join('');
+
+  var fieldsHtml = detail.kind === 'gem' ? renderBagDetailGemFields(def, ver) : renderBagDetailEquipmentFields(def, ver);
+  var error = state.uiState.bagDetailError;
+
+  return (
+    '<button class="btn ws-flyout-close" data-flyout-close onclick="wsCloseBagDetail()">✕</button>' +
+    '<div class="ws-flyout-header">' +
+      '<span class="ws-flyout-icon">' + icon + '</span>' +
+      '<span class="ws-flyout-type-label">' + typeLabel + '</span>' +
+      '<span class="ws-flyout-name">' + escapeHtml(def.displayName) + '</span>' +
+    '</div>' +
+    '<div class="ws-flyout-level-row">' + levelButtons + '</div>' +
+    (error ? '<div class="ws-flyout-error" data-flyout-error>' + escapeHtml(error) + '</div>' : '') +
+    fieldsHtml
+  );
+}
+
+function renderBagDetailFlyout(state) {
+  var flyoutEl = document.getElementById('ws-bag-detail-flyout');
+  var centerEl = document.getElementById('ws-center');
+  if (!flyoutEl) return;
+  var detail = state.uiState.bagDetail;
+  if (!detail) {
+    flyoutEl.classList.remove('ws-flyout--active');
+    flyoutEl.innerHTML = '';
+    if (centerEl) { centerEl.classList.remove('ws-center--dim'); centerEl.removeAttribute('inert'); }
+    return;
+  }
+  flyoutEl.classList.add('ws-flyout--active');
+  if (centerEl) { centerEl.classList.add('ws-center--dim'); centerEl.setAttribute('inert', ''); }
+  flyoutEl.innerHTML = detail.mode === 'create' ? '' : renderBagDetailViewBody(state);
+}
+
 function renderAbilityArea(state) {
   var container = document.getElementById('ws-ability-area');
   if (!container) return;
@@ -809,6 +931,7 @@ function renderBagForVariant(state) {
           'onclick="wsBagWear(\'' + gemDef.name + '\', ' + ver.level + ')">' +
           '<span class="ws-bag-item-name">' + escapeHtml(gemDef.displayName) + '</span>' +
           '<span class="hint">Lv' + ver.level + (isDraft ? ' · 草稿・不可選' : (worn ? ' · 已佩掛' : '')) + '</span>' +
+          '<button class="ws-bag-item-detail-btn" data-bag-gem-detail="' + gemDef.name + '.' + ver.level + '" onclick="event.stopPropagation(); wsOpenBagDetail(\'gem\', \'' + gemDef.name + '\', ' + ver.level + ')">⋯</button>' +
         '</div>'
       );
     }).join('');
@@ -825,6 +948,7 @@ function renderBagForVariant(state) {
           'onclick="wsBagEquip(\'' + eqDef.name + '\', ' + ver.level + ')">' +
           '<span class="ws-bag-item-name">' + escapeHtml(eqDef.displayName) + '</span>' +
           '<span class="hint">Lv' + ver.level + (isDraft ? ' · 草稿・不可選' : (worn ? ' · 已穿上' : '')) + '</span>' +
+          '<button class="ws-bag-item-detail-btn" data-bag-equipment-detail="' + eqDef.name + '.' + ver.level + '" onclick="event.stopPropagation(); wsOpenBagDetail(\'equipment\', \'' + eqDef.name + '\', ' + ver.level + ')">⋯</button>' +
         '</div>'
       );
     }).join('');

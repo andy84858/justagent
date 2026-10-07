@@ -592,6 +592,66 @@ async function main() {
   const sqlAnalysisEqRefs = await page.evaluate(function () { return wsEquipmentReferences('sql-analysis', 1); });
   record('wsEquipmentReferences returns an empty array for an unequipped equipment', sqlAnalysisEqRefs.variants.length === 0, JSON.stringify(sqlAnalysisEqRefs));
 
+  // --- Phase 3 Task 2: flyout shell + view-mode content ---
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  await page.click('[data-bag-gem-detail="get_order_status.1"]');
+  const flyoutActiveAfterOpen = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
+  record('clicking a gem\'s ⋯ button opens the flyout', flyoutActiveAfterOpen === 1);
+  const centerDimmed = await page.locator('#ws-center.ws-center--dim').count();
+  record('center pane gets the dim class while the flyout is open', centerDimmed === 1);
+  const centerInert = await page.evaluate(() => document.getElementById('ws-center').hasAttribute('inert'));
+  record('center pane gets the inert attribute while the flyout is open', centerInert === true);
+  const flyoutNameText = await page.locator('.ws-flyout-name').innerText();
+  record('flyout header shows the gem\'s display name', flyoutNameText.indexOf('查詢訂單狀態') !== -1, flyoutNameText);
+  const levelButtonCount = await page.locator('[data-flyout-level-btn]').count();
+  record('flyout shows one level button per version (4 for get_order_status)', levelButtonCount === 4, 'found ' + levelButtonCount);
+  const lv4ButtonText = await page.locator('[data-flyout-level-btn="4"]').innerText();
+  record('the draft level button is labeled as a draft', lv4ButtonText.indexOf('草稿') !== -1, lv4ButtonText);
+
+  await page.click('[data-flyout-level-btn="4"]');
+  const activeLevelAfterSwitch = await page.evaluate(() => window.appState.uiState.bagDetail.level);
+  record('clicking a level button switches which level the flyout views', activeLevelAfterSwitch === 4, activeLevelAfterSwitch);
+
+  await page.click('[data-flyout-level-btn="1"]');
+  const refListTextLv1 = await page.locator('.ws-flyout-ref-list').innerText();
+  record('Lv1 的被引用清單 includes the equipment carrying it', refListTextLv1.indexOf('訂單查詢術') !== -1, refListTextLv1);
+  record('Lv1 的被引用清單 includes the variant that equips it', refListTextLv1.indexOf('一般版') !== -1, refListTextLv1);
+
+  // Esc closes it
+  await page.keyboard.press('Escape');
+  const flyoutActiveAfterEsc = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
+  record('Escape closes the flyout', flyoutActiveAfterEsc === 0);
+  const centerDimmedAfterEsc = await page.locator('#ws-center.ws-center--dim').count();
+  record('center pane dim class is removed after Escape closes the flyout', centerDimmedAfterEsc === 0);
+  const centerInertAfterEsc = await page.evaluate(() => document.getElementById('ws-center').hasAttribute('inert'));
+  record('center pane inert attribute is removed after Escape closes the flyout', centerInertAfterEsc === false);
+
+  // ✕ button closes it too, and while open the center pane is truly unclickable.
+  // A programmatic `.click()` via page.evaluate bypasses Playwright's own actionability
+  // checks (and inert does not block script-invoked .click()), so this uses a real
+  // Playwright click — which does honor `inert` in its actionability checks and times
+  // out trying to reach an element under an inert ancestor — as the actual proof.
+  await page.click('[data-bag-gem-detail="get_order_status.1"]');
+  let saveClickBlockedByInert = false;
+  try {
+    await page.click('[data-variant-save]', { timeout: 2000 });
+  } catch (e) {
+    saveClickBlockedByInert = true;
+  }
+  record('a real click on a button under the dimmed+inert center pane is blocked while the flyout is open', saveClickBlockedByInert === true);
+  await page.click('[data-flyout-close]');
+  const flyoutActiveAfterCloseBtn = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
+  record('✕ button closes the flyout', flyoutActiveAfterCloseBtn === 0);
+
+  // equipment ⋯ button + 被哪些人物卡掛載
+  await page.click('[data-bag-equipment-detail="order-lookup.1"]');
+  const eqFlyoutName = await page.locator('.ws-flyout-name').innerText();
+  record('equipment ⋯ button opens the flyout on the equipment', eqFlyoutName.indexOf('訂單查詢術') !== -1, eqFlyoutName);
+  const eqRefListText = await page.locator('.ws-flyout-ref-list').innerText();
+  record('equipment 被哪些人物卡掛載 lists the variant that equips it', eqRefListText.indexOf('一般版') !== -1, eqRefListText);
+  await page.click('[data-flyout-close]');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
