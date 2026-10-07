@@ -16,7 +16,13 @@ window.appState = {
     bagDetailEditing: null,
     bagDetailGemsDraft: null,
     bagDetailError: null,
-    bagDetailCreateForm: null
+    bagDetailCreateForm: null,
+    bagMode: 'bag',
+    packDetail: null,
+    packDetailEditing: null,
+    packMembershipDraft: null,
+    packDetailError: null,
+    packCreateForm: null
   }
 };
 
@@ -24,7 +30,7 @@ function render() {
   document.getElementById('ws-nav').innerHTML = renderNavTree(window.appState);
   document.getElementById('ws-center').innerHTML = renderCenterPane(window.appState);
   document.getElementById('ws-bag').innerHTML = window.appState.selection.variantCode
-    ? renderBagForVariant(window.appState)
+    ? (window.appState.uiState.bagMode === 'pack' ? renderPackPane(window.appState) : renderBagForVariant(window.appState))
     : renderBagPlaceholder();
   renderNpcPane(window.appState);
   renderModelSection(window.appState);
@@ -59,7 +65,13 @@ window.resetData = function resetData() {
     bagDetailEditing: null,
     bagDetailGemsDraft: null,
     bagDetailError: null,
-    bagDetailCreateForm: null
+    bagDetailCreateForm: null,
+    bagMode: 'bag',
+    packDetail: null,
+    packDetailEditing: null,
+    packMembershipDraft: null,
+    packDetailError: null,
+    packCreateForm: null
   };
   render();
 };

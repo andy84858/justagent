@@ -148,6 +148,17 @@ function wsResetVariantTransientUi() {
   window.appState.uiState.editingVariantBasics = false;
   window.appState.uiState.editingVariantInstructions = false;
   window.appState.uiState.variantTab = 'basics';
+  window.appState.uiState.bagMode = 'bag';
+  window.appState.uiState.packDetail = null;
+  window.appState.uiState.packDetailEditing = null;
+  window.appState.uiState.packMembershipDraft = null;
+  window.appState.uiState.packDetailError = null;
+  window.appState.uiState.packCreateForm = null;
+}
+
+function wsSetBagMode(mode) {
+  window.appState.uiState.bagMode = mode;
+  window.rerender();
 }
 
 function wsSelectNpc(code) {
@@ -557,6 +568,7 @@ function renderVariantPane(state) {
         '<button class="btn" data-variant-discard ' + (dirty ? '' : 'disabled') + ' onclick="wsDiscardVariantChanges()">放棄修改</button>' +
         '<button class="btn btn-primary" data-variant-save ' + (dirty ? '' : 'disabled') + ' onclick="wsSaveVariant()">💾 儲存</button>' +
         '<button class="btn" data-variant-publish onclick="wsOpenPublishVariantModal()">🚀 發布</button>' +
+        '<button class="btn" data-variant-pack-toggle onclick="wsSetBagMode(\'pack\')">📦 打包</button>' +
       '</div>' +
     '</div>' +
     '<div id="ws-variant-body"></div>';
@@ -1277,6 +1289,16 @@ function renderBagForVariant(state) {
     (warning ? '<div class="ws-bag-warning" data-bag-warning>' + escapeHtml(warning) + '</div>' : '') +
     '<div class="label">🎒 背包 — 寶石</div>' + gemRows +
     '<div class="label" style="margin-top:var(--space-3);">🎒 背包 — 裝備</div>' + equipmentRows
+  );
+}
+
+function renderPackPane(state) {
+  return (
+    '<div data-pack-pane>' +
+      '<div class="ws-bag-header"><span class="label">📦 打包</span>' +
+        '<button class="btn" data-pack-mode-toggle onclick="wsSetBagMode(\'bag\')">🎒 背包</button>' +
+      '</div>' +
+    '</div>'
   );
 }
 

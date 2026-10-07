@@ -117,7 +117,9 @@ var SEED = {
         { level: 2, status: 'published', copiedFromLevel: 1, gems: [{ gemName: 'run_sql_query', level: 2 }] }
       ]
     }
-  ]
+  ],
+  bundles: [],
+  extensions: []
 };
 
 function cloneSeed() {

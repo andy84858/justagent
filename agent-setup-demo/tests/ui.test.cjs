@@ -952,6 +952,39 @@ async function main() {
   record('the freed code can be reused to create a new item afterward', orphanGemRecreated === true);
   await page.click('[data-flyout-close]');
 
+  // --- Phase 4 Task 1: data model + bagMode plumbing + 打包 button ---
+  const bundlesIsEmptyArray = await page.evaluate(() => Array.isArray(window.appState.data.bundles) && window.appState.data.bundles.length === 0);
+  record('SEED.bundles starts as an empty array', bundlesIsEmptyArray === true);
+  const extensionsIsEmptyArray = await page.evaluate(() => Array.isArray(window.appState.data.extensions) && window.appState.data.extensions.length === 0);
+  record('SEED.extensions starts as an empty array', extensionsIsEmptyArray === true);
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  const packButtonCount = await page.locator('[data-variant-pack-toggle]').count();
+  record('variant titlebar has a 打包 button', packButtonCount === 1);
+
+  const bagModeDefault = await page.evaluate(() => window.appState.uiState.bagMode);
+  record('bagMode defaults to bag', bagModeDefault === 'bag', bagModeDefault);
+
+  await page.click('[data-variant-pack-toggle]');
+  const bagModeAfterToggle = await page.evaluate(() => window.appState.uiState.bagMode);
+  record('clicking 打包 switches bagMode to pack', bagModeAfterToggle === 'pack', bagModeAfterToggle);
+  const packPaneVisible = await page.locator('[data-pack-pane]').count();
+  record('ws-bag now renders the pack pane instead of the bag', packPaneVisible === 1);
+  const bagPaneGoneInPackMode = await page.locator('[data-bag-add]').count();
+  record('the ordinary bag UI is gone while in pack mode', bagPaneGoneInPackMode === 0);
+
+  // leaving the variant resets bagMode back to bag
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const bagModeAfterLeavingVariant = await page.evaluate(() => window.appState.uiState.bagMode);
+  record('selecting a different NPC/variant resets bagMode to bag', bagModeAfterLeavingVariant === 'bag', bagModeAfterLeavingVariant);
+
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  await page.click('[data-variant-pack-toggle]');
+  await page.click('[data-pack-mode-toggle]');
+  const bagModeAfterPaneToggle = await page.evaluate(() => window.appState.uiState.bagMode);
+  record('the pack pane\'s own toggle button switches back to bag mode', bagModeAfterPaneToggle === 'bag', bagModeAfterPaneToggle);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
