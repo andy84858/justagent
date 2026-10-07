@@ -973,6 +973,51 @@ function renderBagDetailEquipmentFields(eqDef, ver, editing, gemsDraft) {
   );
 }
 
+function wsOpenNewBagDetailDraft() {
+  var detail = window.appState.uiState.bagDetail;
+  var def = wsBagDetailDef(detail);
+  var viewing = def.versions.find(function (v) { return v.level === detail.level; });
+  var maxLevel = wsBagDetailMaxLevel(def);
+  if (viewing.level !== maxLevel || viewing.status !== 'published') return;
+  var nextLevel = maxLevel + 1;
+  var newVersion = detail.kind === 'gem'
+    ? { level: nextLevel, status: 'draft', copiedFromLevel: viewing.level }
+    : { level: nextLevel, status: 'draft', copiedFromLevel: viewing.level, gems: JSON.parse(JSON.stringify(viewing.gems || [])) };
+  def.versions.push(newVersion);
+  window.appState.uiState.bagDetail = { kind: detail.kind, name: detail.name, level: nextLevel, mode: 'view' };
+  window.rerender();
+}
+
+function wsPublishBagDetailVersion() {
+  var detail = window.appState.uiState.bagDetail;
+  var def = wsBagDetailDef(detail);
+  var viewing = def.versions.find(function (v) { return v.level === detail.level; });
+  if (viewing.status !== 'draft') return;
+  viewing.status = 'published';
+  window.rerender();
+}
+
+function wsBagDetailVersionHasReferences(detail) {
+  var refs = detail.kind === 'gem' ? wsGemReferences(detail.name, detail.level) : wsEquipmentReferences(detail.name, detail.level);
+  return detail.kind === 'gem'
+    ? (refs.equipment.length > 0 || refs.variants.length > 0)
+    : (refs.variants.length > 0);
+}
+
+function wsDeleteBagDetailVersion() {
+  var detail = window.appState.uiState.bagDetail;
+  var def = wsBagDetailDef(detail);
+  var viewing = def.versions.find(function (v) { return v.level === detail.level; });
+  if (viewing.status !== 'draft') return;
+  if (wsBagDetailVersionHasReferences(detail)) {
+    window.appState.uiState.bagDetailError = '這個版本仍被引用，無法刪除';
+    window.rerender();
+    return;
+  }
+  def.versions = def.versions.filter(function (v) { return v.level !== detail.level; });
+  wsCloseBagDetail();
+}
+
 function renderBagDetailViewBody(state) {
   var detail = state.uiState.bagDetail;
   var def = wsBagDetailDef(detail);
@@ -992,6 +1037,18 @@ function renderBagDetailViewBody(state) {
   var fieldsHtml = detail.kind === 'gem' ? renderBagDetailGemFields(def, ver, state.uiState.bagDetailEditing) : renderBagDetailEquipmentFields(def, ver, state.uiState.bagDetailEditing, state.uiState.bagDetailGemsDraft);
   var error = state.uiState.bagDetailError;
   var editing = state.uiState.bagDetailEditing;
+  var maxLevel = wsBagDetailMaxLevel(def);
+  var actionsHtml;
+  if (ver.status === 'draft') {
+    var disabled = wsBagDetailVersionHasReferences(detail) ? 'disabled' : '';
+    actionsHtml =
+      '<button class="btn btn-primary" data-flyout-publish onclick="wsPublishBagDetailVersion()">公開</button> ' +
+      '<button class="btn btn-danger" data-flyout-delete ' + disabled + ' onclick="wsDeleteBagDetailVersion()">刪除</button>';
+  } else if (ver.level === maxLevel) {
+    actionsHtml = '<button class="btn" data-flyout-open-draft onclick="wsOpenNewBagDetailDraft()">開 Lv' + (maxLevel + 1) + ' 草稿</button>';
+  } else {
+    actionsHtml = '<span class="hint">較舊版本，唯讀</span>';
+  }
 
   var nameBlock = editing === 'displayName'
     ? (
@@ -1013,7 +1070,8 @@ function renderBagDetailViewBody(state) {
     '</div>' +
     '<div class="ws-flyout-level-row">' + levelButtons + '</div>' +
     (error ? '<div class="ws-flyout-error" data-flyout-error>' + escapeHtml(error) + '</div>' : '') +
-    fieldsHtml
+    fieldsHtml +
+    '<div class="ws-flyout-actions">' + actionsHtml + '</div>'
   );
 }
 

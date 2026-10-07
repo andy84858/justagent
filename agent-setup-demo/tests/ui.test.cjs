@@ -751,6 +751,66 @@ async function main() {
   record('published equipment version shows a locked badge instead', gemsLockedBadge === 1);
   await page.click('[data-flyout-close]');
 
+  // --- Phase 3 Task 6: 開新草稿／公開／刪除 action bar ---
+  await page.click('[data-bag-gem-detail="render_chart.1"]');
+  const openDraftBtnOnMaxPublished = await page.locator('[data-flyout-open-draft]').count();
+  record('開新草稿 button shows when viewing the highest, published level', openDraftBtnOnMaxPublished === 1);
+  await page.click('[data-flyout-open-draft]');
+  const newDraftLevel = await page.evaluate(() => window.appState.uiState.bagDetail.level);
+  record('開新草稿 switches the flyout to the newly created Lv2 draft', newDraftLevel === 2, newDraftLevel);
+  const newDraftExists = await page.evaluate(() => window.appState.data.gems.find((g) => g.name === 'render_chart').versions.some((v) => v.level === 2 && v.status === 'draft' && v.copiedFromLevel === 1));
+  record('the new draft is appended to the gem\'s versions with copiedFromLevel set', newDraftExists === true);
+
+  const publishBtnOnDraft = await page.locator('[data-flyout-publish]').count();
+  record('公開 button shows while viewing a draft version', publishBtnOnDraft === 1);
+  const deleteBtnOnDraft = await page.locator('[data-flyout-delete]').count();
+  record('刪除 button shows while viewing a draft version', deleteBtnOnDraft === 1);
+  const openDraftBtnGoneOnDraft = await page.locator('[data-flyout-open-draft]').count();
+  record('開新草稿 button is gone while viewing the still-open draft (no concurrent drafts)', openDraftBtnGoneOnDraft === 0);
+
+  await page.click('[data-flyout-publish]');
+  const statusAfterPublish = await page.evaluate(() => window.appState.data.gems.find((g) => g.name === 'render_chart').versions.find((v) => v.level === 2).status);
+  record('公開 flips the draft\'s status to published', statusAfterPublish === 'published', statusAfterPublish);
+  await page.click('[data-flyout-close]');
+
+  // delete guard: get_order_status Lv4 is a draft with zero references (nothing equips/wears it)
+  await page.click('[data-bag-gem-detail="get_order_status.4"]', { force: true });
+  const deleteBtnEnabledForUnreferencedDraft = await page.locator('[data-flyout-delete]').isDisabled();
+  record('刪除 is enabled for an unreferenced draft', deleteBtnEnabledForUnreferencedDraft === false);
+  await page.click('[data-flyout-delete]');
+  const lv4StillExists = await page.evaluate(() => window.appState.data.gems.find((g) => g.name === 'get_order_status').versions.some((v) => v.level === 4));
+  record('刪除 removes an unreferenced draft version', lv4StillExists === false);
+  const flyoutClosedAfterDelete = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
+  record('flyout closes after a successful delete', flyoutClosedAfterDelete === 0);
+
+  // delete guard: mount a still-draft gem into an equipment draft's carried-gems list, then try to delete that gem's draft level
+  await page.evaluate(function () {
+    window.appState.data.gems.push({
+      name: 'send_sms', displayName: '發送簡訊', kind: 'API', protocol: 'REST',
+      versions: [{ level: 1, status: 'draft', copiedFromLevel: null }]
+    });
+    window.appState.data.equipment.push({
+      name: 'sms-helper', displayName: '簡訊小幫手',
+      versions: [{ level: 1, status: 'draft', copiedFromLevel: null, gems: [{ gemName: 'send_sms', level: 1 }] }]
+    });
+    window.rerender();
+  });
+  await page.click('[data-bag-gem-detail="send_sms.1"]', { force: true });
+  const deleteBtnDisabledForReferencedDraft = await page.locator('[data-flyout-delete]').isDisabled();
+  record('刪除 is disabled for a draft referenced by an equipment\'s carried-gems list', deleteBtnDisabledForReferencedDraft === true);
+  // A native <button disabled> never dispatches a click event, even via a programmatic
+  // `.click()` call — the HTML `disabled` attribute is the UI's first line of defense here,
+  // but wsDeleteBagDetailVersion() carries its own reference-guard independently of that
+  // attribute (defense in depth: the attribute alone would silently do nothing if a future
+  // change ever rendered the button without `disabled` in some state). Calling the function
+  // directly is the only way to exercise that guard and prove it, not just the HTML attribute.
+  await page.evaluate(function () { wsDeleteBagDetailVersion(); });
+  const errorShownForBlockedDelete = await page.evaluate(() => window.appState.uiState.bagDetailError);
+  record('clicking a disabled-but-still-clicked 刪除 shows a reference-blocked error, not a silent no-op', typeof errorShownForBlockedDelete === 'string' && errorShownForBlockedDelete.indexOf('引用') !== -1, errorShownForBlockedDelete);
+  const stillExistsAfterBlockedDelete = await page.evaluate(() => window.appState.data.gems.find((g) => g.name === 'send_sms').versions.length);
+  record('the referenced draft is not actually deleted', stillExistsAfterBlockedDelete === 1);
+  await page.click('[data-flyout-close]');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
