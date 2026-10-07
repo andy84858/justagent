@@ -678,6 +678,41 @@ async function main() {
   record('opening a different item resets bagDetailEditing to null', leakedEditingState === null, leakedEditingState);
   await page.click('[data-flyout-close]');
 
+  // --- Phase 3 Task 4: pencil-edit 種類／協定, locked after first publish ---
+  await page.click('[data-bag-gem-detail="get_order_status.1"]');
+  const kindProtocolLockedForPublishedGem = await page.locator('[data-flyout-kindprotocol-pencil]').count();
+  record('種類／協定 pencil is absent for a gem that has ever been published', kindProtocolLockedForPublishedGem === 0);
+  const kindProtocolLockedBadge = await page.locator('[data-flyout-kindprotocol-locked]').count();
+  record('種類／協定 shows a locked badge instead', kindProtocolLockedBadge === 1);
+  await page.click('[data-flyout-close]');
+
+  // create a never-published gem directly in app state to test the unlocked path without depending on Task 7's create flow
+  await page.evaluate(function () {
+    window.appState.data.gems.push({
+      name: 'send_email', displayName: '寄送郵件', kind: 'API', protocol: 'REST',
+      versions: [{ level: 1, status: 'draft', copiedFromLevel: null }]
+    });
+    window.rerender();
+  });
+  // force: true — the draft gem's bag row carries aria-disabled="true" (Phase 2's accessibility
+  // hint that *wearing* a draft is blocked), and Playwright's actionability check treats that as
+  // disabling descendant elements too, including this unrelated ⋯ detail button. Viewing/managing
+  // a draft must stay reachable even though wearing it is blocked, and nothing in the page actually
+  // prevents the click (no pointer-events:none on the button) — this is a Playwright heuristic
+  // false positive on a real, intentionally-clickable button, not a production bug.
+  await page.click('[data-bag-gem-detail="send_email.1"]', { force: true });
+  const kindProtocolPencilForNewGem = await page.locator('[data-flyout-kindprotocol-pencil]').count();
+  record('種類／協定 pencil is present for a never-published gem', kindProtocolPencilForNewGem === 1);
+  await page.click('[data-flyout-kindprotocol-pencil]');
+  await page.selectOption('[data-flyout-kind-input]', 'MCP');
+  await page.fill('[data-flyout-protocol-input]', 'MCP-TOOL');
+  await page.click('[data-flyout-kindprotocol-commit]');
+  const updatedKind = await page.evaluate(() => window.appState.data.gems.find((g) => g.name === 'send_email').kind);
+  const updatedProtocol = await page.evaluate(() => window.appState.data.gems.find((g) => g.name === 'send_email').protocol);
+  record('committing the 種類／協定 edit updates kind', updatedKind === 'MCP', updatedKind);
+  record('committing the 種類／協定 edit updates protocol', updatedProtocol === 'MCP-TOOL', updatedProtocol);
+  await page.click('[data-flyout-close]');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

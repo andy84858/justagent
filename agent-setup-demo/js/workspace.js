@@ -802,7 +802,19 @@ function wsCommitBagDetailDisplayName() {
   window.rerender();
 }
 
-function renderBagDetailGemFields(gemDef, ver) {
+function wsCommitBagDetailKindProtocol() {
+  var detail = window.appState.uiState.bagDetail;
+  var gemDef = wsGemByName(detail.name);
+  if (wsGemEverPublished(gemDef)) return;
+  var kindInput = document.querySelector('[data-flyout-kind-input]');
+  var protocolInput = document.querySelector('[data-flyout-protocol-input]');
+  gemDef.kind = kindInput.value;
+  gemDef.protocol = protocolInput.value.trim() || gemDef.protocol;
+  window.appState.uiState.bagDetailEditing = null;
+  window.rerender();
+}
+
+function renderBagDetailGemFields(gemDef, ver, editing) {
   var refs = wsGemReferences(gemDef.name, ver.level);
   var refList = (refs.equipment.length === 0 && refs.variants.length === 0)
     ? '<div class="ws-flyout-ref-list hint">尚未被任何裝備或人物卡引用</div>'
@@ -812,8 +824,35 @@ function renderBagDetailGemFields(gemDef, ver) {
         refs.variants.map(function (v) { return '<div class="ws-flyout-ref-item">人物卡：' + escapeHtml(v.variantName) + '</div>'; }).join('') +
       '</div>'
     );
+
+  var kindProtocolBlock;
+  if (editing === 'kindProtocol') {
+    kindProtocolBlock =
+      '<div class="ws-flyout-field">' +
+        '<label class="label">種類</label>' +
+        '<select data-flyout-kind-input>' +
+          '<option value="API"' + (gemDef.kind === 'API' ? ' selected' : '') + '>API</option>' +
+          '<option value="MCP"' + (gemDef.kind === 'MCP' ? ' selected' : '') + '>MCP</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="ws-flyout-field">' +
+        '<label class="label">協定</label>' +
+        '<input data-flyout-protocol-input value="' + escapeHtml(gemDef.protocol) + '">' +
+      '</div>' +
+      '<button class="btn btn-primary" data-flyout-kindprotocol-commit onclick="wsCommitBagDetailKindProtocol()">✓ 完成編輯</button> ' +
+      '<button class="btn" onclick="wsCancelEditBagDetailField()">取消</button>';
+  } else if (wsGemEverPublished(gemDef)) {
+    kindProtocolBlock =
+      '<div class="ws-flyout-field"><span class="label">種類／協定</span> ' + escapeHtml(gemDef.kind) + ' / ' + escapeHtml(gemDef.protocol) + ' ' +
+      '<span class="badge badge-locked" data-flyout-kindprotocol-locked>🔒 已公開過，不可改</span></div>';
+  } else {
+    kindProtocolBlock =
+      '<div class="ws-flyout-field"><span class="label">種類／協定</span> ' + escapeHtml(gemDef.kind) + ' / ' + escapeHtml(gemDef.protocol) + ' ' +
+      '<button class="btn" data-flyout-kindprotocol-pencil onclick="wsStartEditBagDetailField(\'kindProtocol\')">✎</button></div>';
+  }
+
   return (
-    '<div class="ws-flyout-field"><span class="label">種類／協定</span> ' + escapeHtml(gemDef.kind) + ' / ' + escapeHtml(gemDef.protocol) + '</div>' +
+    kindProtocolBlock +
     '<div class="ws-flyout-field"><span class="label">從哪一級複製</span> ' + (ver.copiedFromLevel ? ('Lv' + ver.copiedFromLevel) : '（原始建立）') + '</div>' +
     '<div class="ws-flyout-field"><span class="label">被引用清單</span></div>' +
     refList
@@ -853,7 +892,7 @@ function renderBagDetailViewBody(state) {
     );
   }).join('');
 
-  var fieldsHtml = detail.kind === 'gem' ? renderBagDetailGemFields(def, ver) : renderBagDetailEquipmentFields(def, ver);
+  var fieldsHtml = detail.kind === 'gem' ? renderBagDetailGemFields(def, ver, state.uiState.bagDetailEditing) : renderBagDetailEquipmentFields(def, ver);
   var error = state.uiState.bagDetailError;
   var editing = state.uiState.bagDetailEditing;
 
