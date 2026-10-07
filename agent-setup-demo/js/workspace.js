@@ -1321,6 +1321,10 @@ function renderPackListRows(state, kind) {
 
 function renderPackPane(state) {
   var kind = state.uiState.packListKind || 'bundle';
+  if (state.uiState.packCreateForm) {
+    var form = state.uiState.packCreateForm;
+    return '<div data-pack-pane>' + (form.kind === 'bundle' ? renderPackCreateBundleForm(state) : '') + '</div>';
+  }
   return (
     '<div data-pack-pane>' +
       '<div class="ws-bag-header"><span class="label">📦 打包</span>' +
@@ -1342,8 +1346,108 @@ function wsOpenPackDetail(kind, code) {
   window.rerender();
 }
 
+function wsValidatePackCode(code, catalogList) {
+  if (!/^[A-Z0-9_]{1,40}$/.test(code)) {
+    return '代碼只能是大寫英數字與底線，長度 1–40';
+  }
+  var duplicate = catalogList.some(function (item) { return item.code === code; });
+  if (duplicate) {
+    return '已有相同代碼的打包項目';
+  }
+  return null;
+}
+
+function wsToggleBundleVariantSelection(npcCode, variantCode) {
+  var form = window.appState.uiState.packCreateForm;
+  form.selectedVariants = form.selectedVariants || [];
+  var idx = form.selectedVariants.findIndex(function (v) { return v.npcCode === npcCode && v.variantCode === variantCode; });
+  if (idx === -1) {
+    form.selectedVariants.push({ npcCode: npcCode, variantCode: variantCode });
+  } else {
+    form.selectedVariants.splice(idx, 1);
+  }
+  window.rerender();
+}
+
+function wsSameZonePublishedVariants(npc) {
+  var zone = npc.usedFor;
+  var results = [];
+  window.appState.data.npcs.forEach(function (n) {
+    if (n.usedFor !== zone) return;
+    n.variants.forEach(function (v) {
+      if (v.publishedVersion) results.push({ npcCode: n.code, variantCode: v.code, variantName: v.name });
+    });
+  });
+  return results;
+}
+
+function wsUpdatePackCreateField(field, value) {
+  window.appState.uiState.packCreateForm[field] = value;
+}
+
+function wsSubmitCreateBundle() {
+  var npc = wsFindNpc(window.appState);
+  var form = window.appState.uiState.packCreateForm;
+  var code = (form.code || '').trim();
+  var displayName = (form.displayName || '').trim();
+  var selected = form.selectedVariants || [];
+  if (selected.length === 0) {
+    window.appState.uiState.packDetailError = '至少要選一張人物卡';
+    window.rerender();
+    return;
+  }
+  var error = wsValidatePackCode(code, window.appState.data.bundles);
+  if (error) {
+    window.appState.uiState.packDetailError = error;
+    window.rerender();
+    return;
+  }
+  window.appState.data.bundles.push({
+    code: code, displayName: displayName || code, description: '',
+    usedFor: npc.usedFor, status: 'DRAFT', variantRefs: selected
+  });
+  window.appState.uiState.packDetailError = null;
+  window.appState.uiState.packCreateForm = null;
+  window.appState.uiState.packDetail = { kind: 'bundle', code: code, mode: 'view' };
+  window.rerender();
+}
+
+function renderPackCreateBundleForm(state) {
+  var npc = wsFindNpc(state);
+  var form = state.uiState.packCreateForm;
+  var selected = form.selectedVariants || [];
+  var error = state.uiState.packDetailError;
+  var rows = wsSameZonePublishedVariants(npc).map(function (v) {
+    var checked = selected.some(function (s) { return s.npcCode === v.npcCode && s.variantCode === v.variantCode; });
+    return (
+      '<div class="ws-bag-item' + (checked ? ' ws-bag-item--active' : '') + '" data-bundle-variant-checkbox="' + v.npcCode + '.' + v.variantCode + '" onclick="wsToggleBundleVariantSelection(\'' + v.npcCode + '\', \'' + v.variantCode + '\')">' +
+        '<span class="ws-bag-item-name">' + escapeHtml(v.variantName) + '</span>' +
+        '<span class="hint">' + (checked ? '已選取' : '') + '</span>' +
+      '</div>'
+    );
+  }).join('') || '<div class="hint">此場域沒有已發布的人物卡</div>';
+  return (
+    '<div class="ws-flyout-field"><label class="label">代碼</label><input data-pack-create-name value="' + escapeHtml(form.code || '') + '" oninput="wsUpdatePackCreateField(\'code\', this.value)" placeholder="e.g. CS_BUNDLE_1"></div>' +
+    '<div class="ws-flyout-field"><label class="label">顯示名稱</label><input data-pack-create-display-name value="' + escapeHtml(form.displayName || '') + '" oninput="wsUpdatePackCreateField(\'displayName\', this.value)" placeholder="顯示名稱"></div>' +
+    '<div class="label">選擇人物卡（同場域：' + escapeHtml(npc.usedFor) + '）</div>' +
+    rows +
+    (error ? '<div class="ws-flyout-error" data-flyout-error>' + escapeHtml(error) + '</div>' : '') +
+    '<div class="ws-flyout-actions">' +
+      '<button class="btn" onclick="wsCancelPackCreate()">取消</button> ' +
+      '<button class="btn btn-primary" data-pack-create-submit onclick="wsSubmitCreateBundle()">確認建立</button>' +
+    '</div>'
+  );
+}
+
+function wsCancelPackCreate() {
+  window.appState.uiState.packCreateForm = null;
+  window.appState.uiState.packDetailError = null;
+  window.rerender();
+}
+
 function wsOpenPackCreate(kind) {
-  window.appState.uiState.packCreateForm = { kind: kind };
+  window.appState.uiState.packCreateForm = { kind: kind, selectedVariants: [], selectedItems: [] };
+  window.appState.uiState.packDetailError = null;
   window.rerender();
 }
 

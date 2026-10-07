@@ -1022,6 +1022,45 @@ async function main() {
   const createExtensionBtnCount = await page.locator('[data-pack-create="extension"]').count();
   record('both ＋ 新增組合包 and ＋ 新增擴充包 entry points exist', createBundleBtnCount === 1 && createExtensionBtnCount === 1);
 
+  // --- Phase 4 Task 3: 組合包 creation flow, zone-restricted ---
+  await page.click('[data-pack-create="bundle"]');
+  const bundleFormNameInput = await page.locator('[data-pack-create-name]').count();
+  record('clicking ＋ 新增組合包 shows the creation form', bundleFormNameInput === 1);
+
+  const standardCheckboxCount = await page.locator('[data-bundle-variant-checkbox="FAQ_ANSWER.STANDARD"]').count();
+  record('a published, same-zone variant (FAQ_ANSWER.STANDARD) is offered as a checkbox', standardCheckboxCount === 1);
+  const premiumCheckboxCount = await page.locator('[data-bundle-variant-checkbox="FAQ_ANSWER.PREMIUM"]').count();
+  record('same-zone published variants beyond the currently-open one are also offered (PREMIUM was published earlier in this suite)', premiumCheckboxCount === 1);
+  const orderAssistCheckboxCount = await page.locator('[data-bundle-variant-checkbox^="ORDER_ASSIST."]').count();
+  record('a different-zone NPC\'s variants are never offered (ORDER_ASSIST has no variants anyway, but asserts the selector matches nothing)', orderAssistCheckboxCount === 0);
+
+  await page.fill('[data-pack-create-name]', 'CS_BUNDLE_1');
+  await page.fill('[data-pack-create-display-name]', '客服組合包一號');
+  await page.click('[data-pack-create-submit]');
+  const noVariantsSelectedError = await page.evaluate(() => window.appState.uiState.packDetailError);
+  record('submitting with zero variants selected is rejected with an error', typeof noVariantsSelectedError === 'string' && noVariantsSelectedError.length > 0, noVariantsSelectedError);
+  const bundleNotCreatedEmpty = await page.evaluate(() => window.appState.data.bundles.some((b) => b.code === 'CS_BUNDLE_1'));
+  record('no bundle is created when the selection is empty', bundleNotCreatedEmpty === false);
+
+  await page.click('[data-bundle-variant-checkbox="FAQ_ANSWER.STANDARD"]');
+  await page.click('[data-pack-create-submit]');
+  const bundleCreated = await page.evaluate(() => window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_1'));
+  record('a valid submission creates a DRAFT bundle with the selected variant and the current NPC\'s zone', !!bundleCreated && bundleCreated.status === 'DRAFT' && bundleCreated.usedFor === 'customer_service' && bundleCreated.variantRefs.length === 1 && bundleCreated.variantRefs[0].variantCode === 'STANDARD', JSON.stringify(bundleCreated));
+  const packDetailAfterCreate = await page.evaluate(() => window.appState.uiState.packDetail);
+  record('after creation packDetail switches to view mode on the new bundle', packDetailAfterCreate.kind === 'bundle' && packDetailAfterCreate.code === 'CS_BUNDLE_1' && packDetailAfterCreate.mode === 'view', JSON.stringify(packDetailAfterCreate));
+
+  // duplicate code rejected
+  await page.evaluate(() => { window.appState.uiState.packDetail = null; });
+  await page.click('[data-pack-create="bundle"]');
+  await page.click('[data-bundle-variant-checkbox="FAQ_ANSWER.STANDARD"]');
+  await page.fill('[data-pack-create-name]', 'CS_BUNDLE_1');
+  await page.fill('[data-pack-create-display-name]', '重複代碼');
+  await page.click('[data-pack-create-submit]');
+  const duplicateBundleError = await page.evaluate(() => window.appState.uiState.packDetailError);
+  record('a duplicate bundle code is rejected with an error', typeof duplicateBundleError === 'string' && duplicateBundleError.length > 0, duplicateBundleError);
+  const bundleCountUnchanged = await page.evaluate(() => window.appState.data.bundles.filter((b) => b.code === 'CS_BUNDLE_1').length);
+  record('the duplicate submission does not create a second entry', bundleCountUnchanged === 1);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
