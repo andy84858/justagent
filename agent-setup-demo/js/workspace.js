@@ -1401,6 +1401,83 @@ function wsCancelEditPackDetailField() {
   window.rerender();
 }
 
+function wsStartEditPackMembers() {
+  var detail = window.appState.uiState.packDetail;
+  var def = wsPackDef(detail);
+  window.appState.uiState.packMembershipDraft = detail.kind === 'bundle'
+    ? JSON.parse(JSON.stringify(def.variantRefs))
+    : JSON.parse(JSON.stringify(def.itemRefs));
+  window.appState.uiState.packDetailEditing = 'members';
+  window.rerender();
+}
+
+function wsCancelEditPackMembers() {
+  window.appState.uiState.packMembershipDraft = null;
+  window.appState.uiState.packDetailEditing = null;
+  window.rerender();
+}
+
+function wsToggleMembershipDraftVariant(npcCode, variantCode) {
+  var draft = window.appState.uiState.packMembershipDraft;
+  var idx = draft.findIndex(function (v) { return v.npcCode === npcCode && v.variantCode === variantCode; });
+  if (idx === -1) draft.push({ npcCode: npcCode, variantCode: variantCode });
+  else draft.splice(idx, 1);
+  window.rerender();
+}
+
+function wsToggleMembershipDraftItem(kind, name, level) {
+  var draft = window.appState.uiState.packMembershipDraft;
+  var sameNameIdx = draft.findIndex(function (i) { return i.kind === kind && i.name === name; });
+  var isExactMatch = sameNameIdx !== -1 && draft[sameNameIdx].level === level;
+  if (sameNameIdx !== -1) draft.splice(sameNameIdx, 1);
+  if (!isExactMatch) draft.push({ kind: kind, name: name, level: level });
+  window.rerender();
+}
+
+function wsCommitPackMembers() {
+  var detail = window.appState.uiState.packDetail;
+  var def = wsPackDef(detail);
+  if (detail.kind === 'bundle') def.variantRefs = window.appState.uiState.packMembershipDraft;
+  else def.itemRefs = window.appState.uiState.packMembershipDraft;
+  window.appState.uiState.packMembershipDraft = null;
+  window.appState.uiState.packDetailEditing = null;
+  window.rerender();
+}
+
+function renderPackMembershipEditor(detail, def) {
+  var draft = window.appState.uiState.packMembershipDraft;
+  var rows;
+  if (detail.kind === 'bundle') {
+    var zoneNpc = window.appState.data.npcs.find(function (n) { return n.usedFor === def.usedFor; });
+    rows = wsSameZonePublishedVariants(zoneNpc).map(function (v) {
+      var checked = draft.some(function (s) { return s.npcCode === v.npcCode && s.variantCode === v.variantCode; });
+      return (
+        '<div class="ws-bag-item' + (checked ? ' ws-bag-item--active' : '') + '" data-membership-variant-checkbox="' + v.npcCode + '.' + v.variantCode + '" onclick="wsToggleMembershipDraftVariant(\'' + v.npcCode + '\', \'' + v.variantCode + '\')">' +
+          '<span class="ws-bag-item-name">' + escapeHtml(v.variantName) + '</span>' +
+          '<span class="hint">' + (checked ? '已選取' : '') + '</span>' +
+        '</div>'
+      );
+    }).join('');
+  } else {
+    rows = wsPublishedCatalogItems().map(function (item) {
+      var checked = draft.some(function (s) { return s.kind === item.kind && s.name === item.name && s.level === item.level; });
+      return (
+        '<div class="ws-bag-item' + (checked ? ' ws-bag-item--active' : '') + '" data-membership-item-checkbox="' + item.kind + '.' + item.name + '.' + item.level + '" onclick="wsToggleMembershipDraftItem(\'' + item.kind + '\', \'' + item.name + '\', ' + item.level + ')">' +
+          '<span class="ws-bag-item-name">' + escapeHtml(item.label) + '</span>' +
+          '<span class="hint">' + (checked ? '已選取' : '') + '</span>' +
+        '</div>'
+      );
+    }).join('');
+  }
+  return (
+    rows +
+    '<div class="ws-flyout-actions">' +
+      '<button class="btn btn-primary" data-membership-commit onclick="wsCommitPackMembers()">✓ 完成編輯</button> ' +
+      '<button class="btn" onclick="wsCancelEditPackMembers()">取消</button>' +
+    '</div>'
+  );
+}
+
 function wsCommitPackDetailDisplayName() {
   var def = wsPackDef(window.appState.uiState.packDetail);
   var input = document.querySelector('[data-pack-displayname-input]');
@@ -1471,9 +1548,9 @@ function renderPackDetailViewBody(state) {
     '<div class="ws-flyout-field"><span class="label">說明</span></div>' +
     descriptionBlock +
     '<div class="ws-flyout-field"><span class="label">' + (detail.kind === 'bundle' ? '成員人物卡' : '成員能力') + '</span>' +
-      (def.status === 'DRAFT' ? '<button class="btn" data-pack-members-pencil onclick="wsStartEditPackDetailField(\'members\')">✎</button>' : '') +
+      (def.status === 'DRAFT' && editing !== 'members' ? '<button class="btn" data-pack-members-pencil onclick="wsStartEditPackMembers()">✎</button>' : '') +
     '</div>' +
-    renderPackMembersList(detail, def) +
+    (editing === 'members' ? renderPackMembershipEditor(detail, def) : renderPackMembersList(detail, def)) +
     '<div class="ws-flyout-actions">' +
       wsPackNextStatuses(def.status).map(function (next) {
         var label = (next === 'PUBLISHED' && def.status === 'MAINTENANCE') ? '▶ 恢復發布' : WS_PACK_TRANSITION_LABELS[next];

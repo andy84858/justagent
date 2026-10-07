@@ -1179,6 +1179,30 @@ async function main() {
   record('displayName pencil remains available even on an EOS pack', displayNamePencilStillThere === 1);
   await page.click('[data-flyout-close]');
 
+  // --- Phase 4 Task 7: membership editor for DRAFT packs ---
+  // CS_BUNDLE_1 is EOS by now (Task 6 drove it there); create a fresh DRAFT bundle to edit.
+  await page.click('[data-pack-create="bundle"]');
+  await page.click('[data-bundle-variant-checkbox="FAQ_ANSWER.STANDARD"]');
+  await page.fill('[data-pack-create-name]', 'CS_BUNDLE_2');
+  await page.fill('[data-pack-create-display-name]', '客服組合包二號');
+  await page.click('[data-pack-create-submit]');
+
+  await page.click('[data-pack-members-pencil]');
+  const memberCheckboxCount = await page.locator('[data-membership-variant-checkbox]').count();
+  record('membership editor shows same-zone published variant checkboxes', memberCheckboxCount > 0, 'found ' + memberCheckboxCount);
+  const standardPreChecked = await page.evaluate(function () {
+    var el = document.querySelector('[data-membership-variant-checkbox="FAQ_ANSWER.STANDARD"]');
+    return el ? el.classList.contains('ws-bag-item--active') : false;
+  });
+  record('the already-included variant starts checked', standardPreChecked === true);
+
+  await page.click('[data-membership-variant-checkbox="FAQ_ANSWER.PREMIUM"]');
+  await page.click('[data-membership-commit]');
+  const membersAfterCommit = await page.evaluate(() => window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_2').variantRefs);
+  record('committing the membership editor adds the newly-checked variant', membersAfterCommit.some((v) => v.variantCode === 'PREMIUM') && membersAfterCommit.some((v) => v.variantCode === 'STANDARD'), JSON.stringify(membersAfterCommit));
+
+  await page.click('[data-flyout-close]');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
