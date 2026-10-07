@@ -43,9 +43,9 @@ function render() {
 window.rerender = render;
 
 document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape' && window.appState.uiState.bagDetail) {
-    wsCloseBagDetail();
-  }
+  if (e.key !== 'Escape') return;
+  if (window.appState.uiState.bagDetail) wsCloseBagDetail();
+  if (window.appState.uiState.packDetail) wsClosePackDetail();
 });
 
 window.resetData = function resetData() {

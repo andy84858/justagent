@@ -1182,7 +1182,8 @@ function renderBagDetailFlyout(state) {
   var centerEl = document.getElementById('ws-center');
   if (!flyoutEl) return;
   var detail = state.uiState.bagDetail;
-  if (!detail) {
+  var packDetail = state.uiState.packDetail;
+  if (!detail && !packDetail) {
     flyoutEl.classList.remove('ws-flyout--active');
     flyoutEl.innerHTML = '';
     if (centerEl) { centerEl.classList.remove('ws-center--dim'); centerEl.removeAttribute('inert'); }
@@ -1190,7 +1191,11 @@ function renderBagDetailFlyout(state) {
   }
   flyoutEl.classList.add('ws-flyout--active');
   if (centerEl) { centerEl.classList.add('ws-center--dim'); centerEl.setAttribute('inert', ''); }
-  flyoutEl.innerHTML = detail.mode === 'create' ? renderBagDetailCreateBody(state) : renderBagDetailViewBody(state);
+  if (detail) {
+    flyoutEl.innerHTML = detail.mode === 'create' ? renderBagDetailCreateBody(state) : renderBagDetailViewBody(state);
+  } else {
+    flyoutEl.innerHTML = renderPackDetailViewBody(state);
+  }
 }
 
 function renderAbilityArea(state) {
@@ -1343,7 +1348,107 @@ function renderPackPane(state) {
 
 function wsOpenPackDetail(kind, code) {
   window.appState.uiState.packDetail = { kind: kind, code: code, mode: 'view' };
+  window.appState.uiState.packDetailEditing = null;
+  window.appState.uiState.packMembershipDraft = null;
+  window.appState.uiState.packDetailError = null;
   window.rerender();
+}
+
+function wsClosePackDetail() {
+  window.appState.uiState.packDetail = null;
+  window.appState.uiState.packDetailEditing = null;
+  window.appState.uiState.packMembershipDraft = null;
+  window.appState.uiState.packDetailError = null;
+  window.rerender();
+}
+
+function wsPackDef(detail) {
+  var catalogList = detail.kind === 'bundle' ? window.appState.data.bundles : window.appState.data.extensions;
+  return catalogList.find(function (p) { return p.code === detail.code; });
+}
+
+function wsStartEditPackDetailField(field) {
+  window.appState.uiState.packDetailEditing = field;
+  window.rerender();
+}
+
+function wsCancelEditPackDetailField() {
+  window.appState.uiState.packDetailEditing = null;
+  window.rerender();
+}
+
+function wsCommitPackDetailDisplayName() {
+  var def = wsPackDef(window.appState.uiState.packDetail);
+  var input = document.querySelector('[data-pack-displayname-input]');
+  def.displayName = input.value.trim() || def.displayName;
+  window.appState.uiState.packDetailEditing = null;
+  window.rerender();
+}
+
+function wsCommitPackDetailDescription() {
+  var def = wsPackDef(window.appState.uiState.packDetail);
+  var input = document.querySelector('[data-pack-description-input]');
+  def.description = input.value;
+  window.appState.uiState.packDetailEditing = null;
+  window.rerender();
+}
+
+function renderPackMembersList(detail, def) {
+  if (detail.kind === 'bundle') {
+    var rows = def.variantRefs.map(function (ref) {
+      var npc = window.appState.data.npcs.find(function (n) { return n.code === ref.npcCode; });
+      var variant = npc.variants.find(function (v) { return v.code === ref.variantCode; });
+      return '<div class="ws-flyout-ref-item">' + escapeHtml(npc.displayName) + ' — ' + escapeHtml(variant.name) + '</div>';
+    }).join('') || '<div class="hint">沒有成員</div>';
+    return '<div data-pack-members>' + rows + '</div>';
+  }
+  var itemRows = def.itemRefs.map(function (ref) {
+    var itemDef = ref.kind === 'gem' ? wsGemByName(ref.name) : wsEquipmentByName(ref.name);
+    return '<div class="ws-flyout-ref-item">' + escapeHtml(itemDef.displayName) + ' Lv' + ref.level + '</div>';
+  }).join('') || '<div class="hint">沒有項目</div>';
+  return '<div data-pack-members>' + itemRows + '</div>';
+}
+
+function renderPackDetailViewBody(state) {
+  var detail = state.uiState.packDetail;
+  var def = wsPackDef(detail);
+  var editing = state.uiState.packDetailEditing;
+  var typeLabel = detail.kind === 'bundle' ? '組合包' : '擴充包';
+
+  var nameBlock = editing === 'displayName'
+    ? (
+      '<input class="ws-npc-name-input" data-pack-displayname-input value="' + escapeHtml(def.displayName) + '">' +
+      '<button class="btn btn-primary" data-pack-displayname-commit onclick="wsCommitPackDetailDisplayName()">✓</button> ' +
+      '<button class="btn" onclick="wsCancelEditPackDetailField()">取消</button>'
+    )
+    : (
+      '<span class="ws-flyout-name">' + escapeHtml(def.displayName) + '</span>' +
+      '<button class="btn" data-pack-displayname-pencil onclick="wsStartEditPackDetailField(\'displayName\')">✎</button>'
+    );
+
+  var descriptionBlock = editing === 'description'
+    ? (
+      '<textarea data-pack-description-input rows="3" style="width:100%;">' + escapeHtml(def.description) + '</textarea>' +
+      '<button class="btn btn-primary" data-pack-description-commit onclick="wsCommitPackDetailDescription()">✓</button> ' +
+      '<button class="btn" onclick="wsCancelEditPackDetailField()">取消</button>'
+    )
+    : (
+      '<div class="ws-flyout-field">' + escapeHtml(def.description) + ' ' +
+      '<button class="btn" data-pack-description-pencil onclick="wsStartEditPackDetailField(\'description\')">✎</button></div>'
+    );
+
+  return (
+    '<button class="btn ws-flyout-close" data-flyout-close onclick="wsClosePackDetail()">✕</button>' +
+    '<div class="ws-flyout-header">' +
+      '<span class="ws-flyout-type-label">' + typeLabel + '</span>' +
+      nameBlock +
+    '</div>' +
+    '<div class="ws-flyout-field"><span class="label">狀態</span> <span data-pack-status>' + escapeHtml(def.status) + '</span></div>' +
+    '<div class="ws-flyout-field"><span class="label">說明</span></div>' +
+    descriptionBlock +
+    '<div class="ws-flyout-field"><span class="label">' + (detail.kind === 'bundle' ? '成員人物卡' : '成員能力') + '</span></div>' +
+    renderPackMembersList(detail, def)
+  );
 }
 
 function wsValidatePackCode(code, catalogList) {

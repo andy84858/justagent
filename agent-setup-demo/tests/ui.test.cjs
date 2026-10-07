@@ -1095,6 +1095,44 @@ async function main() {
   const extensionCreated = await page.evaluate(() => window.appState.data.extensions.find((e) => e.code === 'CS_EXT_1'));
   record('a valid submission creates a DRAFT extension with the chosen agent and item', !!extensionCreated && extensionCreated.status === 'DRAFT' && extensionCreated.agentCode === 'FAQ_ANSWER' && extensionCreated.itemRefs.length === 1 && extensionCreated.itemRefs[0].level === 2, JSON.stringify(extensionCreated));
 
+  // --- Phase 4 Task 5: pack flyout view mode ---
+  await page.click('[data-pack-list-kind="bundle"]');
+  await page.click('[data-pack-row="bundle.CS_BUNDLE_1"]');
+  const packFlyoutActive = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
+  record('clicking a pack row opens the flyout', packFlyoutActive === 1);
+  const packFlyoutNameText = await page.locator('.ws-flyout-name').innerText();
+  record('pack flyout header shows the pack\'s display name', packFlyoutNameText.indexOf('客服組合包一號') !== -1, packFlyoutNameText);
+  const packStatusText = await page.locator('[data-pack-status]').innerText();
+  record('pack flyout shows the DRAFT status', packStatusText.indexOf('DRAFT') !== -1, packStatusText);
+  const memberListText = await page.locator('[data-pack-members]').innerText();
+  record('bundle flyout lists its member variant', memberListText.indexOf('一般版') !== -1, memberListText);
+
+  await page.click('[data-pack-displayname-pencil]');
+  await page.fill('[data-pack-displayname-input]', '客服組合包一號（改名）');
+  await page.click('[data-pack-displayname-commit]');
+  const renamedBundle = await page.evaluate(() => window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_1').displayName);
+  record('committing the displayName edit updates the bundle', renamedBundle === '客服組合包一號（改名）', renamedBundle);
+
+  await page.click('[data-pack-description-pencil]');
+  await page.fill('[data-pack-description-input]', '一些說明文字');
+  await page.click('[data-pack-description-commit]');
+  const describedBundle = await page.evaluate(() => window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_1').description);
+  record('committing the description edit updates the bundle', describedBundle === '一些說明文字', describedBundle);
+
+  await page.click('[data-flyout-close]');
+  const packFlyoutClosedAfterCloseBtn = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
+  record('✕ closes the pack flyout', packFlyoutClosedAfterCloseBtn === 0);
+  const packDetailNullAfterClose = await page.evaluate(() => window.appState.uiState.packDetail);
+  record('closing the pack flyout clears packDetail', packDetailNullAfterClose === null, packDetailNullAfterClose);
+
+  // Review Focus: switching NPC closes an open pack flyout
+  await page.click('[data-pack-row="bundle.CS_BUNDLE_1"]');
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  const packFlyoutClosedAfterNpcSwitch = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
+  record('switching the NPC selection closes an open pack flyout (bagMode resets to bag)', packFlyoutClosedAfterNpcSwitch === 0);
+  const packDetailNullAfterNpcSwitch = await page.evaluate(() => window.appState.uiState.packDetail);
+  record('switching the NPC selection also clears packDetail, not just the visual bagMode', packDetailNullAfterNpcSwitch === null, packDetailNullAfterNpcSwitch);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
