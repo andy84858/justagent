@@ -1203,6 +1203,99 @@ async function main() {
 
   await page.click('[data-flyout-close]');
 
+  // --- Final-review fix verification: Critical #1 + Important #1, a stale pack-creation
+  // form / open pack flyout surviving a selection change made via nav-creation paths
+  // (creating a new NPC or a new variant never called wsResetVariantTransientUi) ---
+  await page.evaluate(function () { window.appState.uiState.bagDetail = null; window.appState.uiState.packDetail = null; window.appState.uiState.bagMode = 'bag'; window.rerender(); });
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  await page.click('[data-variant-pack-toggle]');
+  await page.click('[data-pack-list-kind="bundle"]');
+  await page.click('[data-pack-create="bundle"]');
+  await page.click('[data-bundle-variant-checkbox="FAQ_ANSWER.STANDARD"]');
+  await page.fill('[data-pack-create-name]', 'LEAK_BUNDLE');
+  await page.fill('[data-pack-create-display-name]', '洩漏組合包');
+  // Use ORDER_ASSIST's own "+新人物卡" (a different NPC/zone) to trigger wsSubmitCreateVariant's
+  // selection change while the FAQ_ANSWER-zone bundle form above is still open.
+  await page.click('[data-npc-toggle="ORDER_ASSIST"]');
+  await page.click('[data-create-variant="ORDER_ASSIST"]');
+  await page.fill('[data-variant-form-code="ORDER_ASSIST"]', 'NEWV');
+  await page.fill('[data-variant-form-name="ORDER_ASSIST"]', '新人物卡');
+  await page.click('[data-variant-form-submit="ORDER_ASSIST"]');
+  const packCreateFormGoneAfterNavCreate = await page.evaluate(() => window.appState.uiState.packCreateForm);
+  record('creating a variant from the left nav while a pack-creation form is open closes that form (no stale cross-zone submission is possible)', packCreateFormGoneAfterNavCreate === null, JSON.stringify(packCreateFormGoneAfterNavCreate));
+  const bagModeResetAfterNavCreate = await page.evaluate(() => window.appState.uiState.bagMode);
+  record('the bagMode also resets to bag after creating a variant from the left nav', bagModeResetAfterNavCreate === 'bag', bagModeResetAfterNavCreate);
+  const leakBundleNeverCreated = await page.evaluate(() => window.appState.data.bundles.some((b) => b.code === 'LEAK_BUNDLE'));
+  record('the abandoned pack-creation form never created a bundle (nothing to submit it with)', leakBundleNeverCreated === false);
+
+  // Important #1's own repro: an open pack flyout closes when a new NPC is created from the left nav
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  await page.click('[data-variant-pack-toggle]');
+  await page.click('[data-pack-list-kind="bundle"]');
+  await page.click('[data-pack-row="bundle.CS_BUNDLE_2"]');
+  const packFlyoutOpenBeforeNpcCreate = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
+  record('setup: a pack flyout is open before creating a new NPC', packFlyoutOpenBeforeNpcCreate === 1);
+  await page.click('.ws-nav-create-npc');
+  await page.fill('[data-npc-form-code]', 'NEW_AGENT_X');
+  await page.fill('[data-npc-form-name]', '新代理人');
+  await page.click('[data-npc-form-submit]');
+  const packFlyoutClosedAfterNpcCreate = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
+  record('creating a new NPC from the left nav closes an open pack flyout, not leave it orphaned against the new selection', packFlyoutClosedAfterNpcCreate === 0);
+  const packDetailNullAfterNpcCreate = await page.evaluate(() => window.appState.uiState.packDetail);
+  record('creating a new NPC also clears packDetail state, not just the visual flyout', packDetailNullAfterNpcCreate === null, JSON.stringify(packDetailNullAfterNpcCreate));
+
+  // --- Final-review fix verification: Important #2, the pack pane's own 🎒 背包 toggle must
+  // close any open pack flyout, not just flip bagMode while leaving #ws-bag uncovered ---
+  // Reset to a known-clean slate first — a still-unfixed bug in an earlier block in this same
+  // fix-verification pass could otherwise leave a flyout open that blocks every click below.
+  await page.evaluate(function () { window.appState.uiState.bagDetail = null; window.appState.uiState.packDetail = null; window.appState.uiState.bagMode = 'bag'; window.rerender(); });
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  await page.click('[data-variant-pack-toggle]');
+  await page.click('[data-pack-list-kind="bundle"]');
+  await page.click('[data-pack-row="bundle.CS_BUNDLE_2"]');
+  await page.click('[data-pack-mode-toggle]');
+  const packFlyoutClosedAfterBagModeToggle = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
+  record('switching back to 背包 mode via the pane\'s own toggle closes an open pack flyout', packFlyoutClosedAfterBagModeToggle === 0);
+  const packDetailNullAfterBagModeToggle = await page.evaluate(() => window.appState.uiState.packDetail);
+  record('switching back to 背包 mode also clears packDetail, not just the visual bagMode', packDetailNullAfterBagModeToggle === null, packDetailNullAfterBagModeToggle);
+
+  // --- Final-review fix verification: Important #3 + #5, the membership editor must refuse
+  // to commit once the pack has left DRAFT (publishing while the editor is open), and must
+  // refuse an empty member selection the same way creation already does ---
+  await page.evaluate(function () { window.appState.uiState.bagDetail = null; window.appState.uiState.packDetail = null; window.appState.uiState.bagMode = 'bag'; window.rerender(); });
+  await page.click('[data-variant-pack-toggle]');
+  await page.click('[data-pack-list-kind="bundle"]');
+  await page.click('[data-pack-row="bundle.CS_BUNDLE_2"]');
+  await page.click('[data-pack-members-pencil]');
+  await page.click('[data-pack-transition="PUBLISHED"]');
+  const editingClearedAfterPublishMidEdit = await page.evaluate(() => window.appState.uiState.packDetailEditing);
+  record('publishing while the membership editor is open closes the editor instead of leaving it open on a now-published pack', editingClearedAfterPublishMidEdit === null, editingClearedAfterPublishMidEdit);
+  const membersBeforeDirectCommitAttempt = await page.evaluate(() => JSON.stringify(window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_2').variantRefs));
+  await page.evaluate(function () {
+    window.appState.uiState.packMembershipDraft = [];
+    wsCommitPackMembers();
+  });
+  const membersAfterDirectCommitAttempt = await page.evaluate(() => JSON.stringify(window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_2').variantRefs));
+  record('wsCommitPackMembers refuses to overwrite an already-published pack even when called directly', membersAfterDirectCommitAttempt === membersBeforeDirectCommitAttempt, membersAfterDirectCommitAttempt);
+
+  // empty-selection guard, exercised against a still-DRAFT pack
+  await page.click('[data-pack-create="bundle"]');
+  await page.click('[data-bundle-variant-checkbox="FAQ_ANSWER.STANDARD"]');
+  await page.fill('[data-pack-create-name]', 'CS_BUNDLE_3');
+  await page.fill('[data-pack-create-display-name]', '客服組合包三號');
+  await page.click('[data-pack-create-submit]');
+  await page.click('[data-pack-members-pencil]');
+  await page.click('[data-membership-variant-checkbox="FAQ_ANSWER.STANDARD"]');
+  await page.click('[data-membership-commit]');
+  const emptyCommitError = await page.evaluate(() => window.appState.uiState.packDetailError);
+  record('committing an empty member selection is rejected with an error', typeof emptyCommitError === 'string' && emptyCommitError.length > 0, emptyCommitError);
+  const membersStillPresentAfterEmptyCommitAttempt = await page.evaluate(() => window.appState.data.bundles.find((b) => b.code === 'CS_BUNDLE_3').variantRefs.length);
+  record('the pack still has its original member after a rejected empty commit', membersStillPresentAfterEmptyCommitAttempt === 1, membersStillPresentAfterEmptyCommitAttempt);
+  await page.click('[data-flyout-close]');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

@@ -133,6 +133,7 @@ function wsSubmitCreateNpc() {
   window.appState.uiState.creatingNpc = false;
   window.appState.uiState.npcFormError = null;
   window.appState.selection = { npcCode: code, variantCode: null };
+  wsResetVariantTransientUi();
   window.rerender();
 }
 
@@ -158,6 +159,19 @@ function wsResetVariantTransientUi() {
 
 function wsSetBagMode(mode) {
   window.appState.uiState.bagMode = mode;
+  if (mode === 'bag') {
+    window.appState.uiState.packDetail = null;
+    window.appState.uiState.packDetailEditing = null;
+    window.appState.uiState.packMembershipDraft = null;
+    window.appState.uiState.packDetailError = null;
+    window.appState.uiState.packCreateForm = null;
+  } else {
+    window.appState.uiState.bagDetail = null;
+    window.appState.uiState.bagDetailEditing = null;
+    window.appState.uiState.bagDetailGemsDraft = null;
+    window.appState.uiState.bagDetailError = null;
+    window.appState.uiState.bagDetailCreateForm = null;
+  }
   window.rerender();
 }
 
@@ -218,6 +232,7 @@ function wsSubmitCreateVariant(npcCode) {
   window.appState.uiState.creatingVariantFor = null;
   window.appState.uiState.variantFormError = null;
   window.appState.selection = { npcCode: npcCode, variantCode: code };
+  wsResetVariantTransientUi();
   window.rerender();
 }
 
@@ -1382,6 +1397,8 @@ function wsTransitionPackStatus(newStatus) {
   var def = wsPackDef(detail);
   if (wsPackNextStatuses(def.status).indexOf(newStatus) === -1) return;
   def.status = newStatus;
+  window.appState.uiState.packDetailEditing = null;
+  window.appState.uiState.packMembershipDraft = null;
   window.rerender();
 }
 
@@ -1437,10 +1454,23 @@ function wsToggleMembershipDraftItem(kind, name, level) {
 function wsCommitPackMembers() {
   var detail = window.appState.uiState.packDetail;
   var def = wsPackDef(detail);
-  if (detail.kind === 'bundle') def.variantRefs = window.appState.uiState.packMembershipDraft;
-  else def.itemRefs = window.appState.uiState.packMembershipDraft;
+  if (def.status !== 'DRAFT') {
+    window.appState.uiState.packMembershipDraft = null;
+    window.appState.uiState.packDetailEditing = null;
+    window.rerender();
+    return;
+  }
+  var draft = window.appState.uiState.packMembershipDraft;
+  if (draft.length === 0) {
+    window.appState.uiState.packDetailError = detail.kind === 'bundle' ? '至少要選一張人物卡' : '至少要選一個寶石或裝備';
+    window.rerender();
+    return;
+  }
+  if (detail.kind === 'bundle') def.variantRefs = draft;
+  else def.itemRefs = draft;
   window.appState.uiState.packMembershipDraft = null;
   window.appState.uiState.packDetailEditing = null;
+  window.appState.uiState.packDetailError = null;
   window.rerender();
 }
 
@@ -1551,6 +1581,7 @@ function renderPackDetailViewBody(state) {
       (def.status === 'DRAFT' && editing !== 'members' ? '<button class="btn" data-pack-members-pencil onclick="wsStartEditPackMembers()">✎</button>' : '') +
     '</div>' +
     (editing === 'members' ? renderPackMembershipEditor(detail, def) : renderPackMembersList(detail, def)) +
+    (state.uiState.packDetailError ? '<div class="ws-flyout-error" data-flyout-error>' + escapeHtml(state.uiState.packDetailError) + '</div>' : '') +
     '<div class="ws-flyout-actions">' +
       wsPackNextStatuses(def.status).map(function (next) {
         var label = (next === 'PUBLISHED' && def.status === 'MAINTENANCE') ? '▶ 恢復發布' : WS_PACK_TRANSITION_LABELS[next];
