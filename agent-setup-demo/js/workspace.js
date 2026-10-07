@@ -1292,14 +1292,59 @@ function renderBagForVariant(state) {
   );
 }
 
+function wsSwitchPackListKind(kind) {
+  window.appState.uiState.packListKind = kind;
+  window.rerender();
+}
+
+function wsPacksForCurrentContext(state, kind) {
+  var npc = wsFindNpc(state);
+  if (!npc) return [];
+  if (kind === 'bundle') {
+    return state.data.bundles.filter(function (b) { return b.usedFor === npc.usedFor; });
+  }
+  return state.data.extensions.filter(function (e) { return e.agentCode === npc.code; });
+}
+
+function renderPackListRows(state, kind) {
+  var packs = wsPacksForCurrentContext(state, kind);
+  if (packs.length === 0) return '<div class="hint">目前沒有' + (kind === 'bundle' ? '組合包' : '擴充包') + '</div>';
+  return packs.map(function (p) {
+    return (
+      '<div class="ws-bag-item" data-pack-row="' + kind + '.' + p.code + '" onclick="wsOpenPackDetail(\'' + kind + '\', \'' + p.code + '\')">' +
+        '<span class="ws-bag-item-name">' + escapeHtml(p.displayName) + '</span>' +
+        '<span class="hint">' + escapeHtml(p.status) + '</span>' +
+      '</div>'
+    );
+  }).join('');
+}
+
 function renderPackPane(state) {
+  var kind = state.uiState.packListKind || 'bundle';
   return (
     '<div data-pack-pane>' +
       '<div class="ws-bag-header"><span class="label">📦 打包</span>' +
         '<button class="btn" data-pack-mode-toggle onclick="wsSetBagMode(\'bag\')">🎒 背包</button>' +
       '</div>' +
+      '<div class="ws-variant-tabs">' +
+        '<span class="ws-variant-tab' + (kind === 'bundle' ? ' ws-variant-tab--active' : '') + '" data-pack-list-kind="bundle" onclick="wsSwitchPackListKind(\'bundle\')">組合包</span>' +
+        '<span class="ws-variant-tab' + (kind === 'extension' ? ' ws-variant-tab--active' : '') + '" data-pack-list-kind="extension" onclick="wsSwitchPackListKind(\'extension\')">擴充包</span>' +
+      '</div>' +
+      '<button class="btn" data-pack-create="bundle" onclick="wsOpenPackCreate(\'bundle\')">＋ 新增組合包</button> ' +
+      '<button class="btn" data-pack-create="extension" onclick="wsOpenPackCreate(\'extension\')">＋ 新增擴充包</button>' +
+      '<div style="margin-top:var(--space-3);">' + renderPackListRows(state, kind) + '</div>' +
     '</div>'
   );
+}
+
+function wsOpenPackDetail(kind, code) {
+  window.appState.uiState.packDetail = { kind: kind, code: code, mode: 'view' };
+  window.rerender();
+}
+
+function wsOpenPackCreate(kind) {
+  window.appState.uiState.packCreateForm = { kind: kind };
+  window.rerender();
 }
 
 function wsWearGem(variant, gemName, level) {

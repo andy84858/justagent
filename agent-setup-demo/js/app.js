@@ -22,7 +22,8 @@ window.appState = {
     packDetailEditing: null,
     packMembershipDraft: null,
     packDetailError: null,
-    packCreateForm: null
+    packCreateForm: null,
+    packListKind: 'bundle'
   }
 };
 
@@ -71,7 +72,8 @@ window.resetData = function resetData() {
     packDetailEditing: null,
     packMembershipDraft: null,
     packDetailError: null,
-    packCreateForm: null
+    packCreateForm: null,
+    packListKind: 'bundle'
   };
   render();
 };

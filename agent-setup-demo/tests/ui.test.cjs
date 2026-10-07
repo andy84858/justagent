@@ -985,6 +985,43 @@ async function main() {
   const bagModeAfterPaneToggle = await page.evaluate(() => window.appState.uiState.bagMode);
   record('the pack pane\'s own toggle button switches back to bag mode', bagModeAfterPaneToggle === 'bag', bagModeAfterPaneToggle);
 
+  // --- Phase 4 Task 2: pack-mode narrow list, zone/agent filtered ---
+  // Seed two bundles (one in FAQ_ANSWER's zone, one in a different zone) and two extensions
+  // (one targeting FAQ_ANSWER, one targeting ORDER_ASSIST) directly, to test the filter
+  // without depending on the creation flow this plan builds in Tasks 3-4.
+  await page.evaluate(function () {
+    window.appState.data.bundles.push(
+      { code: 'CS_BASIC', displayName: '客服基本包', description: '', usedFor: 'customer_service', status: 'DRAFT', variantRefs: [{ npcCode: 'FAQ_ANSWER', variantCode: 'STANDARD' }] },
+      { code: 'ORDER_BASIC', displayName: '訂單基本包', description: '', usedFor: 'order_support', status: 'DRAFT', variantRefs: [] }
+    );
+    window.appState.data.extensions.push(
+      { code: 'CS_EXT', displayName: '客服擴充', description: '', agentCode: 'FAQ_ANSWER', status: 'DRAFT', itemRefs: [] },
+      { code: 'ORDER_EXT', displayName: '訂單擴充', description: '', agentCode: 'ORDER_ASSIST', status: 'DRAFT', itemRefs: [] }
+    );
+  });
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  await page.click('[data-variant-pack-toggle]');
+
+  const bundleKindActiveByDefault = await page.evaluate(() => window.appState.uiState.packListKind);
+  record('pack list defaults to 組合包 kind', bundleKindActiveByDefault === 'bundle', bundleKindActiveByDefault);
+  const csBundleRowCount = await page.locator('[data-pack-row="bundle.CS_BASIC"]').count();
+  record('a same-zone bundle (customer_service) is listed', csBundleRowCount === 1);
+  const orderBundleRowCount = await page.locator('[data-pack-row="bundle.ORDER_BASIC"]').count();
+  record('a different-zone bundle (order_support) is NOT listed', orderBundleRowCount === 0);
+
+  await page.click('[data-pack-list-kind="extension"]');
+  const extensionKindActive = await page.evaluate(() => window.appState.uiState.packListKind);
+  record('clicking the 擴充包 sub-tab switches packListKind', extensionKindActive === 'extension', extensionKindActive);
+  const csExtRowCount = await page.locator('[data-pack-row="extension.CS_EXT"]').count();
+  record('an extension targeting the current NPC (FAQ_ANSWER) is listed', csExtRowCount === 1);
+  const orderExtRowCount = await page.locator('[data-pack-row="extension.ORDER_EXT"]').count();
+  record('an extension targeting a different NPC (ORDER_ASSIST) is NOT listed', orderExtRowCount === 0);
+
+  const createBundleBtnCount = await page.locator('[data-pack-create="bundle"]').count();
+  const createExtensionBtnCount = await page.locator('[data-pack-create="extension"]').count();
+  record('both ＋ 新增組合包 and ＋ 新增擴充包 entry points exist', createBundleBtnCount === 1 && createExtensionBtnCount === 1);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
