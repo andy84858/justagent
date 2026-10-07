@@ -859,17 +859,114 @@ function renderBagDetailGemFields(gemDef, ver, editing) {
   );
 }
 
-function renderBagDetailEquipmentFields(eqDef, ver) {
+function wsStartEditBagDetailGems() {
+  var detail = window.appState.uiState.bagDetail;
+  var eqDef = wsEquipmentByName(detail.name);
+  var ver = wsEquipmentVersion(eqDef, detail.level);
+  window.appState.uiState.bagDetailGemsDraft = JSON.parse(JSON.stringify(ver.gems || []));
+  window.appState.uiState.bagDetailEditing = 'gems';
+  window.rerender();
+}
+
+function wsCancelEditBagDetailGems() {
+  window.appState.uiState.bagDetailGemsDraft = null;
+  window.appState.uiState.bagDetailEditing = null;
+  window.rerender();
+}
+
+function wsAddGemToBagDetailDraft(gemName, level) {
+  var draft = window.appState.uiState.bagDetailGemsDraft;
+  var already = draft.some(function (g) { return g.gemName === gemName; });
+  if (already) {
+    window.appState.uiState.bagDetailError = '這顆寶石已在鑲嵌清單中';
+    window.rerender();
+    return;
+  }
+  var gemDef = wsGemByName(gemName);
+  var ver = wsGemVersion(gemDef, level);
+  if (!ver || ver.status === 'draft') {
+    window.appState.uiState.bagDetailError = '只能鑲嵌已公開的寶石版本';
+    window.rerender();
+    return;
+  }
+  draft.push({ gemName: gemName, level: level });
+  window.appState.uiState.bagDetailError = null;
+  window.rerender();
+}
+
+function wsAddGemFromSelect() {
+  var select = document.querySelector('[data-flyout-add-gem-select]');
+  if (!select || !select.value) return;
+  var parts = select.value.split('@');
+  wsAddGemToBagDetailDraft(parts[0], Number(parts[1]));
+}
+
+function wsRemoveGemFromBagDetailDraft(gemName) {
+  var draft = window.appState.uiState.bagDetailGemsDraft;
+  window.appState.uiState.bagDetailGemsDraft = draft.filter(function (g) { return g.gemName !== gemName; });
+  window.rerender();
+}
+
+function wsCommitBagDetailGems() {
+  var detail = window.appState.uiState.bagDetail;
+  var eqDef = wsEquipmentByName(detail.name);
+  var ver = wsEquipmentVersion(eqDef, detail.level);
+  ver.gems = window.appState.uiState.bagDetailGemsDraft;
+  window.appState.uiState.bagDetailGemsDraft = null;
+  window.appState.uiState.bagDetailEditing = null;
+  window.rerender();
+}
+
+function renderBagDetailEquipmentFields(eqDef, ver, editing, gemsDraft) {
   var refs = wsEquipmentReferences(eqDef.name, ver.level);
-  var gemsHtml = (ver.gems || []).map(function (g) {
-    var gemDef = wsGemByName(g.gemName);
-    return '<span class="ws-gem-chip">' + escapeHtml(gemDef.displayName) + ' Lv' + g.level + '</span>';
-  }).join('') || '<span class="hint">尚未鑲嵌任何寶石</span>';
+  var gemsBlock;
+  if (editing === 'gems') {
+    var rows = gemsDraft.map(function (g) {
+      var gemDef = wsGemByName(g.gemName);
+      return (
+        '<div class="ws-flyout-gem-row">' +
+          '<span>' + escapeHtml(gemDef.displayName) + ' Lv' + g.level + '</span>' +
+          '<button class="btn" data-flyout-remove-gem="' + g.gemName + '" onclick="wsRemoveGemFromBagDetailDraft(\'' + g.gemName + '\')">⊖</button>' +
+        '</div>'
+      );
+    }).join('') || '<div class="hint">尚未鑲嵌任何寶石</div>';
+    var publishedOptions = [];
+    window.appState.data.gems.forEach(function (gemDef) {
+      gemDef.versions.forEach(function (v) {
+        if (v.status === 'published') publishedOptions.push({ gemName: gemDef.name, level: v.level, label: gemDef.displayName + ' Lv' + v.level });
+      });
+    });
+    var optionsHtml = publishedOptions.map(function (o) {
+      return '<option value="' + o.gemName + '@' + o.level + '">' + escapeHtml(o.label) + '</option>';
+    }).join('');
+    gemsBlock =
+      '<div class="ws-flyout-field"><span class="label">鑲嵌寶石</span></div>' +
+      rows +
+      '<select data-flyout-add-gem-select>' + optionsHtml + '</select>' +
+      '<button class="btn" data-flyout-add-gem onclick="wsAddGemFromSelect()">加入</button>' +
+      '<div>' +
+        '<button class="btn btn-primary" data-flyout-gems-commit onclick="wsCommitBagDetailGems()">✓ 完成編輯</button> ' +
+        '<button class="btn" onclick="wsCancelEditBagDetailGems()">取消</button>' +
+      '</div>';
+  } else {
+    var viewRows = (ver.gems || []).map(function (g) {
+      var gemDef = wsGemByName(g.gemName);
+      return '<span class="ws-gem-chip">' + escapeHtml(gemDef.displayName) + ' Lv' + g.level + '</span>';
+    }).join('') || '<span class="hint">尚未鑲嵌任何寶石</span>';
+    gemsBlock =
+      '<div class="ws-flyout-field"><span class="label">鑲嵌寶石</span> ' + viewRows + ' ' +
+      (ver.status === 'draft'
+        ? '<button class="btn" data-flyout-gems-pencil onclick="wsStartEditBagDetailGems()">✎</button>'
+        : '<span class="badge badge-locked" data-flyout-gems-locked>🔒 已公開版本不可改</span>') +
+      '</div>';
+  }
+
   var refList = refs.variants.length === 0
     ? '<div class="ws-flyout-ref-list hint">尚未被任何人物卡掛載</div>'
     : '<div class="ws-flyout-ref-list">' + refs.variants.map(function (v) { return '<div class="ws-flyout-ref-item">人物卡：' + escapeHtml(v.variantName) + '</div>'; }).join('') + '</div>';
+
   return (
-    '<div class="ws-flyout-field"><span class="label">鑲嵌寶石</span> ' + gemsHtml + '</div>' +
+    gemsBlock +
     '<div class="ws-flyout-field"><span class="label">從哪一級複製</span> ' + (ver.copiedFromLevel ? ('Lv' + ver.copiedFromLevel) : '（原始建立）') + '</div>' +
     '<div class="ws-flyout-field"><span class="label">被哪些人物卡掛載</span></div>' +
     refList
@@ -892,7 +989,7 @@ function renderBagDetailViewBody(state) {
     );
   }).join('');
 
-  var fieldsHtml = detail.kind === 'gem' ? renderBagDetailGemFields(def, ver, state.uiState.bagDetailEditing) : renderBagDetailEquipmentFields(def, ver);
+  var fieldsHtml = detail.kind === 'gem' ? renderBagDetailGemFields(def, ver, state.uiState.bagDetailEditing) : renderBagDetailEquipmentFields(def, ver, state.uiState.bagDetailEditing, state.uiState.bagDetailGemsDraft);
   var error = state.uiState.bagDetailError;
   var editing = state.uiState.bagDetailEditing;
 

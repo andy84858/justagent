@@ -92,3 +92,4 @@
 .ws-flyout-error { color: var(--block); font-size: 12px; margin: 6px 0; }
 .ws-flyout-actions { margin-top: var(--space-4); display: flex; gap: 8px; }
 .ws-flyout-gem-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; }
+.ws-flyout-field select[data-flyout-add-gem-select] { margin-right: 6px; }

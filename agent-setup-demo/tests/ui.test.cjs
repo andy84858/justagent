@@ -713,6 +713,44 @@ async function main() {
   record('committing the 種類／協定 edit updates protocol', updatedProtocol === 'MCP-TOOL', updatedProtocol);
   await page.click('[data-flyout-close]');
 
+  // --- Phase 3 Task 5: 裝備草稿鑲嵌寶石編輯器 ---
+  // order-lookup only has published versions; create a draft Lv3 directly in app state to exercise the editor
+  // without depending on Task 6's "open new draft" action.
+  await page.evaluate(function () {
+    window.appState.data.equipment.find(function (e) { return e.name === 'order-lookup'; }).versions.push({
+      level: 3, status: 'draft', copiedFromLevel: 2, gems: [{ gemName: 'get_order_status', level: 2 }]
+    });
+    window.rerender();
+  });
+  await page.click('[data-bag-equipment-detail="order-lookup.1"]');
+  await page.click('[data-flyout-level-btn="3"]');
+  const gemsPencilOnDraft = await page.locator('[data-flyout-gems-pencil]').count();
+  record('鑲嵌寶石 pencil is present on a draft equipment version', gemsPencilOnDraft === 1);
+
+  await page.click('[data-flyout-gems-pencil]');
+  const removeButtonCount = await page.locator('[data-flyout-remove-gem]').count();
+  record('editor shows the currently-carried gem with a remove button', removeButtonCount === 1);
+  await page.click('[data-flyout-remove-gem="get_order_status"]');
+  const removeButtonCountAfter = await page.locator('[data-flyout-remove-gem]').count();
+  record('removing a carried gem takes it out of the draft list', removeButtonCountAfter === 0);
+
+  await page.selectOption('[data-flyout-add-gem-select]', 'run_sql_query@1');
+  await page.click('[data-flyout-add-gem]');
+  const addedGemCount = await page.locator('[data-flyout-remove-gem="run_sql_query"]').count();
+  record('adding a published gem puts it in the draft list', addedGemCount === 1);
+
+  await page.click('[data-flyout-gems-commit]');
+  const committedGems = await page.evaluate(() => window.appState.data.equipment.find((e) => e.name === 'order-lookup').versions.find((v) => v.level === 3).gems);
+  record('committing the editor writes the new gems array onto the version', committedGems.length === 1 && committedGems[0].gemName === 'run_sql_query', JSON.stringify(committedGems));
+
+  // published versions never show the pencil
+  await page.click('[data-flyout-level-btn="1"]');
+  const gemsPencilOnPublished = await page.locator('[data-flyout-gems-pencil]').count();
+  record('鑲嵌寶石 pencil is absent on a published equipment version', gemsPencilOnPublished === 0);
+  const gemsLockedBadge = await page.locator('[data-flyout-gems-locked]').count();
+  record('published equipment version shows a locked badge instead', gemsLockedBadge === 1);
+  await page.click('[data-flyout-close]');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
