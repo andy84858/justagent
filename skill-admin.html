@@ -1061,6 +1061,21 @@ This product is broken, I need help
     </div>
   </div>
 
+  <!-- Agent 基礎設定（agent-setup-demo）的發布／公開記錄彈窗，與其 index.html 放置方式一致 -->
+  <div class="ws-modal-mask" id="modal-publish-variant">
+    <div class="ws-modal-box">
+      <div id="modal-publish-variant-body"></div>
+    </div>
+  </div>
+  <div class="ws-modal-mask" id="modal-variant-history">
+    <div class="ws-modal-box">
+      <div id="modal-variant-history-body"></div>
+      <div class="ws-variant-titlebar-actions" style="margin-top:12px;">
+        <button class="btn" data-variant-history-close onclick="wsCloseVariantHistoryModal()">關閉</button>
+      </div>
+    </div>
+  </div>
+
   <script src="skill-admin/app.js"></script>
   <script src="agent-setup-demo/js/data.js"></script>
   <script src="agent-setup-demo/js/workspace.js"></script>

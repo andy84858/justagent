@@ -529,6 +529,36 @@ async function main() {
   const historyBtnDisabledForNeverPublished = await page.locator('[data-variant-history]').isDisabled();
   record('公開記錄 stays enabled for an already-published variant (STANDARD was seeded at v2)', historyBtnDisabledForNeverPublished === false);
 
+  // --- Final-review fix verification: Important #4, stale bag/editing uiState leaks across variant switches ---
+  await page.evaluate(function () {
+    window.appState.selection = { npcCode: 'FAQ_ANSWER', variantCode: 'PREMIUM' };
+    window.appState.uiState.bagError = null;
+    window.appState.uiState.bagWarning = 'fixture warning from PREMIUM';
+    window.appState.uiState.editingVariantBasics = true;
+    window.rerender();
+  });
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  const leakedWarning = await page.locator('[data-bag-warning]').count();
+  record('switching variants clears a stale bag warning from the previous variant', leakedWarning === 0);
+  const leakedEditMode = await page.locator('[data-variant-name-input]').count();
+  record('switching variants closes an open edit-basics session from the previous variant', leakedEditMode === 0);
+
+  // --- Final-review fix verification: Important #2, draft catalog entries must be visible-but-blocked in the bag, not hidden ---
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.PREMIUM"]');
+  const draftGemTileCount = await page.locator('[data-bag-gem="get_order_status"][data-bag-gem-level="4"]').count();
+  record('draft-status gem (Lv4) is rendered in the bag, not filtered out', draftGemTileCount === 1, 'found ' + draftGemTileCount);
+  const draftGemDisabledMarker = await page.evaluate(function () {
+    var el = document.querySelector('[data-bag-gem="get_order_status"][data-bag-gem-level="4"]');
+    return el ? el.getAttribute('aria-disabled') : null;
+  });
+  record('draft-status gem tile is marked aria-disabled', draftGemDisabledMarker === 'true', draftGemDisabledMarker);
+  await page.click('[data-bag-gem="get_order_status"][data-bag-gem-level="4"]');
+  const draftClickBlockedError = await page.evaluate(() => window.appState.uiState.bagError);
+  record('clicking a draft gem in the bag is blocked with a visible reason, not silently ignored', typeof draftClickBlockedError === 'string' && draftClickBlockedError.indexOf('公開版') !== -1, draftClickBlockedError);
+  const draftClickDidNotWear = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'PREMIUM').wornGems.some((g) => g.name === 'get_order_status' && g.level === 4));
+  record('clicking a draft gem does not actually wear it', draftClickDidNotWear === false);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
