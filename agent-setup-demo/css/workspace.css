@@ -70,3 +70,4 @@
 .ws-modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 50; }
 .ws-modal-mask.ws-modal--active { display: flex; }
 .ws-modal-box { background: var(--panel); border-radius: 8px; padding: var(--space-4); width: 360px; }
+.ws-history-row { padding: 4px 0; font-size: 13px; display: flex; justify-content: space-between; }

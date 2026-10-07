@@ -535,10 +535,12 @@ function renderVariantPane(state) {
   var dirty = wsVariantIsDirty(npc.code, variant);
   var publishLabel = variant.publishedVersion ? ('已發布 v' + variant.publishedVersion) : '尚未發布';
   var savedLabel = dirty ? '有未儲存的修改' : '已儲存';
+  var hasHistory = variant.publishedVersion || (variant.publishHistory && variant.publishHistory.length > 0);
 
   container.innerHTML =
     '<div class="ws-variant-titlebar">' +
       '<span class="ws-variant-titlebar-name">' + escapeHtml(variant.name) + '</span>' +
+      '<button class="btn" data-variant-history ' + (hasHistory ? '' : 'disabled') + ' onclick="wsOpenVariantHistoryModal()">公開記錄 📖</button>' +
       '<span class="hint">' + publishLabel + '</span>' +
       '<span class="hint">' + savedLabel + '</span>' +
       '<div class="ws-variant-titlebar-actions">' +
@@ -961,6 +963,25 @@ function wsConfirmPublishVariant() {
   variant.publishHistory.unshift({ version: variant.publishedVersion, publishedAt: new Date().toISOString() });
   document.getElementById('modal-publish-variant').classList.remove('ws-modal--active');
   window.rerender();
+}
+
+function renderVariantHistoryModalBody() {
+  var variant = wsFindVariant(window.appState);
+  var container = document.getElementById('modal-variant-history-body');
+  if (!container) return;
+  var rows = (variant.publishHistory || []).map(function (entry) {
+    return '<div class="ws-history-row">v' + entry.version + ' <span class="hint">' + escapeHtml(entry.publishedAt) + '</span></div>';
+  }).join('') || '<div class="hint">尚無發布紀錄</div>';
+  container.innerHTML = rows;
+}
+
+function wsOpenVariantHistoryModal() {
+  renderVariantHistoryModalBody();
+  document.getElementById('modal-variant-history').classList.add('ws-modal--active');
+}
+
+function wsCloseVariantHistoryModal() {
+  document.getElementById('modal-variant-history').classList.remove('ws-modal--active');
 }
 
 function renderCenterPane(state) {

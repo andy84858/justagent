@@ -11,7 +11,7 @@ var SEED = {
       retrieval: { topK: 5, scoreThreshold: 0.7, maxContext: 4000 },
       publishedVersion: 2,
       variants: [
-        { code: 'STANDARD', name: '一般版', publishedVersion: 2, description: '客服的一般版本，查得到訂單狀態。', baseInstructions: '請用親切的語氣回答客戶問題，優先查詢訂單狀態。', equippedEquipment: [{ name: 'order-lookup', level: 1 }], wornGems: [] },
+        { code: 'STANDARD', name: '一般版', publishedVersion: 2, description: '客服的一般版本，查得到訂單狀態。', baseInstructions: '請用親切的語氣回答客戶問題，優先查詢訂單狀態。', equippedEquipment: [{ name: 'order-lookup', level: 1 }], wornGems: [], publishHistory: [{ version: 2, publishedAt: '2026-09-01T00:00:00.000Z' }, { version: 1, publishedAt: '2026-08-01T00:00:00.000Z' }] },
         { code: 'PREMIUM', name: '豪華版', publishedVersion: 1, description: '豪華版客服，可以直接幫客戶退款。', baseInstructions: '請用親切的語氣回答客戶問題，必要時可直接建立退款單。', equippedEquipment: [], wornGems: [{ name: 'create_refund', level: 1 }] }
       ]
     },

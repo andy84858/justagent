@@ -513,6 +513,22 @@ async function main() {
   const versionAfterPublish = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'PREMIUM').publishedVersion);
   record('confirming publish bumps publishedVersion by 1', versionAfterPublish === 2, versionAfterPublish);
 
+  const historyBtnDisabledBeforePublish = await page.locator('[data-variant-history]').isDisabled();
+  record('公開記錄 is disabled before any publish exists for this variant', historyBtnDisabledBeforePublish === false, 'PREMIUM was just published above in Task 9\'s test');
+  // (PREMIUM already has 1 publish from Task 9's test, so the button should already be enabled here.)
+
+  await page.click('[data-variant-history]');
+  const historyModalVisible = await page.locator('#modal-variant-history.ws-modal--active').count();
+  record('公開記錄 opens the history modal', historyModalVisible === 1);
+  const historyText = await page.locator('#modal-variant-history-body').innerText();
+  record('history modal lists the v2 publish', historyText.indexOf('v2') !== -1, historyText);
+  await page.click('[data-variant-history-close]');
+
+  await page.click('[data-npc-select="FAQ_ANSWER"]');
+  await page.click('[data-variant-row="FAQ_ANSWER.STANDARD"]');
+  const historyBtnDisabledForNeverPublished = await page.locator('[data-variant-history]').isDisabled();
+  record('公開記錄 stays enabled for an already-published variant (STANDARD was seeded at v2)', historyBtnDisabledForNeverPublished === false);
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
