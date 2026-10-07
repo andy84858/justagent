@@ -811,6 +811,55 @@ async function main() {
   record('the referenced draft is not actually deleted', stillExistsAfterBlockedDelete === 1);
   await page.click('[data-flyout-close]');
 
+  // --- Phase 3 Task 7: ＋ 新增 creation flow ---
+  const addButtonCount = await page.locator('[data-bag-add]').count();
+  record('narrow bag header has a ＋ 新增 button', addButtonCount === 1);
+  await page.click('[data-bag-add]');
+  const createChoiceVisible = await page.locator('[data-flyout-create-gem]').count();
+  record('clicking ＋ 新增 opens the flyout in create-choice mode', createChoiceVisible === 1);
+
+  await page.click('[data-flyout-create-gem]');
+  const createFormVisible = await page.locator('[data-bag-create-name]').count();
+  record('choosing 新增寶石 shows the name/displayName form', createFormVisible === 1);
+
+  // malformed name rejected
+  await page.fill('[data-bag-create-name]', 'Bad Name!');
+  await page.fill('[data-bag-create-display-name]', '壞名字');
+  await page.click('[data-bag-create-submit]');
+  const malformedError = await page.evaluate(() => window.appState.uiState.bagDetailError);
+  record('a malformed gem code is rejected with an error', typeof malformedError === 'string' && malformedError.length > 0, malformedError);
+  const gemNotCreatedForBadName = await page.evaluate(() => window.appState.data.gems.some((g) => g.displayName === '壞名字'));
+  record('the malformed-name gem is not created', gemNotCreatedForBadName === false);
+
+  // duplicate name rejected
+  await page.fill('[data-bag-create-name]', 'get_order_status');
+  await page.fill('[data-bag-create-display-name]', '重複名稱');
+  await page.click('[data-bag-create-submit]');
+  const duplicateError = await page.evaluate(() => window.appState.uiState.bagDetailError);
+  record('a duplicate gem code is rejected with an error', typeof duplicateError === 'string' && duplicateError.length > 0, duplicateError);
+  const gemCountUnchangedAfterDuplicate = await page.evaluate(() => window.appState.data.gems.filter((g) => g.name === 'get_order_status').length);
+  record('the duplicate-name submission does not create a second entry', gemCountUnchangedAfterDuplicate === 1);
+
+  // valid creation
+  await page.fill('[data-bag-create-name]', 'send_slack_message');
+  await page.fill('[data-bag-create-display-name]', '發送 Slack 訊息');
+  await page.click('[data-bag-create-submit]');
+  const newGemCreated = await page.evaluate(() => window.appState.data.gems.find((g) => g.name === 'send_slack_message'));
+  record('a valid gem submission creates a new Lv1 draft gem', !!newGemCreated && newGemCreated.versions.length === 1 && newGemCreated.versions[0].level === 1 && newGemCreated.versions[0].status === 'draft', JSON.stringify(newGemCreated));
+  const flyoutNowViewsNewGem = await page.evaluate(() => window.appState.uiState.bagDetail);
+  record('after creation the flyout switches to view mode on the new gem', flyoutNowViewsNewGem.kind === 'gem' && flyoutNowViewsNewGem.name === 'send_slack_message' && flyoutNowViewsNewGem.mode === 'view', JSON.stringify(flyoutNowViewsNewGem));
+  await page.click('[data-flyout-close]');
+
+  // equipment creation path (kebab-case name)
+  await page.click('[data-bag-add]');
+  await page.click('[data-flyout-create-equipment]');
+  await page.fill('[data-bag-create-name]', 'slack-poster');
+  await page.fill('[data-bag-create-display-name]', 'Slack 發文術');
+  await page.click('[data-bag-create-submit]');
+  const newEquipmentCreated = await page.evaluate(() => window.appState.data.equipment.find((e) => e.name === 'slack-poster'));
+  record('a valid equipment submission creates a new Lv1 draft equipment', !!newEquipmentCreated && newEquipmentCreated.versions.length === 1 && newEquipmentCreated.versions[0].status === 'draft' && Array.isArray(newEquipmentCreated.versions[0].gems), JSON.stringify(newEquipmentCreated));
+  await page.click('[data-flyout-close]');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

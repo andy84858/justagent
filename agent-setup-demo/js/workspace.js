@@ -1018,6 +1018,85 @@ function wsDeleteBagDetailVersion() {
   wsCloseBagDetail();
 }
 
+function wsOpenBagDetailCreate() {
+  window.appState.uiState.bagDetail = { kind: null, name: null, level: null, mode: 'create' };
+  window.appState.uiState.bagDetailCreateForm = null;
+  window.appState.uiState.bagDetailError = null;
+  window.rerender();
+}
+
+function wsChooseBagDetailCreateKind(kind) {
+  window.appState.uiState.bagDetailCreateForm = { kind: kind };
+  window.appState.uiState.bagDetailError = null;
+  window.rerender();
+}
+
+function wsCancelBagDetailCreate() {
+  wsCloseBagDetail();
+}
+
+function wsValidateCatalogName(kind, name, catalogList) {
+  var pattern = kind === 'gem' ? /^[a-z][a-z0-9_]{0,59}$/ : /^[a-z][a-z0-9-]{0,59}$/;
+  if (!pattern.test(name)) {
+    return kind === 'gem'
+      ? '代碼只能是小寫英數字與底線，需以小寫英文字母開頭，長度 1–60'
+      : '代碼只能是小寫英數字與連字號，需以小寫英文字母開頭，長度 1–60';
+  }
+  var duplicate = catalogList.some(function (item) { return item.name === name; });
+  if (duplicate) {
+    return '已有相同代碼的' + (kind === 'gem' ? '寶石' : '裝備');
+  }
+  return null;
+}
+
+function wsSubmitCreateBagItem() {
+  var form = window.appState.uiState.bagDetailCreateForm;
+  var nameInput = document.querySelector('[data-bag-create-name]');
+  var displayNameInput = document.querySelector('[data-bag-create-display-name]');
+  var name = nameInput.value.trim();
+  var displayName = displayNameInput.value.trim();
+  var catalogList = form.kind === 'gem' ? window.appState.data.gems : window.appState.data.equipment;
+  var error = wsValidateCatalogName(form.kind, name, catalogList);
+  if (error) {
+    window.appState.uiState.bagDetailError = error;
+    window.rerender();
+    return;
+  }
+  var newDef = form.kind === 'gem'
+    ? { name: name, displayName: displayName || name, kind: 'API', protocol: 'REST', versions: [{ level: 1, status: 'draft', copiedFromLevel: null }] }
+    : { name: name, displayName: displayName || name, versions: [{ level: 1, status: 'draft', copiedFromLevel: null, gems: [] }] };
+  catalogList.push(newDef);
+  window.appState.uiState.bagDetailError = null;
+  window.appState.uiState.bagDetailCreateForm = null;
+  window.appState.uiState.bagDetail = { kind: form.kind, name: name, level: 1, mode: 'view' };
+  window.rerender();
+}
+
+function renderBagDetailCreateBody(state) {
+  var form = state.uiState.bagDetailCreateForm;
+  var error = state.uiState.bagDetailError;
+  if (!form) {
+    return (
+      '<button class="btn ws-flyout-close" data-flyout-close onclick="wsCloseBagDetail()">✕</button>' +
+      '<div class="ws-flyout-header"><span class="ws-flyout-name">新增素材</span></div>' +
+      '<button class="btn" data-flyout-create-gem onclick="wsChooseBagDetailCreateKind(\'gem\')">新增寶石</button> ' +
+      '<button class="btn" data-flyout-create-equipment onclick="wsChooseBagDetailCreateKind(\'equipment\')">新增裝備</button>'
+    );
+  }
+  var typeLabel = form.kind === 'gem' ? '寶石' : '裝備';
+  return (
+    '<button class="btn ws-flyout-close" data-flyout-close onclick="wsCloseBagDetail()">✕</button>' +
+    '<div class="ws-flyout-header"><span class="ws-flyout-name">新增' + typeLabel + '</span></div>' +
+    '<div class="ws-flyout-field"><label class="label">代碼</label><input data-bag-create-name placeholder="' + (form.kind === 'gem' ? 'e.g. send_email' : 'e.g. email-sender') + '"></div>' +
+    '<div class="ws-flyout-field"><label class="label">顯示名稱</label><input data-bag-create-display-name placeholder="顯示名稱"></div>' +
+    (error ? '<div class="ws-flyout-error" data-flyout-error>' + escapeHtml(error) + '</div>' : '') +
+    '<div class="ws-flyout-actions">' +
+      '<button class="btn" onclick="wsCancelBagDetailCreate()">取消</button> ' +
+      '<button class="btn btn-primary" data-bag-create-submit onclick="wsSubmitCreateBagItem()">建立 Lv1 草稿</button>' +
+    '</div>'
+  );
+}
+
 function renderBagDetailViewBody(state) {
   var detail = state.uiState.bagDetail;
   var def = wsBagDetailDef(detail);
@@ -1088,7 +1167,7 @@ function renderBagDetailFlyout(state) {
   }
   flyoutEl.classList.add('ws-flyout--active');
   if (centerEl) { centerEl.classList.add('ws-center--dim'); centerEl.setAttribute('inert', ''); }
-  flyoutEl.innerHTML = detail.mode === 'create' ? '' : renderBagDetailViewBody(state);
+  flyoutEl.innerHTML = detail.mode === 'create' ? renderBagDetailCreateBody(state) : renderBagDetailViewBody(state);
 }
 
 function renderAbilityArea(state) {
@@ -1182,6 +1261,7 @@ function renderBagForVariant(state) {
   var error = state.uiState.bagError;
   var warning = state.uiState.bagWarning;
   return (
+    '<div class="ws-bag-header"><span class="label">🎒 背包</span><button class="btn" data-bag-add onclick="wsOpenBagDetailCreate()">＋ 新增</button></div>' +
     (error ? '<div class="ws-bag-error" data-bag-error>' + escapeHtml(error) + '</div>' : '') +
     (warning ? '<div class="ws-bag-warning" data-bag-warning>' + escapeHtml(warning) + '</div>' : '') +
     '<div class="label">🎒 背包 — 寶石</div>' + gemRows +
