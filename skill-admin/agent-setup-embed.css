@@ -114,3 +114,27 @@
 .ws-modal-mask.ws-modal--active { display: flex; }
 .ws-modal-box { background: var(--panel); border-radius: 8px; padding: var(--space-4); width: 360px; }
 .ws-history-row { padding: 4px 0; font-size: 13px; display: flex; justify-content: space-between; }
+
+/* Phase 3 additions (flyout detail panel) */
+#page-agents .ws-shell { position: relative; }
+#page-agents .ws-bag-item-detail-btn { margin-left: 6px; cursor: pointer; background: none; border: none; color: var(--muted); font-size: 12px; }
+#page-agents #ws-bag-detail-flyout { display: none; position: absolute; top: 0; bottom: 0; right: 300px; width: 460px; background: var(--panel); border-left: 1px solid var(--line); box-shadow: -4px 0 12px rgba(0,0,0,0.15); z-index: 40; overflow-y: auto; padding: var(--space-4); }
+#page-agents #ws-bag-detail-flyout.ws-flyout--active { display: block; }
+#page-agents .ws-center--dim { opacity: 0.4; }
+#page-agents .ws-flyout-close { float: right; }
+#page-agents .ws-flyout-header { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-3); clear: both; }
+#page-agents .ws-flyout-icon { font-size: 24px; }
+#page-agents .ws-flyout-type-label { font-size: 11px; color: var(--muted); }
+#page-agents .ws-flyout-name { font-size: 16px; font-weight: 600; }
+#page-agents .ws-flyout-level-row { display: flex; gap: 6px; margin-bottom: var(--space-3); flex-wrap: wrap; }
+#page-agents .ws-flyout-level-btn { padding: 4px 10px; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; font-size: 12px; background: var(--panel); }
+#page-agents .ws-flyout-level-btn--active { border-color: var(--accent); color: var(--accent); }
+#page-agents .ws-flyout-level-btn--draft { border-style: dashed; }
+#page-agents .ws-flyout-field { margin-bottom: var(--space-2); font-size: 13px; }
+#page-agents .ws-flyout-ref-list { font-size: 12px; color: var(--muted); }
+#page-agents .ws-flyout-ref-item { padding: 2px 0; }
+#page-agents .ws-flyout-error { color: var(--block); font-size: 12px; margin: 6px 0; }
+#page-agents .ws-flyout-actions { margin-top: var(--space-4); display: flex; gap: 8px; }
+#page-agents .ws-flyout-gem-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; }
+#page-agents .ws-flyout-field select[data-flyout-add-gem-select] { margin-right: 6px; }
+#page-agents .ws-bag-header { display: flex; align-items: center; justify-content: space-between; margin-top: 28px; margin-bottom: var(--space-2); }
