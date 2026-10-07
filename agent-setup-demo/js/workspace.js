@@ -1323,7 +1323,7 @@ function renderPackPane(state) {
   var kind = state.uiState.packListKind || 'bundle';
   if (state.uiState.packCreateForm) {
     var form = state.uiState.packCreateForm;
-    return '<div data-pack-pane>' + (form.kind === 'bundle' ? renderPackCreateBundleForm(state) : '') + '</div>';
+    return '<div data-pack-pane>' + (form.kind === 'bundle' ? renderPackCreateBundleForm(state) : renderPackCreateExtensionForm(state)) + '</div>';
   }
   return (
     '<div data-pack-pane>' +
@@ -1435,6 +1435,104 @@ function renderPackCreateBundleForm(state) {
     '<div class="ws-flyout-actions">' +
       '<button class="btn" onclick="wsCancelPackCreate()">取消</button> ' +
       '<button class="btn btn-primary" data-pack-create-submit onclick="wsSubmitCreateBundle()">確認建立</button>' +
+    '</div>'
+  );
+}
+
+function wsSetExtensionAgent(agentCode) {
+  var form = window.appState.uiState.packCreateForm;
+  form.agentCode = agentCode;
+  window.rerender();
+}
+
+function wsToggleExtensionItemSelection(kind, name, level) {
+  var form = window.appState.uiState.packCreateForm;
+  form.selectedItems = form.selectedItems || [];
+  var sameNameIdx = form.selectedItems.findIndex(function (i) { return i.kind === kind && i.name === name; });
+  var isExactMatch = sameNameIdx !== -1 && form.selectedItems[sameNameIdx].level === level;
+  if (sameNameIdx !== -1) form.selectedItems.splice(sameNameIdx, 1);
+  if (!isExactMatch) form.selectedItems.push({ kind: kind, name: name, level: level });
+  window.rerender();
+}
+
+function wsPublishedCatalogItems() {
+  var items = [];
+  window.appState.data.gems.forEach(function (gemDef) {
+    gemDef.versions.forEach(function (v) {
+      if (v.status === 'published') items.push({ kind: 'gem', name: gemDef.name, level: v.level, label: gemDef.displayName + ' Lv' + v.level });
+    });
+  });
+  window.appState.data.equipment.forEach(function (eqDef) {
+    eqDef.versions.forEach(function (v) {
+      if (v.status === 'published') items.push({ kind: 'equipment', name: eqDef.name, level: v.level, label: eqDef.displayName + ' Lv' + v.level });
+    });
+  });
+  return items;
+}
+
+function wsSubmitCreateExtension() {
+  var form = window.appState.uiState.packCreateForm;
+  var code = (form.code || '').trim();
+  var displayName = (form.displayName || '').trim();
+  if (!form.agentCode) {
+    window.appState.uiState.packDetailError = '請先選擇適用 agent';
+    window.rerender();
+    return;
+  }
+  var selected = form.selectedItems || [];
+  if (selected.length === 0) {
+    window.appState.uiState.packDetailError = '至少要選一個寶石或裝備';
+    window.rerender();
+    return;
+  }
+  var error = wsValidatePackCode(code, window.appState.data.extensions);
+  if (error) {
+    window.appState.uiState.packDetailError = error;
+    window.rerender();
+    return;
+  }
+  window.appState.data.extensions.push({
+    code: code, displayName: displayName || code, description: '',
+    agentCode: form.agentCode, status: 'DRAFT', itemRefs: selected
+  });
+  window.appState.uiState.packDetailError = null;
+  window.appState.uiState.packCreateForm = null;
+  window.appState.uiState.packDetail = { kind: 'extension', code: code, mode: 'view' };
+  window.rerender();
+}
+
+function renderPackCreateExtensionForm(state) {
+  var form = state.uiState.packCreateForm;
+  var error = state.uiState.packDetailError;
+  var agentOptions = state.data.npcs.filter(function (n) { return n.type === 'AGENT'; }).map(function (n) {
+    return '<option value="' + n.code + '"' + (form.agentCode === n.code ? ' selected' : '') + '>' + escapeHtml(n.displayName) + '</option>';
+  }).join('');
+  var itemsHtml = '';
+  if (form.agentCode) {
+    var selected = form.selectedItems || [];
+    itemsHtml = wsPublishedCatalogItems().map(function (item) {
+      var checked = selected.some(function (s) { return s.kind === item.kind && s.name === item.name && s.level === item.level; });
+      return (
+        '<div class="ws-bag-item' + (checked ? ' ws-bag-item--active' : '') + '" data-extension-item-checkbox="' + item.kind + '.' + item.name + '.' + item.level + '" onclick="wsToggleExtensionItemSelection(\'' + item.kind + '\', \'' + item.name + '\', ' + item.level + ')">' +
+          '<span class="ws-bag-item-name">' + escapeHtml(item.label) + '</span>' +
+          '<span class="hint">' + (checked ? '已選取' : '') + '</span>' +
+        '</div>'
+      );
+    }).join('');
+  }
+  return (
+    '<div class="ws-flyout-field"><label class="label">適用 Agent</label>' +
+      '<select data-extension-agent-select onchange="wsSetExtensionAgent(this.value)">' +
+        '<option value="">-- 選擇 --</option>' + agentOptions +
+      '</select>' +
+    '</div>' +
+    '<div class="ws-flyout-field"><label class="label">代碼</label><input data-pack-create-name value="' + escapeHtml(form.code || '') + '" oninput="wsUpdatePackCreateField(\'code\', this.value)" placeholder="e.g. CS_EXT_1"></div>' +
+    '<div class="ws-flyout-field"><label class="label">顯示名稱</label><input data-pack-create-display-name value="' + escapeHtml(form.displayName || '') + '" oninput="wsUpdatePackCreateField(\'displayName\', this.value)" placeholder="顯示名稱"></div>' +
+    itemsHtml +
+    (error ? '<div class="ws-flyout-error" data-flyout-error>' + escapeHtml(error) + '</div>' : '') +
+    '<div class="ws-flyout-actions">' +
+      '<button class="btn" onclick="wsCancelPackCreate()">取消</button> ' +
+      '<button class="btn btn-primary" data-pack-create-submit onclick="wsSubmitCreateExtension()">確認建立</button>' +
     '</div>'
   );
 }

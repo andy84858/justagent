@@ -1061,6 +1061,40 @@ async function main() {
   const bundleCountUnchanged = await page.evaluate(() => window.appState.data.bundles.filter((b) => b.code === 'CS_BUNDLE_1').length);
   record('the duplicate submission does not create a second entry', bundleCountUnchanged === 1);
 
+  // --- Phase 4 Task 4: 擴充包 creation flow, agent picker + one-level-per-name ---
+  // Task 3's last test left a pending (duplicate-rejected) bundle creation form open; cancel
+  // it to get back to the pack list view where [data-pack-create="extension"] lives.
+  await page.evaluate(() => { window.appState.uiState.packCreateForm = null; window.appState.uiState.packDetailError = null; window.rerender(); });
+  await page.click('[data-pack-create="extension"]');
+  const agentSelectCount = await page.locator('[data-extension-agent-select]').count();
+  record('擴充包 creation form shows an agent picker', agentSelectCount === 1);
+  const switchTypeExcludedFromAgentOptions = await page.locator('[data-extension-agent-select] option[value="INTENT_SWITCH"]').count();
+  record('a SWITCH-type NPC is not offered as an extension target agent', switchTypeExcludedFromAgentOptions === 0);
+
+  await page.selectOption('[data-extension-agent-select]', 'FAQ_ANSWER');
+  const itemCheckboxCount = await page.locator('[data-extension-item-checkbox]').count();
+  record('selecting an agent reveals published gem/equipment checkboxes', itemCheckboxCount > 0, 'found ' + itemCheckboxCount);
+  const draftItemOfferedCount = await page.locator('[data-extension-item-checkbox="gem.get_order_status.4"]').count();
+  record('a draft-status catalog version is never offered as a selectable item', draftItemOfferedCount === 0);
+
+  // one-level-per-name: checking Lv1 then Lv2 of the same gem replaces the selection, not adds to it
+  await page.click('[data-extension-item-checkbox="gem.get_order_status.1"]');
+  const selectedAfterLv1 = await page.evaluate(() => window.appState.uiState.packCreateForm.selectedItems);
+  record('checking get_order_status Lv1 selects it', selectedAfterLv1.some((i) => i.kind === 'gem' && i.name === 'get_order_status' && i.level === 1), JSON.stringify(selectedAfterLv1));
+  await page.click('[data-extension-item-checkbox="gem.get_order_status.2"]');
+  const selectedAfterLv2 = await page.evaluate(() => window.appState.uiState.packCreateForm.selectedItems);
+  const lv1StillSelected = selectedAfterLv2.some((i) => i.kind === 'gem' && i.name === 'get_order_status' && i.level === 1);
+  const lv2NowSelected = selectedAfterLv2.some((i) => i.kind === 'gem' && i.name === 'get_order_status' && i.level === 2);
+  record('checking a different level of the same gem replaces the first selection, not adds a second', lv1StillSelected === false && lv2NowSelected === true, JSON.stringify(selectedAfterLv2));
+  const onlyOneGetOrderStatusEntry = selectedAfterLv2.filter((i) => i.kind === 'gem' && i.name === 'get_order_status').length;
+  record('only one entry for get_order_status exists in the selection after the replace', onlyOneGetOrderStatusEntry === 1, onlyOneGetOrderStatusEntry);
+
+  await page.fill('[data-pack-create-name]', 'CS_EXT_1');
+  await page.fill('[data-pack-create-display-name]', '客服擴充一號');
+  await page.click('[data-pack-create-submit]');
+  const extensionCreated = await page.evaluate(() => window.appState.data.extensions.find((e) => e.code === 'CS_EXT_1'));
+  record('a valid submission creates a DRAFT extension with the chosen agent and item', !!extensionCreated && extensionCreated.status === 'DRAFT' && extensionCreated.agentCode === 'FAQ_ANSWER' && extensionCreated.itemRefs.length === 1 && extensionCreated.itemRefs[0].level === 2, JSON.stringify(extensionCreated));
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;
