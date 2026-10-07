@@ -632,14 +632,34 @@ async function main() {
   // checks (and inert does not block script-invoked .click()), so this uses a real
   // Playwright click — which does honor `inert` in its actionability checks and times
   // out trying to reach an element under an inert ancestor — as the actual proof.
+  //
+  // Final-review fix: the original version of this check clicked [data-variant-save],
+  // which is also independently `disabled` at this point in the suite (no unsaved
+  // changes) — so the check passed for the wrong reason and could never fail even if
+  // `inert` were never applied. [data-variant-history] is enabled here (STANDARD was
+  // seeded with a publish history), so this targets an element that is only blocked
+  // by `inert`, and a control step below proves the check can actually fail.
   await page.click('[data-bag-gem-detail="get_order_status.1"]');
-  let saveClickBlockedByInert = false;
+  let historyClickBlockedByInert = false;
   try {
-    await page.click('[data-variant-save]', { timeout: 2000 });
+    await page.click('[data-variant-history]', { timeout: 2000 });
   } catch (e) {
-    saveClickBlockedByInert = true;
+    historyClickBlockedByInert = true;
   }
-  record('a real click on a button under the dimmed+inert center pane is blocked while the flyout is open', saveClickBlockedByInert === true);
+  record('a real click on an enabled button under the dimmed+inert center pane is blocked while the flyout is open', historyClickBlockedByInert === true);
+
+  // Control: with `inert` removed, the identical click must succeed — proving the check
+  // above is not vacuous (it would fail if `inert` were missing or removed in production).
+  await page.evaluate(() => document.getElementById('ws-center').removeAttribute('inert'));
+  let historyClickSucceededWithoutInert = false;
+  try {
+    await page.click('[data-variant-history]', { timeout: 2000 });
+    historyClickSucceededWithoutInert = true;
+  } catch (e) { /* leave false */ }
+  record('control: the same click succeeds once inert is removed, proving the inert check above is not vacuous', historyClickSucceededWithoutInert === true);
+  const historyModalOpenedByControlClick = await page.locator('#modal-variant-history.ws-modal--active').count();
+  if (historyModalOpenedByControlClick === 1) await page.click('[data-variant-history-close]');
+
   await page.click('[data-flyout-close]');
   const flyoutActiveAfterCloseBtn = await page.locator('#ws-bag-detail-flyout.ws-flyout--active').count();
   record('✕ button closes the flyout', flyoutActiveAfterCloseBtn === 0);
@@ -858,6 +878,78 @@ async function main() {
   await page.click('[data-bag-create-submit]');
   const newEquipmentCreated = await page.evaluate(() => window.appState.data.equipment.find((e) => e.name === 'slack-poster'));
   record('a valid equipment submission creates a new Lv1 draft equipment', !!newEquipmentCreated && newEquipmentCreated.versions.length === 1 && newEquipmentCreated.versions[0].status === 'draft' && Array.isArray(newEquipmentCreated.versions[0].gems), JSON.stringify(newEquipmentCreated));
+  await page.click('[data-flyout-close]');
+
+  // --- Final-review fix verification: Important #1, an uncommitted gems-editor edit leaks
+  // into a brand-new item created via ＋ 新增 without closing the flyout first ---
+  await page.evaluate(function () {
+    window.appState.data.equipment.find(function (e) { return e.name === 'order-lookup'; }).versions.push({
+      level: 4, status: 'draft', copiedFromLevel: 3, gems: [{ gemName: 'get_order_status', level: 2 }]
+    });
+    window.rerender();
+  });
+  await page.click('[data-bag-equipment-detail="order-lookup.1"]', { force: true });
+  await page.click('[data-flyout-level-btn="4"]');
+  await page.click('[data-flyout-gems-pencil]');
+  const editingGemsBeforeAdd = await page.evaluate(() => window.appState.uiState.bagDetailEditing);
+  record('setup: gems editor is open (uncommitted) before pressing ＋ 新增', editingGemsBeforeAdd === 'gems');
+  await page.click('[data-bag-add]');
+  const editingResetAfterOpenCreate = await page.evaluate(() => window.appState.uiState.bagDetailEditing);
+  record('pressing ＋ 新增 without closing the flyout first resets bagDetailEditing', editingResetAfterOpenCreate === null, editingResetAfterOpenCreate);
+  await page.click('[data-flyout-create-equipment]');
+  await page.fill('[data-bag-create-name]', 'leak-test');
+  await page.fill('[data-bag-create-display-name]', '洩漏測試');
+  await page.click('[data-bag-create-submit]');
+  const leakTestGems = await page.evaluate(() => window.appState.data.equipment.find((e) => e.name === 'leak-test').versions[0].gems);
+  record('the newly created item does not inherit the previous item\'s uncommitted gems draft', leakTestGems.length === 0, JSON.stringify(leakTestGems));
+  await page.click('[data-flyout-close]');
+
+  // --- Final-review fix verification: Important #2, publishing mid-edit must not leave a
+  // stale editor open on what is now a published (read-only) version ---
+  await page.click('[data-bag-equipment-detail="order-lookup.1"]', { force: true });
+  await page.click('[data-flyout-level-btn="4"]');
+  await page.click('[data-flyout-gems-pencil]');
+  const gemsEditingBeforePublish = await page.evaluate(() => window.appState.uiState.bagDetailEditing);
+  record('setup: gems editor is open on the Lv4 draft before publishing', gemsEditingBeforePublish === 'gems');
+  await page.click('[data-flyout-publish]');
+  const gemsEditingAfterPublish = await page.evaluate(() => window.appState.uiState.bagDetailEditing);
+  record('publishing while the gems editor is open closes the editor instead of leaving it open on a now-published version', gemsEditingAfterPublish === null, gemsEditingAfterPublish);
+  const gemsCommitButtonGoneAfterPublish = await page.locator('[data-flyout-gems-commit]').count();
+  record('the 完成編輯 commit button is gone after publish', gemsCommitButtonGoneAfterPublish === 0);
+  const gemsLockedBadgeAfterPublish = await page.locator('[data-flyout-gems-locked]').count();
+  record('the published version shows the locked badge after publish', gemsLockedBadgeAfterPublish === 1);
+  // defense in depth: even if wsCommitBagDetailGems were invoked directly against a
+  // now-published version, it must refuse to overwrite the published gems list
+  const gemsBeforeDirectCommitAttempt = await page.evaluate(() => window.appState.data.equipment.find((e) => e.name === 'order-lookup').versions.find((v) => v.level === 4).gems);
+  await page.evaluate(function () {
+    window.appState.uiState.bagDetailGemsDraft = [];
+    wsCommitBagDetailGems();
+  });
+  const gemsAfterDirectCommitAttempt = await page.evaluate(() => window.appState.data.equipment.find((e) => e.name === 'order-lookup').versions.find((v) => v.level === 4).gems);
+  record('wsCommitBagDetailGems refuses to overwrite an already-published version even when called directly', JSON.stringify(gemsAfterDirectCommitAttempt) === JSON.stringify(gemsBeforeDirectCommitAttempt), JSON.stringify(gemsAfterDirectCommitAttempt));
+  await page.click('[data-flyout-close]');
+
+  // --- Final-review fix verification: Important #4, deleting an item's only version must
+  // remove the catalog entry itself, not leave an invisible entry that permanently reserves
+  // the code and can never be recreated ---
+  await page.click('[data-bag-add]');
+  await page.click('[data-flyout-create-gem]');
+  await page.fill('[data-bag-create-name]', 'orphan_gem');
+  await page.fill('[data-bag-create-display-name]', '孤兒寶石');
+  await page.click('[data-bag-create-submit]');
+  const orphanGemCreated = await page.evaluate(() => !!window.appState.data.gems.find((g) => g.name === 'orphan_gem'));
+  record('setup: orphan_gem is created', orphanGemCreated === true);
+  await page.click('[data-flyout-delete]');
+  const orphanEntryGoneAfterDeletingOnlyVersion = await page.evaluate(() => window.appState.data.gems.some((g) => g.name === 'orphan_gem'));
+  record('deleting an item\'s only version removes the catalog entry itself, not just the version', orphanEntryGoneAfterDeletingOnlyVersion === false);
+
+  await page.click('[data-bag-add]');
+  await page.click('[data-flyout-create-gem]');
+  await page.fill('[data-bag-create-name]', 'orphan_gem');
+  await page.fill('[data-bag-create-display-name]', '復活的孤兒寶石');
+  await page.click('[data-bag-create-submit]');
+  const orphanGemRecreated = await page.evaluate(() => !!window.appState.data.gems.find((g) => g.name === 'orphan_gem'));
+  record('the freed code can be reused to create a new item afterward', orphanGemRecreated === true);
   await page.click('[data-flyout-close]');
 
   await browser.close();

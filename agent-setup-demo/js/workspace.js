@@ -756,30 +756,29 @@ function wsBagDetailMaxLevel(def) {
   return Math.max.apply(null, def.versions.map(function (v) { return v.level; }));
 }
 
-function wsOpenBagDetail(kind, name, level) {
-  window.appState.uiState.bagDetail = { kind: kind, name: name, level: level, mode: 'view' };
+function wsResetBagDetailTransient() {
   window.appState.uiState.bagDetailEditing = null;
   window.appState.uiState.bagDetailGemsDraft = null;
   window.appState.uiState.bagDetailError = null;
   window.appState.uiState.bagDetailCreateForm = null;
+}
+
+function wsOpenBagDetail(kind, name, level) {
+  window.appState.uiState.bagDetail = { kind: kind, name: name, level: level, mode: 'view' };
+  wsResetBagDetailTransient();
   window.rerender();
 }
 
 function wsCloseBagDetail() {
   window.appState.uiState.bagDetail = null;
-  window.appState.uiState.bagDetailEditing = null;
-  window.appState.uiState.bagDetailGemsDraft = null;
-  window.appState.uiState.bagDetailError = null;
-  window.appState.uiState.bagDetailCreateForm = null;
+  wsResetBagDetailTransient();
   window.rerender();
 }
 
 function wsSwitchBagDetailLevel(level) {
   var detail = window.appState.uiState.bagDetail;
   window.appState.uiState.bagDetail = { kind: detail.kind, name: detail.name, level: level, mode: 'view' };
-  window.appState.uiState.bagDetailEditing = null;
-  window.appState.uiState.bagDetailGemsDraft = null;
-  window.appState.uiState.bagDetailError = null;
+  wsResetBagDetailTransient();
   window.rerender();
 }
 
@@ -805,7 +804,11 @@ function wsCommitBagDetailDisplayName() {
 function wsCommitBagDetailKindProtocol() {
   var detail = window.appState.uiState.bagDetail;
   var gemDef = wsGemByName(detail.name);
-  if (wsGemEverPublished(gemDef)) return;
+  if (wsGemEverPublished(gemDef)) {
+    window.appState.uiState.bagDetailEditing = null;
+    window.rerender();
+    return;
+  }
   var kindInput = document.querySelector('[data-flyout-kind-input]');
   var protocolInput = document.querySelector('[data-flyout-protocol-input]');
   gemDef.kind = kindInput.value;
@@ -911,7 +914,9 @@ function wsCommitBagDetailGems() {
   var detail = window.appState.uiState.bagDetail;
   var eqDef = wsEquipmentByName(detail.name);
   var ver = wsEquipmentVersion(eqDef, detail.level);
-  ver.gems = window.appState.uiState.bagDetailGemsDraft;
+  if (ver.status === 'draft') {
+    ver.gems = window.appState.uiState.bagDetailGemsDraft;
+  }
   window.appState.uiState.bagDetailGemsDraft = null;
   window.appState.uiState.bagDetailEditing = null;
   window.rerender();
@@ -994,6 +999,8 @@ function wsPublishBagDetailVersion() {
   var viewing = def.versions.find(function (v) { return v.level === detail.level; });
   if (viewing.status !== 'draft') return;
   viewing.status = 'published';
+  window.appState.uiState.bagDetailEditing = null;
+  window.appState.uiState.bagDetailGemsDraft = null;
   window.rerender();
 }
 
@@ -1015,13 +1022,17 @@ function wsDeleteBagDetailVersion() {
     return;
   }
   def.versions = def.versions.filter(function (v) { return v.level !== detail.level; });
+  if (def.versions.length === 0) {
+    var catalogList = detail.kind === 'gem' ? window.appState.data.gems : window.appState.data.equipment;
+    var idx = catalogList.findIndex(function (item) { return item.name === detail.name; });
+    if (idx !== -1) catalogList.splice(idx, 1);
+  }
   wsCloseBagDetail();
 }
 
 function wsOpenBagDetailCreate() {
   window.appState.uiState.bagDetail = { kind: null, name: null, level: null, mode: 'create' };
-  window.appState.uiState.bagDetailCreateForm = null;
-  window.appState.uiState.bagDetailError = null;
+  wsResetBagDetailTransient();
   window.rerender();
 }
 
