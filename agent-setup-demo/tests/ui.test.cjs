@@ -652,6 +652,32 @@ async function main() {
   record('equipment 被哪些人物卡掛載 lists the variant that equips it', eqRefListText.indexOf('一般版') !== -1, eqRefListText);
   await page.click('[data-flyout-close]');
 
+  // --- Phase 3 Task 3: pencil-edit 顯示名稱 ---
+  await page.click('[data-bag-gem-detail="get_order_status.1"]');
+  await page.click('[data-flyout-displayname-pencil]');
+  const nameInputVisible = await page.locator('[data-flyout-displayname-input]').count();
+  record('clicking the displayName pencil shows an input', nameInputVisible === 1);
+  await page.fill('[data-flyout-displayname-input]', '查詢訂單狀態（新）');
+  await page.click('[data-flyout-displayname-commit]');
+  const newDisplayName = await page.evaluate(() => window.appState.data.gems.find((g) => g.name === 'get_order_status').displayName);
+  record('committing the displayName edit updates the gem definition', newDisplayName === '查詢訂單狀態（新）', newDisplayName);
+  const flyoutShowsNewName = await page.locator('.ws-flyout-name').innerText();
+  record('flyout re-renders with the new displayName', flyoutShowsNewName === '查詢訂單狀態（新）', flyoutShowsNewName);
+  await page.click('[data-flyout-close]');
+
+  // Review Focus: an uncommitted pencil edit on one item must not leak into the next item opened
+  await page.click('[data-bag-gem-detail="get_order_status.1"]');
+  await page.click('[data-flyout-displayname-pencil]');
+  const editingBeforeSwitch = await page.locator('[data-flyout-displayname-input]').count();
+  record('setup: displayName edit is open before switching items', editingBeforeSwitch === 1);
+  await page.click('[data-flyout-close]');
+  await page.click('[data-bag-equipment-detail="order-lookup.1"]');
+  const leakedEditInputOnNewItem = await page.locator('[data-flyout-displayname-input]').count();
+  record('opening a different item after an uncommitted edit does not leak the open edit input', leakedEditInputOnNewItem === 0);
+  const leakedEditingState = await page.evaluate(() => window.appState.uiState.bagDetailEditing);
+  record('opening a different item resets bagDetailEditing to null', leakedEditingState === null, leakedEditingState);
+  await page.click('[data-flyout-close]');
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

@@ -783,6 +783,25 @@ function wsSwitchBagDetailLevel(level) {
   window.rerender();
 }
 
+function wsStartEditBagDetailField(field) {
+  window.appState.uiState.bagDetailEditing = field;
+  window.rerender();
+}
+
+function wsCancelEditBagDetailField() {
+  window.appState.uiState.bagDetailEditing = null;
+  window.rerender();
+}
+
+function wsCommitBagDetailDisplayName() {
+  var detail = window.appState.uiState.bagDetail;
+  var def = wsBagDetailDef(detail);
+  var input = document.querySelector('[data-flyout-displayname-input]');
+  def.displayName = input.value.trim() || def.displayName;
+  window.appState.uiState.bagDetailEditing = null;
+  window.rerender();
+}
+
 function renderBagDetailGemFields(gemDef, ver) {
   var refs = wsGemReferences(gemDef.name, ver.level);
   var refList = (refs.equipment.length === 0 && refs.variants.length === 0)
@@ -836,13 +855,25 @@ function renderBagDetailViewBody(state) {
 
   var fieldsHtml = detail.kind === 'gem' ? renderBagDetailGemFields(def, ver) : renderBagDetailEquipmentFields(def, ver);
   var error = state.uiState.bagDetailError;
+  var editing = state.uiState.bagDetailEditing;
+
+  var nameBlock = editing === 'displayName'
+    ? (
+      '<input class="ws-npc-name-input" data-flyout-displayname-input value="' + escapeHtml(def.displayName) + '">' +
+      '<button class="btn btn-primary" data-flyout-displayname-commit onclick="wsCommitBagDetailDisplayName()">✓</button> ' +
+      '<button class="btn" onclick="wsCancelEditBagDetailField()">取消</button>'
+    )
+    : (
+      '<span class="ws-flyout-name">' + escapeHtml(def.displayName) + '</span>' +
+      '<button class="btn" data-flyout-displayname-pencil onclick="wsStartEditBagDetailField(\'displayName\')">✎</button>'
+    );
 
   return (
     '<button class="btn ws-flyout-close" data-flyout-close onclick="wsCloseBagDetail()">✕</button>' +
     '<div class="ws-flyout-header">' +
       '<span class="ws-flyout-icon">' + icon + '</span>' +
       '<span class="ws-flyout-type-label">' + typeLabel + '</span>' +
-      '<span class="ws-flyout-name">' + escapeHtml(def.displayName) + '</span>' +
+      nameBlock +
     '</div>' +
     '<div class="ws-flyout-level-row">' + levelButtons + '</div>' +
     (error ? '<div class="ws-flyout-error" data-flyout-error>' + escapeHtml(error) + '</div>' : '') +
