@@ -50,3 +50,25 @@
 .ws-param-row input, .ws-param-row select { width: 100px; padding: 2px 6px; }
 .ws-param-error { color: var(--block); font-size: 11px; margin: 4px 0; }
 .ws-reset-btn { position: fixed; top: 8px; right: 8px; z-index: 10; }
+.ws-variant-titlebar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.ws-variant-titlebar-name { font-size: 16px; font-weight: 600; }
+.ws-variant-titlebar-actions { margin-left: auto; display: flex; gap: 6px; }
+.ws-variant-tabs { display: flex; gap: var(--space-4); border-bottom: 1px solid var(--line); margin-bottom: var(--space-3); }
+.ws-variant-tab { padding-bottom: 6px; font-size: 13px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+.ws-variant-tab--active { color: var(--accent); border-bottom-color: var(--accent); }
+.ws-variant-tab-panel { min-height: 120px; }
+.ws-variant-field { margin-bottom: var(--space-2); font-size: 13px; }
+.ws-variant-field textarea, .ws-variant-field input { width: 100%; }
+.ws-ability-section { margin-bottom: var(--space-3); }
+.ws-equipped-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; font-size: 12px; }
+.ws-equipped-item .btn { margin-left: auto; padding: 2px 8px; height: auto; }
+.ws-gem-chip { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--gem-bg); border: 1px solid var(--gem-border); }
+.ws-bag-item { padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; }
+.ws-bag-item--active { border-color: var(--accent); background: var(--accent-soft); }
+.ws-bag-item--draft { opacity: 0.5; cursor: not-allowed; border-style: dashed; }
+.ws-bag-warning { color: var(--warn); font-size: 11px; margin: 6px 0; }
+.ws-bag-error { color: var(--block); font-size: 11px; margin: 6px 0; }
+.ws-modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 50; }
+.ws-modal-mask.ws-modal--active { display: flex; }
+.ws-modal-box { background: var(--panel); border-radius: 8px; padding: var(--space-4); width: 360px; }
+.ws-history-row { padding: 4px 0; font-size: 13px; display: flex; justify-content: space-between; }

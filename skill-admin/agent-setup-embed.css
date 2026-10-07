@@ -83,3 +83,34 @@
 #page-agents .ws-param-row input, #page-agents .ws-param-row select { width: 100px; padding: 2px 6px; }
 #page-agents .ws-param-error { color: var(--block); font-size: 11px; margin: 4px 0; }
 #page-agents .ws-reset-btn { position: absolute; top: 8px; right: 8px; z-index: 10; }
+
+/* Phase 2 additions (variant editor, ability area, bag catalog, modals) */
+#page-agents .ws-variant-titlebar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
+#page-agents .ws-variant-titlebar-name { font-size: 16px; font-weight: 600; }
+#page-agents .ws-variant-titlebar-actions { margin-left: auto; display: flex; gap: 6px; }
+/* Also used, unscoped, inside the body-level modals below (margin-left:auto is harmless there). */
+.ws-variant-titlebar-actions { margin-left: auto; display: flex; gap: 6px; }
+#page-agents .ws-variant-tabs { display: flex; gap: var(--space-4); border-bottom: 1px solid var(--line); margin-bottom: var(--space-3); }
+#page-agents .ws-variant-tab { padding-bottom: 6px; font-size: 13px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+#page-agents .ws-variant-tab--active { color: var(--accent); border-bottom-color: var(--accent); }
+#page-agents .ws-variant-tab-panel { min-height: 120px; }
+#page-agents .ws-variant-field { margin-bottom: var(--space-2); font-size: 13px; }
+#page-agents .ws-variant-field textarea, #page-agents .ws-variant-field input { width: 100%; }
+#page-agents .ws-ability-section { margin-bottom: var(--space-3); }
+#page-agents .ws-equipped-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; font-size: 12px; }
+#page-agents .ws-equipped-item .btn { margin-left: auto; padding: 2px 8px; height: auto; }
+#page-agents .ws-gem-chip { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--gem-bg); border: 1px solid var(--gem-border); }
+#page-agents .ws-bag-item { padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; }
+#page-agents .ws-bag-item--active { border-color: var(--accent); background: var(--accent-soft); }
+#page-agents .ws-bag-item--draft { opacity: 0.5; cursor: not-allowed; border-style: dashed; }
+#page-agents .ws-bag-warning { color: var(--warn); font-size: 11px; margin: 6px 0; }
+#page-agents .ws-bag-error { color: var(--block); font-size: 11px; margin: 6px 0; }
+/* Not #page-agents-scoped on purpose: these two modals are placed at body level in
+   skill-admin.html (siblings of .page, matching skill-admin's own .modal-mask pattern),
+   the same way they sit outside #app in the standalone agent-setup-demo/index.html. The
+   class name ws-modal-mask/ws-modal-box/ws-history-row is distinct from skill-admin's own
+   .modal-mask/.modal-box, so no collision risk from leaving these unscoped. */
+.ws-modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 50; }
+.ws-modal-mask.ws-modal--active { display: flex; }
+.ws-modal-box { background: var(--panel); border-radius: 8px; padding: var(--space-4); width: 360px; }
+.ws-history-row { padding: 4px 0; font-size: 13px; display: flex; justify-content: space-between; }

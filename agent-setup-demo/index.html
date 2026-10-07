@@ -14,6 +14,19 @@
     <div id="ws-center" class="ws-pane"></div>
     <div id="ws-bag" class="ws-pane"></div>
   </div>
+  <div class="ws-modal-mask" id="modal-publish-variant">
+    <div class="ws-modal-box">
+      <div id="modal-publish-variant-body"></div>
+    </div>
+  </div>
+  <div class="ws-modal-mask" id="modal-variant-history">
+    <div class="ws-modal-box">
+      <div id="modal-variant-history-body"></div>
+      <div class="ws-variant-titlebar-actions" style="margin-top:12px;">
+        <button class="btn" data-variant-history-close onclick="wsCloseVariantHistoryModal()">關閉</button>
+      </div>
+    </div>
+  </div>
   <script src="js/data.js"></script>
   <script src="js/workspace.js"></script>
   <script src="js/app.js"></script>
