@@ -79,42 +79,42 @@ var SEED = {
     {
       name: 'get_order_status', displayName: '查詢訂單狀態', kind: 'API', protocol: 'REST',
       versions: [
-        { level: 1, status: 'published' },
-        { level: 2, status: 'published' },
-        { level: 3, status: 'published' },
-        { level: 4, status: 'draft' }
+        { level: 1, status: 'published', copiedFromLevel: null },
+        { level: 2, status: 'published', copiedFromLevel: 1 },
+        { level: 3, status: 'published', copiedFromLevel: 2 },
+        { level: 4, status: 'draft', copiedFromLevel: 3 }
       ]
     },
     {
       name: 'create_refund', displayName: '建立退款單', kind: 'API', protocol: 'REST',
-      versions: [{ level: 1, status: 'published' }]
+      versions: [{ level: 1, status: 'published', copiedFromLevel: null }]
     },
     {
       name: 'run_sql_query', displayName: 'SQL 查詢', kind: 'API', protocol: 'REST',
-      versions: [{ level: 1, status: 'published' }, { level: 2, status: 'published' }]
+      versions: [{ level: 1, status: 'published', copiedFromLevel: null }, { level: 2, status: 'published', copiedFromLevel: 1 }]
     },
     {
       name: 'render_chart', displayName: '產生圖表', kind: 'API', protocol: 'REST',
-      versions: [{ level: 1, status: 'published' }]
+      versions: [{ level: 1, status: 'published', copiedFromLevel: null }]
     }
   ],
   equipment: [
     {
       name: 'order-lookup', displayName: '訂單查詢術',
       versions: [
-        { level: 1, status: 'published', gems: [{ gemName: 'get_order_status', level: 1 }] },
-        { level: 2, status: 'published', gems: [{ gemName: 'get_order_status', level: 2 }] }
+        { level: 1, status: 'published', copiedFromLevel: null, gems: [{ gemName: 'get_order_status', level: 1 }] },
+        { level: 2, status: 'published', copiedFromLevel: 1, gems: [{ gemName: 'get_order_status', level: 2 }] }
       ]
     },
     {
       name: 'refund-helper', displayName: '退款小幫手',
-      versions: [{ level: 1, status: 'published', gems: [{ gemName: 'create_refund', level: 1 }] }]
+      versions: [{ level: 1, status: 'published', copiedFromLevel: null, gems: [{ gemName: 'create_refund', level: 1 }] }]
     },
     {
       name: 'sql-analysis', displayName: 'SQL 分析術',
       versions: [
-        { level: 1, status: 'published', gems: [{ gemName: 'run_sql_query', level: 1 }] },
-        { level: 2, status: 'published', gems: [{ gemName: 'run_sql_query', level: 2 }] }
+        { level: 1, status: 'published', copiedFromLevel: null, gems: [{ gemName: 'run_sql_query', level: 1 }] },
+        { level: 2, status: 'published', copiedFromLevel: 1, gems: [{ gemName: 'run_sql_query', level: 2 }] }
       ]
     }
   ]

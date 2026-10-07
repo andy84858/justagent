@@ -559,6 +559,39 @@ async function main() {
   const draftClickDidNotWear = await page.evaluate(() => window.appState.data.npcs.find((n) => n.code === 'FAQ_ANSWER').variants.find((v) => v.code === 'PREMIUM').wornGems.some((g) => g.name === 'get_order_status' && g.level === 4));
   record('clicking a draft gem does not actually wear it', draftClickDidNotWear === false);
 
+  // --- Phase 3 Task 1: copiedFromLevel seeded + reference-lookup helpers ---
+  const allVersionsHaveCopiedFromLevel = await page.evaluate(function () {
+    var ok = true;
+    window.appState.data.gems.forEach(function (g) { g.versions.forEach(function (v) { if (!('copiedFromLevel' in v)) ok = false; }); });
+    window.appState.data.equipment.forEach(function (e) { e.versions.forEach(function (v) { if (!('copiedFromLevel' in v)) ok = false; }); });
+    return ok;
+  });
+  record('every seeded gem/equipment version has a copiedFromLevel field', allVersionsHaveCopiedFromLevel === true);
+
+  // STANDARD's seeded order-lookup Lv1 equip was unequipped by an earlier test in this stateful
+  // suite (the 單一裝備解除/置換 scenarios around line 378) and never re-equipped — re-establish it
+  // deterministically here so this task's reference-lookup checks don't depend on suite ordering.
+  await page.evaluate(function () {
+    var variant = window.appState.data.npcs.find(function (n) { return n.code === 'FAQ_ANSWER'; }).variants.find(function (v) { return v.code === 'STANDARD'; });
+    variant.equippedEquipment = [{ name: 'order-lookup', level: 1 }];
+  });
+
+  const orderLookupGemRefs = await page.evaluate(function () { return wsGemReferences('get_order_status', 1); });
+  record('wsGemReferences finds order-lookup Lv1 as an equipment reference for get_order_status Lv1', orderLookupGemRefs.equipment.some(function (e) { return e.name === 'order-lookup' && e.level === 1; }), JSON.stringify(orderLookupGemRefs));
+  record('wsGemReferences finds FAQ_ANSWER.STANDARD as a variant reference (via equipped order-lookup Lv1)', orderLookupGemRefs.variants.some(function (v) { return v.npcCode === 'FAQ_ANSWER' && v.variantCode === 'STANDARD'; }), JSON.stringify(orderLookupGemRefs));
+
+  const refundGemRefs = await page.evaluate(function () { return wsGemReferences('create_refund', 1); });
+  record('wsGemReferences finds FAQ_ANSWER.PREMIUM as a direct wornGems reference for create_refund Lv1', refundGemRefs.variants.some(function (v) { return v.npcCode === 'FAQ_ANSWER' && v.variantCode === 'PREMIUM'; }), JSON.stringify(refundGemRefs));
+
+  const unreferencedGemRefs = await page.evaluate(function () { return wsGemReferences('render_chart', 1); });
+  record('wsGemReferences returns empty arrays for a never-used gem', unreferencedGemRefs.equipment.length === 0 && unreferencedGemRefs.variants.length === 0, JSON.stringify(unreferencedGemRefs));
+
+  const orderLookupEqRefs = await page.evaluate(function () { return wsEquipmentReferences('order-lookup', 1); });
+  record('wsEquipmentReferences finds FAQ_ANSWER.STANDARD as a reference for order-lookup Lv1', orderLookupEqRefs.variants.some(function (v) { return v.npcCode === 'FAQ_ANSWER' && v.variantCode === 'STANDARD'; }), JSON.stringify(orderLookupEqRefs));
+
+  const sqlAnalysisEqRefs = await page.evaluate(function () { return wsEquipmentReferences('sql-analysis', 1); });
+  record('wsEquipmentReferences returns an empty array for an unequipped equipment', sqlAnalysisEqRefs.variants.length === 0, JSON.stringify(sqlAnalysisEqRefs));
+
   await browser.close();
 
   const failed = results.filter((r) => !r.passed).length;

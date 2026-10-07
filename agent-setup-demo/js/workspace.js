@@ -708,6 +708,42 @@ function wsCarriedGems(variant) {
   return carried;
 }
 
+function wsGemReferences(gemName, level) {
+  var equipmentRefs = [];
+  window.appState.data.equipment.forEach(function (eqDef) {
+    eqDef.versions.forEach(function (ver) {
+      if ((ver.gems || []).some(function (g) { return g.gemName === gemName && g.level === level; })) {
+        equipmentRefs.push({ name: eqDef.name, displayName: eqDef.displayName, level: ver.level });
+      }
+    });
+  });
+  var variantRefs = [];
+  window.appState.data.npcs.forEach(function (npc) {
+    npc.variants.forEach(function (v) {
+      var direct = v.wornGems.some(function (g) { return g.name === gemName && g.level === level; });
+      var viaEquipment = v.equippedEquipment.some(function (e) {
+        return equipmentRefs.some(function (er) { return er.name === e.name && er.level === e.level; });
+      });
+      if (direct || viaEquipment) {
+        variantRefs.push({ npcCode: npc.code, variantCode: v.code, variantName: v.name });
+      }
+    });
+  });
+  return { equipment: equipmentRefs, variants: variantRefs };
+}
+
+function wsEquipmentReferences(eqName, level) {
+  var variantRefs = [];
+  window.appState.data.npcs.forEach(function (npc) {
+    npc.variants.forEach(function (v) {
+      if (v.equippedEquipment.some(function (e) { return e.name === eqName && e.level === level; })) {
+        variantRefs.push({ npcCode: npc.code, variantCode: v.code, variantName: v.name });
+      }
+    });
+  });
+  return { variants: variantRefs };
+}
+
 function renderAbilityArea(state) {
   var container = document.getElementById('ws-ability-area');
   if (!container) return;
