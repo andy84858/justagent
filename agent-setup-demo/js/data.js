@@ -59,9 +59,9 @@ var SEED = {
         { key: 'max_tokens', label: 'Max Tokens', kind: 'number', min: 1, max: 4096, default: 2048 }
       ]
     },
-    'demo:chat-lite': {
+    'internal:chat-lite': {
       type: 'chat',
-      label: 'Chat Lite（示範用，不支援工具呼叫）',
+      label: 'Chat Lite（輕量版，不支援工具呼叫）',
       supportsTools: false,
       params: [
         { key: 'temperature', label: 'Temperature', kind: 'number', min: 0, max: 1, default: 0.3 }

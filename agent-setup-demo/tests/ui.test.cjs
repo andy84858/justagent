@@ -223,7 +223,7 @@ async function main() {
   // ORDER_ASSIST which already got one attached during Task 9's test in this same run.
   await page.click('[data-npc-select="DATA_ANALYST"]');
   await page.click('[data-add-model="chatModel"]');
-  await page.selectOption('[data-model-template-select="chatModel"]', 'demo:chat-lite');
+  await page.selectOption('[data-model-template-select="chatModel"]', 'internal:chat-lite');
   await page.click('[data-model-confirm="chatModel"]');
   await page.fill('[data-model-param-input="chatModel.temperature"]', '');
   await page.click('[data-model-param-save="chatModel"]');
@@ -261,7 +261,7 @@ async function main() {
   await page.click('[data-variant-form-submit="SMOKE_NPC"]');
   await page.click('[data-npc-select="SMOKE_NPC"]');
   await page.click('[data-add-model="chatModel"]');
-  await page.selectOption('[data-model-template-select="chatModel"]', 'demo:chat-lite');
+  await page.selectOption('[data-model-template-select="chatModel"]', 'internal:chat-lite');
   await page.click('[data-model-confirm="chatModel"]');
   await page.click('[data-model-publish="chatModel"]');
   const smokeVersion = await page.evaluate(function () {
