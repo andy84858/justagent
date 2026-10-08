@@ -241,7 +241,7 @@ async function main() {
   record('version did not bump while empty-param publish was blocked', notPublishedWithEmptyParam === 1, notPublishedWithEmptyParam);
 
   const bagPlaceholderText = await page.locator('#ws-bag').innerText();
-  record('right pane shows the Phase 2 placeholder', bagPlaceholderText.indexOf('背包功能將於 Phase') !== -1, bagPlaceholderText);
+  record('right pane shows a placeholder prompting variant selection when only an NPC is selected', bagPlaceholderText.indexOf('請從左側選擇一張人物卡') !== -1, bagPlaceholderText);
 
   await page.click('[data-reset-data]');
   const npcCountAfterReset = await page.evaluate(() => window.appState.data.npcs.length);

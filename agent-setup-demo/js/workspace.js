@@ -513,7 +513,7 @@ function wsPublishModel(kind) {
 }
 
 function renderBagPlaceholder() {
-  return '<div class="hint">背包功能將於 Phase 2／3 開發，這裡先保留版位。</div>';
+  return '<div class="hint">請從左側選擇一張人物卡以檢視背包。</div>';
 }
 
 function wsVariantSnapshotKey(npcCode, variantCode) {
