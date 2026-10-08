@@ -513,7 +513,7 @@ function wsPublishModel(kind) {
 }
 
 function renderBagPlaceholder() {
-  return '<div class="hint">請從左側選擇一張人物卡以檢視背包。</div>';
+  return '<div class="hint">請從左側選擇一張人物卡以檢視工具庫。</div>';
 }
 
 function wsVariantSnapshotKey(npcCode, variantCode) {
@@ -847,10 +847,10 @@ function wsCommitBagDetailKindProtocol() {
 function renderBagDetailGemFields(gemDef, ver, editing) {
   var refs = wsGemReferences(gemDef.name, ver.level);
   var refList = (refs.equipment.length === 0 && refs.variants.length === 0)
-    ? '<div class="ws-flyout-ref-list hint">尚未被任何裝備或人物卡引用</div>'
+    ? '<div class="ws-flyout-ref-list hint">尚未被任何技能或人物卡引用</div>'
     : (
       '<div class="ws-flyout-ref-list">' +
-        refs.equipment.map(function (e) { return '<div class="ws-flyout-ref-item">裝備：' + escapeHtml(e.displayName) + ' Lv' + e.level + '</div>'; }).join('') +
+        refs.equipment.map(function (e) { return '<div class="ws-flyout-ref-item">技能：' + escapeHtml(e.displayName) + ' Lv' + e.level + '</div>'; }).join('') +
         refs.variants.map(function (v) { return '<div class="ws-flyout-ref-item">人物卡：' + escapeHtml(v.variantName) + '</div>'; }).join('') +
       '</div>'
     );
@@ -908,14 +908,14 @@ function wsAddGemToBagDetailDraft(gemName, level) {
   var draft = window.appState.uiState.bagDetailGemsDraft;
   var already = draft.some(function (g) { return g.gemName === gemName; });
   if (already) {
-    window.appState.uiState.bagDetailError = '這顆寶石已在鑲嵌清單中';
+    window.appState.uiState.bagDetailError = '這個工具已在鑲嵌清單中';
     window.rerender();
     return;
   }
   var gemDef = wsGemByName(gemName);
   var ver = wsGemVersion(gemDef, level);
   if (!ver || ver.status === 'draft') {
-    window.appState.uiState.bagDetailError = '只能鑲嵌已公開的寶石版本';
+    window.appState.uiState.bagDetailError = '只能鑲嵌已公開的工具版本';
     window.rerender();
     return;
   }
@@ -961,7 +961,7 @@ function renderBagDetailEquipmentFields(eqDef, ver, editing, gemsDraft) {
           '<button class="btn" data-flyout-remove-gem="' + g.gemName + '" onclick="wsRemoveGemFromBagDetailDraft(\'' + g.gemName + '\')">⊖</button>' +
         '</div>'
       );
-    }).join('') || '<div class="hint">尚未鑲嵌任何寶石</div>';
+    }).join('') || '<div class="hint">尚未鑲嵌任何工具</div>';
     var publishedOptions = [];
     window.appState.data.gems.forEach(function (gemDef) {
       gemDef.versions.forEach(function (v) {
@@ -972,7 +972,7 @@ function renderBagDetailEquipmentFields(eqDef, ver, editing, gemsDraft) {
       return '<option value="' + o.gemName + '@' + o.level + '">' + escapeHtml(o.label) + '</option>';
     }).join('');
     gemsBlock =
-      '<div class="ws-flyout-field"><span class="label">鑲嵌寶石</span></div>' +
+      '<div class="ws-flyout-field"><span class="label">鑲嵌工具</span></div>' +
       rows +
       '<select data-flyout-add-gem-select>' + optionsHtml + '</select>' +
       '<button class="btn" data-flyout-add-gem onclick="wsAddGemFromSelect()">加入</button>' +
@@ -984,9 +984,9 @@ function renderBagDetailEquipmentFields(eqDef, ver, editing, gemsDraft) {
     var viewRows = (ver.gems || []).map(function (g) {
       var gemDef = wsGemByName(g.gemName);
       return '<span class="ws-gem-chip">' + escapeHtml(gemDef.displayName) + ' Lv' + g.level + '</span>';
-    }).join('') || '<span class="hint">尚未鑲嵌任何寶石</span>';
+    }).join('') || '<span class="hint">尚未鑲嵌任何工具</span>';
     gemsBlock =
-      '<div class="ws-flyout-field"><span class="label">鑲嵌寶石</span> ' + viewRows + ' ' +
+      '<div class="ws-flyout-field"><span class="label">鑲嵌工具</span> ' + viewRows + ' ' +
       (ver.status === 'draft'
         ? '<button class="btn" data-flyout-gems-pencil onclick="wsStartEditBagDetailGems()">✎</button>'
         : '<span class="badge badge-locked" data-flyout-gems-locked>🔒 已公開版本不可改</span>') +
@@ -1082,7 +1082,7 @@ function wsValidateCatalogName(kind, name, catalogList) {
   }
   var duplicate = catalogList.some(function (item) { return item.name === name; });
   if (duplicate) {
-    return '已有相同代碼的' + (kind === 'gem' ? '寶石' : '裝備');
+    return '已有相同代碼的' + (kind === 'gem' ? '工具' : '技能');
   }
   return null;
 }
@@ -1117,11 +1117,11 @@ function renderBagDetailCreateBody(state) {
     return (
       '<button class="btn ws-flyout-close" data-flyout-close onclick="wsCloseBagDetail()">✕</button>' +
       '<div class="ws-flyout-header"><span class="ws-flyout-name">新增素材</span></div>' +
-      '<button class="btn" data-flyout-create-gem onclick="wsChooseBagDetailCreateKind(\'gem\')">新增寶石</button> ' +
-      '<button class="btn" data-flyout-create-equipment onclick="wsChooseBagDetailCreateKind(\'equipment\')">新增裝備</button>'
+      '<button class="btn" data-flyout-create-gem onclick="wsChooseBagDetailCreateKind(\'gem\')">新增工具</button> ' +
+      '<button class="btn" data-flyout-create-equipment onclick="wsChooseBagDetailCreateKind(\'equipment\')">新增技能</button>'
     );
   }
-  var typeLabel = form.kind === 'gem' ? '寶石' : '裝備';
+  var typeLabel = form.kind === 'gem' ? '工具' : '技能';
   return (
     '<button class="btn ws-flyout-close" data-flyout-close onclick="wsCloseBagDetail()">✕</button>' +
     '<div class="ws-flyout-header"><span class="ws-flyout-name">新增' + typeLabel + '</span></div>' +
@@ -1140,7 +1140,7 @@ function renderBagDetailViewBody(state) {
   var def = wsBagDetailDef(detail);
   var ver = def.versions.find(function (v) { return v.level === detail.level; });
   var icon = detail.kind === 'gem' ? '💎' : '🛡️';
-  var typeLabel = detail.kind === 'gem' ? '寶石' : '裝備';
+  var typeLabel = detail.kind === 'gem' ? '工具' : '技能';
 
   var levelButtons = def.versions.slice().sort(function (a, b) { return a.level - b.level; }).map(function (v) {
     return (
@@ -1233,7 +1233,7 @@ function renderAbilityArea(state) {
         '<button class="btn" data-unequip-equipment="' + eq.name + '" onclick="wsUnequipEquipmentClick(\'' + eq.name + '\')">⊖</button>' +
       '</div>'
     );
-  }).join('') || '<div class="hint">尚未穿上任何裝備</div>';
+  }).join('') || '<div class="hint">尚未啟用任何技能</div>';
 
   var gemHtml = variant.wornGems.map(function (g) {
     var gemDef = wsGemByName(g.name);
@@ -1243,12 +1243,12 @@ function renderAbilityArea(state) {
         '<button class="btn" data-unwear-gem="' + g.name + '" onclick="wsUnwearGemClick(\'' + g.name + '\')">⊖</button>' +
       '</div>'
     );
-  }).join('') || '<div class="hint">尚未佩掛任何寶石</div>';
+  }).join('') || '<div class="hint">尚未佩掛任何工具</div>';
 
   container.innerHTML =
     '<div class="label">🎒 能力</div>' +
-    '<div class="ws-ability-section"><div class="label">裝備欄</div>' + equipmentHtml + '</div>' +
-    '<div class="ws-ability-section"><div class="label">佩掛寶石</div>' + gemHtml + '</div>';
+    '<div class="ws-ability-section"><div class="label">技能欄</div>' + equipmentHtml + '</div>' +
+    '<div class="ws-ability-section"><div class="label">佩掛工具</div>' + gemHtml + '</div>';
 }
 
 function wsUnequipEquipmentClick(eqName) {
@@ -1294,7 +1294,7 @@ function renderBagForVariant(state) {
           (isDraft ? 'aria-disabled="true" ' : '') +
           'onclick="wsBagEquip(\'' + eqDef.name + '\', ' + ver.level + ')">' +
           '<span class="ws-bag-item-name">' + escapeHtml(eqDef.displayName) + '</span>' +
-          '<span class="hint">Lv' + ver.level + (isDraft ? ' · 草稿・不可選' : (worn ? ' · 已穿上' : '')) + '</span>' +
+          '<span class="hint">Lv' + ver.level + (isDraft ? ' · 草稿・不可選' : (worn ? ' · 已啟用' : '')) + '</span>' +
           '<button class="ws-bag-item-detail-btn" data-bag-equipment-detail="' + eqDef.name + '.' + ver.level + '" onclick="event.stopPropagation(); wsOpenBagDetail(\'equipment\', \'' + eqDef.name + '\', ' + ver.level + ')">⋯</button>' +
         '</div>'
       );
@@ -1304,11 +1304,11 @@ function renderBagForVariant(state) {
   var error = state.uiState.bagError;
   var warning = state.uiState.bagWarning;
   return (
-    '<div class="ws-bag-header"><span class="label">🎒 背包</span><button class="btn" data-bag-add onclick="wsOpenBagDetailCreate()">＋ 新增</button></div>' +
+    '<div class="ws-bag-header"><span class="label">🧰 工具庫</span><button class="btn" data-bag-add onclick="wsOpenBagDetailCreate()">＋ 新增</button></div>' +
     (error ? '<div class="ws-bag-error" data-bag-error>' + escapeHtml(error) + '</div>' : '') +
     (warning ? '<div class="ws-bag-warning" data-bag-warning>' + escapeHtml(warning) + '</div>' : '') +
-    '<div class="label">🎒 背包 — 寶石</div>' + gemRows +
-    '<div class="label" style="margin-top:var(--space-3);">🎒 背包 — 裝備</div>' + equipmentRows
+    '<div class="label">🧰 工具庫 — 工具</div>' + gemRows +
+    '<div class="label" style="margin-top:var(--space-3);">🧰 工具庫 — 技能</div>' + equipmentRows
   );
 }
 
@@ -1348,7 +1348,7 @@ function renderPackPane(state) {
   return (
     '<div data-pack-pane>' +
       '<div class="ws-bag-header"><span class="label">📦 打包</span>' +
-        '<button class="btn" data-pack-mode-toggle onclick="wsSetBagMode(\'bag\')">🎒 背包</button>' +
+        '<button class="btn" data-pack-mode-toggle onclick="wsSetBagMode(\'bag\')">🧰 工具庫</button>' +
       '</div>' +
       '<div class="ws-variant-tabs">' +
         '<span class="ws-variant-tab' + (kind === 'bundle' ? ' ws-variant-tab--active' : '') + '" data-pack-list-kind="bundle" onclick="wsSwitchPackListKind(\'bundle\')">組合包</span>' +
@@ -1462,7 +1462,7 @@ function wsCommitPackMembers() {
   }
   var draft = window.appState.uiState.packMembershipDraft;
   if (draft.length === 0) {
-    window.appState.uiState.packDetailError = detail.kind === 'bundle' ? '至少要選一張人物卡' : '至少要選一個寶石或裝備';
+    window.appState.uiState.packDetailError = detail.kind === 'bundle' ? '至少要選一張人物卡' : '至少要選一個工具或技能';
     window.rerender();
     return;
   }
@@ -1726,7 +1726,7 @@ function wsSubmitCreateExtension() {
   }
   var selected = form.selectedItems || [];
   if (selected.length === 0) {
-    window.appState.uiState.packDetailError = '至少要選一個寶石或裝備';
+    window.appState.uiState.packDetailError = '至少要選一個工具或技能';
     window.rerender();
     return;
   }
@@ -1797,7 +1797,7 @@ function wsOpenPackCreate(kind) {
 function wsWearGem(variant, gemName, level) {
   var already = variant.wornGems.find(function (g) { return g.name === gemName; });
   if (already) {
-    return { ok: false, message: '這顆寶石已佩掛，請先卸下才能換等級' };
+    return { ok: false, message: '這個工具已佩掛，請先卸下才能換等級' };
   }
   var gemDef = wsGemByName(gemName);
   var ver = wsGemVersion(gemDef, level);
@@ -1807,9 +1807,9 @@ function wsWearGem(variant, gemName, level) {
   var carried = wsCarriedGems(variant).find(function (cg) { return cg.gemName === gemName; });
   if (carried) {
     if (carried.level === level) {
-      return { ok: false, message: '目前穿著的裝備已鑲嵌同名同級寶石，無需另外佩掛' };
+      return { ok: false, message: '目前啟用的技能已鑲嵌同名同級工具，無需另外佩掛' };
     }
-    return { ok: false, message: '目前穿著的裝備已鑲嵌「' + gemDef.displayName + '」Lv' + carried.level + '，無法佩掛不同等級' };
+    return { ok: false, message: '目前啟用的技能已鑲嵌「' + gemDef.displayName + '」Lv' + carried.level + '，無法佩掛不同等級' };
   }
   variant.wornGems.push({ name: gemName, level: level });
   return { ok: true };
@@ -1818,7 +1818,7 @@ function wsWearGem(variant, gemName, level) {
 function wsEquipEquipment(variant, eqName, level) {
   var already = variant.equippedEquipment.find(function (e) { return e.name === eqName; });
   if (already) {
-    return { ok: false, message: '這件裝備已穿上，請先卸下才能換等級' };
+    return { ok: false, message: '這個技能已啟用，請先卸下才能換等級' };
   }
   var eqDef = wsEquipmentByName(eqName);
   var ver = wsEquipmentVersion(eqDef, level);
@@ -1831,7 +1831,7 @@ function wsEquipEquipment(variant, eqName, level) {
     var conflict = wsCarriedGems(variant).find(function (cg) { return cg.gemName === ig.gemName && cg.level !== ig.level; });
     if (conflict) {
       var conflictGemDef = wsGemByName(ig.gemName);
-      return { ok: false, message: '另一件裝備已鑲嵌「' + conflictGemDef.displayName + '」不同等級，請先卸下其中一件' };
+      return { ok: false, message: '另一個技能已鑲嵌「' + conflictGemDef.displayName + '」不同等級，請先卸下其中一個' };
     }
   }
   variant.equippedEquipment.push({ name: eqName, level: level });
