@@ -36,7 +36,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
 
   it('技能從沒測過：勾「啟用狀態」並送出，不會直接寫入，改彈出決策對話框', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [], capabilities: ['能力A'] })
     const { wrapper } = await mountEditFor(id)
 
     // 直接把畫面切到最後一步（確認），不用真的一步一步點過去
@@ -55,7 +55,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
 
   it('決策對話框選「視為通過」，Agent 確認對話框勾選並送出：技能被啟用，接著照原本流程導回技能管理頁', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [], capabilities: ['能力A'] })
     const { wrapper, router } = await mountEditFor(id)
     ;(wrapper.findComponent(SkillEditor).vm as any).currentStep = 2
     await wrapper.vm.$nextTick()
@@ -83,7 +83,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
 
   it('決策對話框選「取消」：對話框關閉，不啟用、停留在編輯頁', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能5', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能5', instructions: 'x', triggerHint: 'y', assignedAgents: [], capabilities: ['能力A'] })
     const { wrapper, router } = await mountEditFor(id)
     ;(wrapper.findComponent(SkillEditor).vm as any).currentStep = 2
     await wrapper.vm.$nextTick()
@@ -100,48 +100,9 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
     expect(router.currentRoute.value.path).toBe('/view/SkillEditor')
   })
 
-  it('決策對話框選「去修改技能內容」：導回技能管理頁並帶上 skillId，不啟用、不寫入', async () => {
-    const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能6', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    const { wrapper, router } = await mountEditFor(id)
-    ;(wrapper.findComponent(SkillEditor).vm as any).currentStep = 2
-    await wrapper.vm.$nextTick()
-    await wrapper.find('.se-toggle input[type="checkbox"]').setValue(true)
-    await wrapper.find('.se-footer button.custom-main-btn').trigger('click')
-    await flushPromises()
-
-    const reviseBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('去修改'))!
-    await reviseBtn.trigger('click')
-    await flushPromises()
-
-    expect(router.currentRoute.value.path).toBe('/view/Skills')
-    expect(router.currentRoute.value.query.skillId).toBe(id)
-    expect(store.findSkill(id)!.isEnabled).toBe(false)
-  })
-
-  it('決策對話框選「前往測試」：導回技能管理頁並帶上 skillId + tab=test，不啟用、不寫入', async () => {
-    const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能6b', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    const { wrapper, router } = await mountEditFor(id)
-    ;(wrapper.findComponent(SkillEditor).vm as any).currentStep = 2
-    await wrapper.vm.$nextTick()
-    await wrapper.find('.se-toggle input[type="checkbox"]').setValue(true)
-    await wrapper.find('.se-footer button.custom-main-btn').trigger('click')
-    await flushPromises()
-
-    const goToTestBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('前往測試'))!
-    await goToTestBtn.trigger('click')
-    await flushPromises()
-
-    expect(router.currentRoute.value.path).toBe('/view/Skills')
-    expect(router.currentRoute.value.query.skillId).toBe(id)
-    expect(router.currentRoute.value.query.tab).toBe('test')
-    expect(store.findSkill(id)!.isEnabled).toBe(false)
-  })
-
   it('已經全對過的技能：勾「啟用狀態」送出不彈閘門失敗對話框，但仍要過 Agent 確認才真的生效', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [], capabilities: ['能力A'] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
       store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
@@ -182,6 +143,8 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
 
     const editor = wrapper.findComponent(SkillEditor)
     ;(editor.vm as any).form.name = '全新技能'
+    ;(editor.vm as any).form.triggerHint = '當使用者需要這個技能時'
+    ;(editor.vm as any).form.capabilities = ['能力A']
     ;(editor.vm as any).form.assignedAgents = ['通用助理']
     ;(editor.vm as any).currentStep = 2
     await wrapper.vm.$nextTick()

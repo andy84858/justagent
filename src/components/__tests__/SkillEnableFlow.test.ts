@@ -40,31 +40,53 @@ describe('SkillEnableFlow', () => {
     expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
   })
 
-  it('沒過測試閘門：選「去修改技能內容」resolve revise，不進 Agent 確認步驟', async () => {
+  it('沒過測試閘門：不再提供「去修改技能內容」，「立即測試」是主要按鈕', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     const wrapper = mountFlow()
-    const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), [])
+    ;(wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()
 
-    const reviseBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('去修改'))!
-    await reviseBtn.trigger('click')
-    expect(await promise).toEqual({ type: 'revise' })
-    expect(new DOMWrapper(document.body).find('.enable-agent-dialog').exists()).toBe(false)
+    const buttons = new DOMWrapper(document.body).findAll('.enable-gate-dialog button')
+    expect(buttons.some(b => b.text().includes('去修改'))).toBe(false)
+    const testBtn = buttons.find(b => b.text().includes('立即測試'))!
+    expect(testBtn.classes()).toContain('custom-main-btn')
+    expect(buttons.find(b => b.text().includes('視為通過'))!.classes()).not.toContain('custom-main-btn')
   })
 
-  it('沒過測試閘門：選「前往測試」resolve goToTest，不進 Agent 確認步驟', async () => {
+  it('沒過測試閘門：選「立即測試」在同一個對話框裡就地測試，原本的選擇按鈕消失；全對後「繼續啟用」進 Agent 確認', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能2b', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     const wrapper = mountFlow()
     const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()
 
-    const goToTestBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('前往測試'))!
-    await goToTestBtn.trigger('click')
-    expect(await promise).toEqual({ type: 'goToTest' })
-    expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
-    expect(new DOMWrapper(document.body).find('.enable-agent-dialog').exists()).toBe(false)
+    const body = new DOMWrapper(document.body)
+    await body.findAll('.enable-gate-dialog button').find(b => b.text().includes('立即測試'))!.trigger('click')
+
+    expect(body.find('.enable-gate-dialog.is-testing').exists()).toBe(true)
+    expect(body.find('.enable-gate-dialog .SkillTestAI').exists()).toBe(true)
+    const labels = body.findAll('.enable-gate-dialog .confirm-actions button').map(b => b.text())
+    expect(labels.some(t => t.includes('立即測試') || t.includes('視為通過'))).toBe(false)
+    const continueBtn = () => body.findAll('.enable-gate-dialog .confirm-actions button').find(b => b.text().includes('繼續啟用'))!
+    expect(continueBtn().attributes('disabled')).toBeDefined()
+
+    await store.generateAITestScenarios(id)
+    for (const sc of [...store.aiTestScenarios]) {
+      store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+    }
+    await wrapper.vm.$nextTick()
+    expect(continueBtn().attributes('disabled')).toBeUndefined()
+
+    await continueBtn().trigger('click')
+    expect(body.find('.enable-gate-dialog').exists()).toBe(false)
+    expect(body.find('.enable-agent-dialog').exists()).toBe(true)
+
+    await body.findAll('.enable-agent-dialog .se-agent-chip')[0].trigger('click')
+    await body.findAll('.enable-agent-dialog button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
+    const outcome = await promise
+    expect(outcome.type).toBe('confirmed')
+    expect(outcome.wasOverridden).toBe(false)
   })
 
   it('沒過測試閘門：選「視為通過」會接著顯示 Agent 確認對話框，預填 existingAgents', async () => {

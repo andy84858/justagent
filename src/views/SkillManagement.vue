@@ -889,14 +889,6 @@ async function handleToggle(skill: Skill) {
   }
   const outcome = await enableFlowRef.value!.requestEnable(skill, skill.assignedAgents ?? [])
   if (outcome.type === 'cancelled') return
-  if (outcome.type === 'revise') {
-    router.push({ query: { skillId: skill.id } })
-    return
-  }
-  if (outcome.type === 'goToTest') {
-    router.push({ query: { skillId: skill.id, tab: 'test' } })
-    return
-  }
   store.setAssignedAgents(skill.id, outcome.agents)
   if (outcome.wasOverridden) store.overrideAndEnableSkill(skill.id)
   else store.toggleSkill(skill.id)

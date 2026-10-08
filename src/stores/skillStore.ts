@@ -829,20 +829,85 @@ const NEGATIVE_KEYWORD_SETS = ['天氣 心情 電影', '旅遊 美食 運動', '
 // Skill 物件可用，只需要這四個就能組題目關鍵字，不用整顆 Skill
 export type TriggerEdgeSource = Pick<Skill, 'name' | 'triggerHint' | 'capabilities' | 'composition'>
 
-function generateDynamicTriggerEdgeScenarios(skill: TriggerEdgeSource | undefined): ScenarioTemplate[] {
-  const MIN_TOTAL = 5
-  const name = skill?.name?.trim() || '這顆技能'
-  const fromTriggerHint = extractTriggerKeywords(skill?.triggerHint)
-  const fromCapabilities = skill?.capabilities ?? []
-  // 積木組裝的技能（有 composition）：「觸發情境」是使用者在「基本設定」步驟手寫、
-  // 專門描述「什麼時候該觸發」的必填欄位，比覆蓋能力（偏「這顆技能做什麼」而非
-  // 「什麼時候該用」）更貼近是非題要驗證的東西，優先用它抓關鍵字，沒抓到字才退回
-  // 覆蓋能力。對話建立的技能沒有這層區分（兩個欄位都是 AI 推導或口語補充的，沒有
-  // 「哪個更權威」的差異），維持原本「覆蓋能力優先」不變
-  const keywords = skill?.composition
+// 積木組裝的技能（有 composition）：「觸發情境」是使用者在「基本設定」步驟手寫、
+// 專門描述「什麼時候該觸發」的必填欄位，比覆蓋能力（偏「這顆技能做什麼」而非
+// 「什麼時候該用」）更貼近是非題要驗證的東西，優先用它抓關鍵字，沒抓到字才退回
+// 覆蓋能力。對話建立的技能沒有這層區分（兩個欄位都是 AI 推導或口語補充的，沒有
+// 「哪個更權威」的差異），維持原本「覆蓋能力優先」不變
+function keywordPoolFor(source: TriggerEdgeSource | undefined): string[] {
+  const name = source?.name?.trim() || '這顆技能'
+  const fromTriggerHint = extractTriggerKeywords(source?.triggerHint)
+  const fromCapabilities = source?.capabilities ?? []
+  const keywords = source?.composition
     ? (fromTriggerHint.length ? fromTriggerHint : fromCapabilities)
     : (fromCapabilities.length ? fromCapabilities : fromTriggerHint)
-  const pool = keywords.length ? keywords : [name]
+  return keywords.length ? keywords : [name]
+}
+
+// 跟這顆技能「搶觸發」風險最高的候選：先看這顆技能指派給哪些 Agent，再從其他技能裡找出
+// 「也指派給至少一個同樣 Agent」的——同一個 Agent 要是能同時調用兩顆內容很像的技能，
+// 使用者講一句話時 Agent 该選哪一顆就會卡住。用 bigram 文字重疊比對（跟
+// useSkillStudioConversation.ts 的 findSimilarSkill 同一套比對邏輯，這裡不直接 import
+// 那邊的函式，避免 store 回頭依賴 composable）在這些候選裡挑重疊分數最高的最多兩顆
+function bigramOverlapScore(a: string, b: string): number {
+  if (a.length < 2 || b.length < 2) return 0
+  const gramsA = new Set<string>()
+  for (let i = 0; i < a.length - 1; i++) gramsA.add(a.slice(i, i + 2))
+  let score = 0
+  for (let i = 0; i < b.length - 1; i++) {
+    if (gramsA.has(b.slice(i, i + 2))) score++
+  }
+  return score
+}
+
+function findCompetingSkills(skill: Skill, candidates: Skill[]): Skill[] {
+  const agents = new Set(skill.assignedAgents ?? [])
+  if (agents.size === 0) return []
+  const haystack = `${skill.name}${skill.triggerHint ?? ''}${skill.instructions ?? ''}`
+  return candidates
+    .filter(s => s.id !== skill.id && (s.assignedAgents ?? []).some(a => agents.has(a)))
+    .map(s => ({ skill: s, score: bigramOverlapScore(haystack, `${s.name}${s.triggerHint ?? ''}${s.instructions ?? ''}`) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2)
+    .map(x => x.skill)
+}
+
+// 生成題目期間給使用者看的敘事文字，讓「生成中」不只是一顆乾乾的轉圈圈——
+// 具體講出「正在做什麼」（查 Agent、比對相似技能），每次重新生成都會照當下的
+// assignedAgents／搶觸發掃描結果重算一次，不是固定的罐頭句子
+function buildGenerationNarration(
+  source: TriggerEdgeSource | undefined,
+  skill: Skill | undefined,
+  competingSkills: Skill[],
+): string[] {
+  const name = source?.name?.trim() || '這顆技能'
+  const agents = skill?.assignedAgents ?? []
+  const lines: string[] = []
+  if (agents.length === 0) {
+    lines.push(`「${name}」目前還沒有指派 Agent，先用技能本身的內容出題。`)
+  } else {
+    lines.push(`正在查看「${name}」可調用的 Agent：${agents.join('、')}。`)
+    lines.push(
+      competingSkills.length > 0
+        ? `發現 ${competingSkills.length} 個同樣被這些 Agent 調用、內容相近的技能：${competingSkills.map(s => s.name).join('、')}，一併納入測試避免搶著被觸發。`
+        : '沒有發現其他搶著被觸發的相似技能。',
+    )
+  }
+  lines.push('正在產生測試情境...')
+  return lines
+}
+
+// 「觸發邊緣」的反例優先用搶觸發風險最高的競爭技能自己的關鍵字——這比「天氣 心情 電影」
+// 這種隨便湊的無關詞更有鑑別度，因為這才是真的可能被搞混、答錯的情境；競爭技能不夠湊滿
+// 最低題數時，才用無關關鍵字池補滿
+function generateDynamicTriggerEdgeScenarios(
+  skill: TriggerEdgeSource | undefined,
+  competingSkills: TriggerEdgeSource[] = [],
+): ScenarioTemplate[] {
+  const MIN_TOTAL = 5
+  const name = skill?.name?.trim() || '這顆技能'
+  const pool = keywordPoolFor(skill)
 
   const positives: ScenarioTemplate[] = pool.slice(0, 3).map(kw => ({
     tag: 'trigger_edge',
@@ -862,12 +927,29 @@ function generateDynamicTriggerEdgeScenarios(skill: TriggerEdgeSource | undefine
   }
 
   const negativeCount = Math.max(2, MIN_TOTAL - positives.length)
-  const negatives: ScenarioTemplate[] = NEGATIVE_KEYWORD_SETS.slice(0, negativeCount).map(kws => ({
-    tag: 'trigger_edge',
-    input: kws,
-    expectedTrigger: false,
-    expectedBehavior: `這些關鍵字跟「${name}」的能力範圍無關，不應該觸發。`,
-  }))
+  const positiveInputs = new Set(positives.map(p => p.input))
+  const competingNegatives: ScenarioTemplate[] = competingSkills
+    .map(other => {
+      const otherName = other.name?.trim() || '另一顆技能'
+      const otherKeywords = keywordPoolFor(other).slice(0, 2).join(' ')
+      return {
+        tag: 'trigger_edge' as const,
+        input: otherKeywords,
+        expectedTrigger: false,
+        expectedBehavior: `這些關鍵字其實是「${otherName}」的，不是「${name}」的——同一個 Agent 也能調用「${otherName}」，不該被「${name}」搶走觸發。`,
+      }
+    })
+    // 競爭技能的關鍵字剛好跟這顆技能自己的某個正例一字不差時（例如兩顆技能不小心標了
+    // 同一個覆蓋能力標籤），同一句輸入會同時出現在正例跟反例、答案互相矛盾，這題直接丟掉
+    .filter(neg => !positiveInputs.has(neg.input))
+  const negatives = competingNegatives.length >= negativeCount
+    ? competingNegatives.slice(0, negativeCount)
+    : [...competingNegatives, ...NEGATIVE_KEYWORD_SETS.slice(0, negativeCount - competingNegatives.length).map(kws => ({
+        tag: 'trigger_edge' as const,
+        input: kws,
+        expectedTrigger: false,
+        expectedBehavior: `這些關鍵字跟「${name}」的能力範圍無關，不應該觸發。`,
+      }))]
 
   return [...positives, ...negatives]
 }
@@ -1216,6 +1298,9 @@ export const useSkillStore = defineStore('skillStore', () => {
   // 跟存不存檔無關——草稿還沒存檔也一樣可能需要提醒「重新生成」
   const aiTestScenariosSnapshot = ref<string | null>(null)
   const aiTestIsGenerating = ref(false)
+  // 生成題目期間給使用者看的敘事文字（掃可調用 Agent／找搶觸發的相似技能／出題），
+  // 讓「生成中」不只是一顆乾乾的轉圈圈——每次 generateAITestScenarios() 都會重算
+  const aiTestGenerationNarration = ref<string[]>([])
 
   const flatSkills = computed<Skill[]>(() => {
     const result: Skill[] = []
@@ -1936,6 +2021,7 @@ export const useSkillStore = defineStore('skillStore', () => {
     aiTestScenariosSkillId.value = null
     aiTestScenariosSnapshot.value = null
     aiTestIsGenerating.value = false
+    aiTestGenerationNarration.value = []
   }
 
   // SkillTestAI.vue 可能被掛載在不同技能的畫面（獨立測試頁 / 抽屜內的測試 tab），
@@ -1947,7 +2033,21 @@ export const useSkillStore = defineStore('skillStore', () => {
       aiTestReport.value = null
       aiTestScenariosSkillId.value = null
       aiTestScenariosSnapshot.value = null
+      aiTestGenerationNarration.value = []
     }
+  }
+
+  // 手動建立精靈的「測試」步驟：使用者從測試步驟按「上一步」回到確認步驟時呼叫，
+  // 無條件清空目前的測試情境／報告——下次再進測試步驟要重新點「生成測試情境」，
+  // 不能延用舊的作答紀錄（跟 ensureAITestStateForSkill 不同，那個只在「換了一顆技能」
+  // 時才清，這裡是同一顆技能也要清，因為使用者明確離開了這個測試回合）
+  function resetAITestState(): void {
+    aiTestScenarios.value = []
+    aiTestReport.value = null
+    aiTestScenariosSkillId.value = null
+    aiTestScenariosSnapshot.value = null
+    aiTestIsGenerating.value = false
+    aiTestGenerationNarration.value = []
   }
 
   // draftContext：還沒存檔的草稿想先測試時，store 裡找不到這顆技能（或還是舊版本），
@@ -1969,19 +2069,29 @@ export const useSkillStore = defineStore('skillStore', () => {
   }
 
   async function generateAITestScenarios(skillId: string, draftContext?: TriggerEdgeSource): Promise<void> {
-    aiTestIsGenerating.value = true
     aiTestScenarios.value = []
     aiTestReport.value = null
     aiTestScenariosSkillId.value = skillId
-    await new Promise(r => setTimeout(r, 900))
+
+    // 敘事文字要在「生成中」那段時間就看得到，所以搶觸發的掃描（查可調用 Agent、
+    // 找相似技能）要在這裡先算好，不是等 900ms 的模擬延遲結束後才算
     const skill = findSkill(skillId)
     const source: TriggerEdgeSource | undefined = skill ?? draftContext
+    const competingSkills = skill
+      ? findCompetingSkills(skill, [...myPersonalSkills.value, ...flatSkills.value])
+      : []
+    aiTestGenerationNarration.value = MOCK_AI_SCENARIO_TEMPLATES[skillId]
+      ? [`正在為「${source?.name?.trim() || '這顆技能'}」產生測試情境...`]
+      : buildGenerationNarration(source, skill, competingSkills)
+    aiTestIsGenerating.value = true
+
+    await new Promise(r => setTimeout(r, 900))
     aiTestScenariosSnapshot.value = JSON.stringify({
       name: source?.name ?? '',
       triggerHint: source?.triggerHint ?? '',
       capabilities: source?.capabilities ?? [],
     })
-    const templates = MOCK_AI_SCENARIO_TEMPLATES[skillId] ?? generateDynamicTriggerEdgeScenarios(source)
+    const templates = MOCK_AI_SCENARIO_TEMPLATES[skillId] ?? generateDynamicTriggerEdgeScenarios(source, competingSkills)
     aiTestScenarios.value = templates.map((t, i) => ({
       ...t,
       id: `ai-sc-${skillId}-${i}`,
@@ -2111,6 +2221,7 @@ export const useSkillStore = defineStore('skillStore', () => {
     aiTestScenariosSnapshot,
     migrateAITestState,
     aiTestIsGenerating,
+    aiTestGenerationNarration,
     flatSkills,
     enabledCount,
     enterpriseExtensionCount,
@@ -2175,6 +2286,7 @@ export const useSkillStore = defineStore('skillStore', () => {
     setSelectedSkill,
     generateAITestScenarios,
     ensureAITestStateForSkill,
+    resetAITestState,
     answerAITestScenario,
     resetConversation,
     sendChatMessage,

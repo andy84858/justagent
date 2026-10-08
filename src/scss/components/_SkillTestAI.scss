@@ -42,6 +42,27 @@
       &:nth-child(3) { animation-delay: 0.4s; }
     }
   }
+
+  // 生成中的敘事文字：跟 SkillStudioChat 的 agent 對話泡泡同一套語彙（底色＋圓角），
+  // 讓「正在做什麼」讀起來像 Agent 主動講話，不是單純的狀態提示
+  .ai-generation-narration {
+    max-width: 420px;
+    background: var(--page-bg);
+    border: 1px solid var(--divider-a50);
+    border-radius: 12px;
+    border-bottom-left-radius: 4px;
+    padding: 12px 16px;
+    text-align: left;
+
+    p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-muted);
+
+      & + p { margin-top: 6px; }
+    }
+  }
 }
 
 @keyframes ai-bounce {

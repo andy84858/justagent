@@ -267,8 +267,7 @@ async function handleSaveAndEnable() {
   const skill = store.findSkill(id)
   if (!skill) return
   const outcome = await enableFlowRef.value!.requestEnable(skill, skill.assignedAgents ?? [])
-  // cancelled／goToTest／revise 都是留在原地：這裡本來就是編輯畫面本身，
-  // 「去修改技能內容」「前往測試」沒有別的地方好導過去，單純關掉對話框就好
+  // cancelled 留在原地：這裡本來就是編輯畫面本身，單純關掉對話框就好
   if (outcome.type !== 'confirmed') return
   store.setAssignedAgents(skill.id, outcome.agents)
   if (outcome.wasOverridden) store.overrideAndEnableSkill(skill.id)

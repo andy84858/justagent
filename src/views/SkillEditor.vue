@@ -52,18 +52,6 @@
             />
             <p class="se-hint">簡短精確，讓 Agent 在選用時能快速識別。</p>
           </div>
-          <div class="se-section">
-            <div class="se-label-row">
-              <label class="se-label">技能描述</label>
-              <span class="se-ai-badge">
-                <i class="material-symbols-outlined">auto_awesome</i>AI 自動生成
-              </span>
-            </div>
-            <div class="se-ai-desc">
-              <template v-if="existingSkill?.description">{{ existingSkill.description }}</template>
-              <span v-else class="se-ai-desc-hint">AI 將根據技能指令自動識別並填入描述</span>
-            </div>
-          </div>
         </template>
 
         <!-- Step 1：技能指令 -->
@@ -86,7 +74,7 @@
 
           <div class="se-section">
             <div class="se-secondary-section">
-              <label class="se-label">觸發時機（選填）</label>
+              <label class="se-label">觸發時機 <span class="se-required">*</span></label>
               <p class="se-hint">描述 Agent 在什麼情境下應優先選用此技能，幫助路由判斷更準確。</p>
               <textarea
                 v-model="form.triggerHint"
@@ -99,7 +87,7 @@
           </div>
 
           <div class="se-section">
-            <label class="se-label">覆蓋能力（選填）</label>
+            <label class="se-label">覆蓋能力 <span class="se-required">*</span></label>
             <p class="se-hint">拆解這個技能具體涵蓋哪些能力，例如「問題分類」「情緒分析」，方便之後在技能詳情快速掌握技能範圍。</p>
             <SkillCapabilityEditor v-model="form.capabilities" />
           </div>
@@ -179,7 +167,7 @@
 
       <!-- 底部導覽 -->
       <div class="se-footer">
-        <button v-if="canGoBack" class="custom-btn" @click="currentStep--">
+        <button v-if="canGoBack" class="custom-btn" @click="goBack">
           <i class="material-symbols-outlined">arrow_back</i>上一步
         </button>
         <span v-else />
@@ -199,9 +187,10 @@
           <button
             v-else-if="isTestStep"
             class="custom-btn custom-main-btn"
+            :disabled="testDoneDisabled"
             @click="router.push('/view/Skills')"
           >
-            <i class="material-symbols-outlined">check</i>完成
+            <i class="material-symbols-outlined">check</i>{{ testDoneLabel }}
           </button>
           <button
             v-else
@@ -263,6 +252,25 @@ function isStepLocked(i: number) {
 }
 const canGoBack = computed(() => currentStep.value > 0 && !isStepLocked(currentStep.value - 1))
 
+// 測試步驟的「完成」按鈕：沒生成過測試情境就是單純的「略過測試」捷徑，一律可按；
+// 生成過之後文字換成「測試完成，建立完成」，但要全部題目都作答完才能按，逼使用者
+// 真的把這輪測試跑完，不能生成題目後又放著不管就直接完成
+const hasGeneratedTestScenarios = computed(() =>
+  store.aiTestScenariosSkillId === createdSkillId.value && store.aiTestScenarios.length > 0
+)
+const allTestScenariosAnswered = computed(() =>
+  hasGeneratedTestScenarios.value && store.aiTestScenarios.every(s => s.status !== 'pending')
+)
+const testDoneLabel = computed(() => hasGeneratedTestScenarios.value ? '測試完成，建立完成' : '不啟用，建立完成')
+const testDoneDisabled = computed(() => hasGeneratedTestScenarios.value && !allTestScenariosAnswered.value)
+
+// 從測試步驟按「上一步」回確認步驟：清掉這輪的測試情境／報告，使用者再往前進測試
+// 步驟時得重新點「生成測試情境」，不能延用舊的作答紀錄
+function goBack() {
+  if (isTestStep.value) store.resetAITestState()
+  currentStep.value--
+}
+
 const existingSkill = editSkillId ? store.findSkill(editSkillId) : null
 const existingDraft = draftId ? (store.myDrafts as DraftSkill[]).find(d => d.id === draftId) ?? null : null
 
@@ -302,11 +310,13 @@ const willGoThroughEnableFlow = computed(() =>
   isEditMode && !!existingSkill && form.isEnabled && !existingSkill.isEnabled
 )
 
-// 唯一的必填限制（名稱）只卡在能不能往下一步走；指派 Agent 必填只卡在真正送出
-// （建立技能／儲存變更）那一刻，中途步驟之間可以留白
+// 唯一不受「只卡最終送出」限制的必填（名稱）卡在能不能往下一步走；觸發時機／覆蓋能力／
+// 指派 Agent 必填只卡在真正送出（建立技能／儲存變更）那一刻，中途步驟之間可以留白
 const missingRequiredFields = computed(() => {
   const missing: string[] = []
   if (!form.name.trim()) missing.push('技能名稱')
+  if (!form.triggerHint.trim()) missing.push('觸發時機')
+  if (!form.capabilities.length) missing.push('覆蓋能力')
   if (!willGoThroughEnableFlow.value && !form.assignedAgents.length) missing.push('指派 Agent')
   return missing
 })
@@ -344,14 +354,6 @@ async function handleSubmit() {
   if (isEditMode && editSkillId && existingSkill && form.isEnabled && !existingSkill.isEnabled) {
     const outcome = await enableFlowRef.value!.requestEnable(existingSkill, form.assignedAgents)
     if (outcome.type === 'cancelled') return
-    if (outcome.type === 'revise') {
-      router.push({ name: 'SkillManagement', query: { skillId: editSkillId } })
-      return
-    }
-    if (outcome.type === 'goToTest') {
-      router.push({ name: 'SkillManagement', query: { skillId: editSkillId, tab: 'test' } })
-      return
-    }
     form.assignedAgents = outcome.agents
     if (outcome.wasOverridden) store.overrideAndEnableSkill(editSkillId)
     store.updateSkill(editSkillId, { ...buildPayload(), isEnabled: true })

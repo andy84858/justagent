@@ -873,6 +873,24 @@
   }
 }
 
+// 啟用閘門對話框「立即測試」：就地嵌入 SkillTestAI，對話框放寬、內容區自己捲動
+.drawer-confirm-dialog.enable-gate-dialog.is-testing {
+  width: 640px;
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+
+  .enable-gate-test {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    text-align: left;
+    margin: 4px 0 16px;
+  }
+
+  .confirm-actions { justify-content: flex-end; }
+}
+
 .confirm-fade-enter-active { transition: opacity 0.15s; }
 .confirm-fade-leave-active { transition: opacity 0.12s; }
 .confirm-fade-enter-from,

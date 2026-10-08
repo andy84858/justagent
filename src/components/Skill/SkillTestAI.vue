@@ -6,7 +6,11 @@
       <div class="ai-idle-spinner">
         <span></span><span></span><span></span>
       </div>
-      <p>AI 正在分析技能描述並生成測試情境...</p>
+      <!-- 敘事文字講「正在做什麼」（查可調用 Agent、比對搶觸發的相似技能），不是一句
+           固定不變的罐頭字——每次生成／重新生成都會照當下掃描結果重算 -->
+      <div class="ai-generation-narration">
+        <p v-for="(line, i) in store.aiTestGenerationNarration" :key="i">{{ line }}</p>
+      </div>
     </div>
 
     <div v-else-if="!store.aiTestScenarios.length" class="ai-idle">
@@ -95,7 +99,7 @@
           </div>
           <p class="report-summary">{{ store.aiTestReport.summary }}</p>
           <button
-            v-if="isFullPass"
+            v-if="isFullPass && !props.embedded"
             type="button"
             class="custom-btn custom-main-btn ai-enable-btn"
             @click="handleEnableClick"
@@ -103,7 +107,7 @@
             <i class="material-symbols-outlined">check_circle</i>啟用技能
           </button>
           <button
-            v-else-if="showSaveAndEnable"
+            v-else-if="showSaveAndEnable && !props.embedded"
             type="button"
             class="custom-btn custom-main-btn ai-save-enable-btn"
             :disabled="!props.canSave"
@@ -115,13 +119,12 @@
       </div>
     </template>
 
-    <SkillEnableFlow ref="enableFlowRef" />
+    <SkillEnableFlow v-if="!props.embedded" ref="enableFlowRef" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useSkillStore } from '@/stores/skillStore'
 import type { AITestTag, TriggerEdgeSource } from '@/stores/skillStore'
 import SkillEnableFlow from '@/components/Skill/SkillEnableFlow.vue'
@@ -135,7 +138,10 @@ import SkillEnableFlow from '@/components/Skill/SkillEnableFlow.vue'
 // 存草稿（那是 conv.save() 的事）——用一個同步的 callback prop 直接拿到新技能 id，
 // 不用靠 emit 再等 props.skillId 反應更新那種跨好幾層元件的非同步 prop 傳遞，
 // 省掉一輪 nextTick 等待、也比較好測試
+// embedded：嵌在 SkillEnableFlow 的「還不能啟用」對話框裡就地測試時，啟用由對話框
+// 自己接手，這裡不顯示啟用按鈕、也不再掛一層 SkillEnableFlow
 const props = defineProps<{
+  embedded?: boolean
   skillId: string
   draftContext?: TriggerEdgeSource
   canSave?: boolean
@@ -143,7 +149,6 @@ const props = defineProps<{
 }>()
 const store = useSkillStore()
 const enableFlowRef = ref<InstanceType<typeof SkillEnableFlow> | null>(null)
-const router = useRouter()
 
 onMounted(() => store.ensureAITestStateForSkill(props.skillId))
 watch(() => props.skillId, (id) => store.ensureAITestStateForSkill(id))
@@ -164,21 +169,13 @@ async function handleEnableClick() {
   // 呼叫端要處理完整的 EnableFlowOutcome，不能假設只會 resolve confirmed
   const outcome = await enableFlowRef.value!.requestEnable(skill, skill.assignedAgents ?? [])
   if (outcome.type === 'cancelled') return
-  if (outcome.type === 'revise') {
-    router.push({ path: '/view/Skills', query: { skillId: skill.id } })
-    return
-  }
-  // 這顆按鈕只在 100% 全對時出現，isFullPass 已經保證 canEnableSkill() 為
-  // true，理論上不會走到閘門對話框、更不會拿到 goToTest——但呼叫端仍要處理
-  // 完整的 EnableFlowOutcome，不能假設只會 resolve confirmed
-  if (outcome.type === 'goToTest') return
   store.setAssignedAgents(skill.id, outcome.agents)
   if (outcome.wasOverridden) store.overrideAndEnableSkill(skill.id)
   else store.toggleSkill(skill.id)
 }
 
 // 還沒存檔、但已經有一份測試紀錄（不限 100%——沒全對的話存檔後會先看到
-// 「還不能啟用」閘門對話框，使用者可以當場選視為通過／去修改／取消，
+// 「還不能啟用」閘門對話框，使用者可以當場選立即測試／視為通過／取消，
 // 不用先存檔再回來找另一顆按鈕重新走一次）
 const showSaveAndEnable = computed(() => {
   if (store.findSkill(props.skillId)) return false
@@ -193,12 +190,6 @@ async function handleSaveAndEnable() {
   if (!skill) return
   const outcome = await enableFlowRef.value!.requestEnable(skill, skill.assignedAgents ?? [])
   if (outcome.type === 'cancelled') return
-  if (outcome.type === 'revise') {
-    router.push({ path: '/view/Skills', query: { skillId: skill.id } })
-    return
-  }
-  // 使用者在閘門對話框選「前往測試」：已經就在測試頁面了，不用額外導頁
-  if (outcome.type === 'goToTest') return
   store.setAssignedAgents(skill.id, outcome.agents)
   if (outcome.wasOverridden) store.overrideAndEnableSkill(skill.id)
   else store.toggleSkill(skill.id)

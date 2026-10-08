@@ -78,40 +78,6 @@ describe('SkillManagement 啟用前的測試閘門', () => {
     expect(new DOMWrapper(document.body).find('.enable-agent-dialog').exists()).toBe(false)
   })
 
-  it('決策對話框選「去修改技能內容」：導向 AI 賦能並帶 skillId，不切換 isEnabled', async () => {
-    setActivePinia(createPinia())
-    const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能3', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    const { wrapper, router } = await mountPage()
-    const push = vi.spyOn(router, 'push')
-    ;(wrapper.vm as any).detailSkillId = id
-    await wrapper.vm.$nextTick()
-    await new DOMWrapper(document.body).find('.dm-toggle-btn').trigger('click')
-
-    const reviseBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('去修改'))!
-    await reviseBtn.trigger('click')
-
-    expect(push).toHaveBeenCalledWith({ query: { skillId: id } })
-    expect(store.findSkill(id)!.isEnabled).toBe(false)
-  })
-
-  it('決策對話框選「前往測試」：導向同一頁並帶 skillId + tab=test，不切換 isEnabled', async () => {
-    setActivePinia(createPinia())
-    const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能3b', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    const { wrapper, router } = await mountPage()
-    const push = vi.spyOn(router, 'push')
-    ;(wrapper.vm as any).detailSkillId = id
-    await wrapper.vm.$nextTick()
-    await new DOMWrapper(document.body).find('.dm-toggle-btn').trigger('click')
-
-    const goToTestBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('前往測試'))!
-    await goToTestBtn.trigger('click')
-
-    expect(push).toHaveBeenCalledWith({ query: { skillId: id, tab: 'test' } })
-    expect(store.findSkill(id)!.isEnabled).toBe(false)
-  })
-
   it('已經全對過的技能：點「啟用技能」不彈閘門失敗對話框，但仍要過 Agent 確認才真的啟用', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()

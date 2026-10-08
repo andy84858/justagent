@@ -162,6 +162,85 @@ describe('generateAITestScenarios', () => {
     expect(store.aiTestScenarios.some(s => s.expectedTrigger === false)).toBe(true)
   })
 
+  it('搶觸發偵測：共用 Agent 又文字相似的技能，其關鍵字會被當成「觸發邊緣」反例，並在 expectedBehavior 指名是哪顆技能', async () => {
+    const store = useSkillStore()
+    const aId = store.createPersonalSkill({
+      name: '庫存查詢助手A', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      assignedAgents: ['客服中心助理'], capabilities: ['庫存查詢'],
+    })
+    const bId = store.createPersonalSkill({
+      name: '庫存查詢助手B', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      assignedAgents: ['客服中心助理'], capabilities: ['庫存盤點'],
+    })
+    await store.generateAITestScenarios(bId)
+    const negative = store.aiTestScenarios.find(s => s.input === '庫存查詢')
+    expect(negative).toBeDefined()
+    expect(negative!.expectedTrigger).toBe(false)
+    expect(negative!.expectedBehavior).toContain('庫存查詢助手A')
+    expect(negative!.expectedBehavior).toContain('庫存查詢助手B')
+    expect(store.findSkill(aId)).toBeDefined() // 只是確認上面建立成功，避免 aId 被當成未用變數
+  })
+
+  it('搶觸發偵測：沒有指派 Agent 時不比對任何競爭技能，反例全部退回無關關鍵字池', async () => {
+    const store = useSkillStore()
+    store.createPersonalSkill({
+      name: '沒指派助手A', instructions: 'x', triggerHint: '當使用者詢問測試時', assignedAgents: [], capabilities: ['測試能力'],
+    })
+    const bId = store.createPersonalSkill({
+      name: '沒指派助手B', instructions: 'x', triggerHint: '當使用者詢問測試時', assignedAgents: [], capabilities: ['測試能力'],
+    })
+    await store.generateAITestScenarios(bId)
+    expect(store.aiTestScenarios.some(s => s.expectedBehavior.includes('沒指派助手A'))).toBe(false)
+  })
+
+  it('搶觸發偵測：競爭技能的關鍵字剛好跟自己的正例一字不差時，直接丟掉這題，不會同一句輸入正反例矛盾', async () => {
+    const store = useSkillStore()
+    store.createPersonalSkill({
+      name: '完全同標籤A', instructions: 'x', triggerHint: 'y', assignedAgents: ['工程助理'], capabilities: ['共用標籤'],
+    })
+    const bId = store.createPersonalSkill({
+      name: '完全同標籤B', instructions: 'x', triggerHint: 'y', assignedAgents: ['工程助理'], capabilities: ['共用標籤'],
+    })
+    await store.generateAITestScenarios(bId)
+    const matches = store.aiTestScenarios.filter(s => s.input === '共用標籤')
+    expect(matches).toHaveLength(1)
+    expect(matches[0].expectedTrigger).toBe(true)
+  })
+
+  it('生成題目期間的敘事文字：有指派 Agent 時講出 Agent 跟找到的相似技能；沒指派時講另一套；每次生成都重算', async () => {
+    const store = useSkillStore()
+    const aId = store.createPersonalSkill({
+      name: '敘事技能A', instructions: '查詢庫存', triggerHint: '當使用者詢問庫存時',
+      assignedAgents: ['會議記錄助理'], capabilities: ['庫存查詢'],
+    })
+    const bId = store.createPersonalSkill({
+      name: '敘事技能B', instructions: '查詢庫存', triggerHint: '當使用者詢問庫存時',
+      assignedAgents: ['會議記錄助理'], capabilities: ['庫存查詢'],
+    })
+    await store.generateAITestScenarios(bId)
+    expect(store.aiTestGenerationNarration.some(l => l.includes('會議記錄助理'))).toBe(true)
+    expect(store.aiTestGenerationNarration.some(l => l.includes('敘事技能A'))).toBe(true)
+
+    const noAgentId = store.createPersonalSkill({ name: '敘事技能C', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    await store.generateAITestScenarios(noAgentId)
+    expect(store.aiTestGenerationNarration.some(l => l.includes('還沒有指派 Agent'))).toBe(true)
+    expect(store.aiTestGenerationNarration.some(l => l.includes('敘事技能A'))).toBe(false)
+    expect(store.findSkill(aId)).toBeDefined()
+  })
+
+  it('離開測試步驟（resetAITestState）或切換技能（ensureAITestStateForSkill）時，敘事文字一併清空', async () => {
+    const store = useSkillStore()
+    await store.generateAITestScenarios('sys-cs-001')
+    expect(store.aiTestGenerationNarration.length).toBeGreaterThan(0)
+    store.resetAITestState()
+    expect(store.aiTestGenerationNarration).toEqual([])
+
+    await store.generateAITestScenarios('sys-cs-001')
+    expect(store.aiTestGenerationNarration.length).toBeGreaterThan(0)
+    store.ensureAITestStateForSkill('ext-erp-001')
+    expect(store.aiTestGenerationNarration).toEqual([])
+  })
+
   it('resets previous scenarios and report when called again', async () => {
     const store = useSkillStore()
     await store.generateAITestScenarios('sys-cs-001')
