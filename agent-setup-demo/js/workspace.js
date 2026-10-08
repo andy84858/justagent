@@ -71,11 +71,11 @@ function renderNavTree(state) {
         '</div>' +
       '</div>';
   } else {
-    createNpcBlock = '<div class="ws-nav-create-npc hint" onclick="wsShowCreateNpcForm()">＋ 新增 NPC</div>';
+    createNpcBlock = '<div class="ws-nav-create-npc hint" onclick="wsShowCreateNpcForm()">＋ 新增 Agent</div>';
   }
 
   return (
-    '<div class="label">NPC／人物卡</div>' +
+    '<div class="label">Agent／人物卡</div>' +
     rows +
     createNpcBlock
   );
@@ -91,7 +91,7 @@ function wsValidateNpcCode(code, usedFor, npcs) {
   // the same [data-npc-row], with clicks on either opening whichever was created first.
   var duplicate = npcs.some(function (n) { return n.code === code; });
   if (duplicate) {
-    return '已有相同代碼的 NPC';
+    return '已有相同代碼的 Agent';
   }
   return null;
 }
@@ -193,7 +193,7 @@ function wsValidateVariantCode(code, npc) {
   }
   var duplicate = npc.variants.some(function (v) { return v.code === code; });
   if (duplicate) {
-    return '這個 NPC 底下已有相同代碼的人物卡';
+    return '這個 Agent 底下已有相同代碼的人物卡';
   }
   return null;
 }
@@ -625,7 +625,7 @@ function renderVariantModelTab(npc) {
   return (
     '<div class="ws-variant-field"><span class="label">對話模型</span>' + escapeHtml(chat) + '</div>' +
     '<div class="ws-variant-field"><span class="label">向量模型</span>' + escapeHtml(vector) + '</div>' +
-    '<div class="hint">模型版本鎖定將於後續階段提供；目前人物卡沿用 NPC 目前生效的模型。</div>'
+    '<div class="hint">模型版本鎖定將於後續階段提供；目前人物卡沿用 Agent 目前生效的模型。</div>'
   );
 }
 
@@ -1999,7 +1999,7 @@ function wsCloseVariantHistoryModal() {
 function renderCenterPane(state) {
   var sel = state.selection;
   if (!sel.npcCode) {
-    return '<div class="hint">請從左側選擇一個 NPC 或人物卡開始編輯。</div>';
+    return '<div class="hint">請從左側選擇一個 Agent 或人物卡開始編輯。</div>';
   }
   if (sel.variantCode) {
     return '<div id="ws-variant-pane"></div>';
