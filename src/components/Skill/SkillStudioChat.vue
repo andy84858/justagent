@@ -5,6 +5,22 @@
         <i class="material-symbols-outlined">{{ props.mode === 'create' ? 'auto_fix_high' : 'person' }}</i>
         {{ props.mode === 'create' ? '建立新技能' : `修改：${props.skillName}` }}
       </span>
+      <!-- 建立對話前可選，送出第一句後鎖住、只標示目前模式（ADR 0015） -->
+      <div v-if="props.showAdviceMode" class="ssc-advice-mode" role="group" aria-label="判斷模式">
+        <template v-if="!props.adviceModeLocked">
+          <button
+            v-for="opt in ADVICE_MODE_OPTIONS"
+            :key="opt.value"
+            type="button"
+            :class="['ssc-advice-btn', { 'is-active': props.adviceMode === opt.value }]"
+            :aria-pressed="props.adviceMode === opt.value"
+            @click="emit('change-advice-mode', opt.value)"
+          >{{ opt.label }}</button>
+        </template>
+        <span v-else class="ssc-advice-badge" title="對話開始後不能切換模式，想換請開新對話">
+          <i class="material-symbols-outlined">lock</i>{{ adviceModeLabel }}（對話中不能切換）
+        </span>
+      </div>
       <div class="ssc-head-actions" v-if="!props.compact">
         <select
           class="custom-input ssc-skill-select"
@@ -81,6 +97,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import type { Skill } from '@/stores/skillStore'
+import type { AdviceMode } from '@/services/skillConversationApi'
 import type { StudioMode, StudioMessage, StudioSuggestion } from '@/composables/useSkillStudioConversation'
 
 const props = defineProps<{
@@ -92,13 +109,25 @@ const props = defineProps<{
   suggestionChips: StudioSuggestion[]
   personalSkills: Skill[]
   compact?: boolean
+  showAdviceMode?: boolean
+  adviceMode?: AdviceMode
+  adviceModeLocked?: boolean
 }>()
 
 const emit = defineEmits<{
   send: [text: string]
   'switch-skill': [skillId: string]
   'new-skill': []
+  'change-advice-mode': [mode: AdviceMode]
 }>()
+
+const ADVICE_MODE_OPTIONS: { value: AdviceMode; label: string }[] = [
+  { value: 'jev', label: 'Jev＋LLM' },
+  { value: 'llm', label: '純 LLM' },
+]
+const adviceModeLabel = computed(
+  () => ADVICE_MODE_OPTIONS.find(o => o.value === (props.adviceMode ?? 'jev'))?.label ?? '',
+)
 
 const inputText = ref('')
 const inputEl = ref<HTMLInputElement | null>(null)
@@ -129,3 +158,32 @@ watch(() => props.messages.length, async () => {
   if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
 })
 </script>
+
+<style scoped lang="scss">
+.ssc-advice-mode {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.ssc-advice-btn {
+  padding: 2px 10px;
+  border: 1px solid #c9c9c9;
+  border-radius: 12px;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  &.is-active {
+    border-color: #4a6cf7;
+    background: #eef1ff;
+    color: #4a6cf7;
+  }
+}
+.ssc-advice-badge {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+  color: #666;
+  .material-symbols-outlined { font-size: 14px; }
+}
+</style>

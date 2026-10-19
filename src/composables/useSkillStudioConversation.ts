@@ -4,7 +4,7 @@ import type { ChatMessage, Skill, SkillCapability, SkillFile, AITestReport } fro
 export type { Skill }
 import { REPORT_CATEGORIES, SECTION_MAP } from '@/constants/reportSections'
 import { parseHashtags } from '@/utils/hashtags'
-import type { BackendNote } from '@/services/skillConversationApi'
+import type { AdviceMode, BackendNote } from '@/services/skillConversationApi'
 import {
   describeConversationError,
   openConversation,
@@ -419,11 +419,20 @@ export function useSkillStudioConversation() {
   // 後端對話（VITE_SKILL_AGENT_API=true 才啟用，沒開就維持下面的模擬回覆）：
   // 只有「新建＋對話方式」走後端；修改既有技能要後端的技能代號與版本，等技能清單接上後端再接
   const conversationId = ref<string | null>(null)
+  // 這場對話由誰判斷：Jev＋LLM 或純 LLM。建立對話時帶給後端，對話開始後就鎖住
+  const adviceMode = ref<AdviceMode>('jev')
+  const adviceModeLocked = computed(() => conversationId.value !== null)
   const note = ref<BackendNote>({ topic: '', steps: [] })   // 便利貼：後端暫存，儲存前顯示在預覽
   const blockedReasons = ref<string[]>([])   // 最近一輪被硬閘門擋下的白話原因，沒被擋是空陣列
   const errorHint = ref('')                  // 最近一次後端失敗的白話提示，成功後清空
   const backendEnabled = () => import.meta.env.VITE_SKILL_AGENT_API === 'true'
   const usesBackend = () => backendEnabled() && mode.value === 'create' && draft.value.method === 'chat'
+  const showAdviceModeSwitch = computed(() => usesBackend())
+
+  function setAdviceMode(next: AdviceMode): void {
+    if (adviceModeLocked.value) return
+    adviceMode.value = next
+  }
 
   const gateStage = ref<GateStage>('active')
   const pendingSimilarSkillId = ref<string | null>(null)
@@ -757,6 +766,7 @@ export function useSkillStudioConversation() {
     mode.value = 'create'
     savedSkillId.value = null
     conversationId.value = null
+    adviceMode.value = 'jev'
     note.value = { topic: '', steps: [] }
     blockedReasons.value = []
     errorHint.value = ''
@@ -869,8 +879,9 @@ export function useSkillStudioConversation() {
   async function sendToBackend(text: string): Promise<void> {
     try {
       if (!conversationId.value) {
-        const opened = await openConversation()
+        const opened = await openConversation(adviceMode.value)
         conversationId.value = opened.conversation_id
+        adviceMode.value = opened.advice_mode   // 以後端確認的模式為準
       }
       const turn = await sendConversationMessage(conversationId.value, text)
       errorHint.value = ''
@@ -1062,7 +1073,7 @@ export function useSkillStudioConversation() {
   }
 
   return {
-    mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, note, blockedReasons, errorHint, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestTestTab, requestNewSkillDrawer,
+    mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, adviceMode, adviceModeLocked, showAdviceModeSwitch, setAdviceMode, note, blockedReasons, errorHint, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestTestTab, requestNewSkillDrawer,
     startCreate, chooseMethod, updateBlocks, updateBlockDescription, updateBlockTriggerHint, updateBlockCapabilities, updateBlockAssignedAgents, updateBlockKeywords,
     loadSkill, send, save, updateFiles, notifyTestResult, toSnapshot, hydrate, detachSavedSkill,
   }

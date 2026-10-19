@@ -21,7 +21,11 @@
         :is-running="conv.isRunning.value"
         :suggestion-chips="conv.suggestionChips.value"
         :personal-skills="[]"
+        :show-advice-mode="conv.showAdviceModeSwitch.value"
+        :advice-mode="conv.adviceMode.value"
+        :advice-mode-locked="conv.adviceModeLocked.value"
         @send="conv.send"
+        @change-advice-mode="conv.setAdviceMode"
       />
       <div v-else class="studio-composer-col">
         <div class="studio-composer-head">

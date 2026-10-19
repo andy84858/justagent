@@ -96,6 +96,65 @@ describe('後端對話（VITE_SKILL_AGENT_API=true）', () => {
   })
 })
 
+describe('模式切換器（advice_mode）', () => {
+  const turn = { reply: 'hi', draft: null, note: { topic: '', steps: [] }, stage: 'START', blocked: [] }
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.stubEnv('VITE_SKILL_AGENT_API', 'true')
+    // 後端會把收到的模式原樣回傳
+    vi.mocked(api.openConversation).mockImplementation(async mode => ({ ...opened, advice_mode: mode ?? 'jev' }))
+    vi.mocked(api.sendConversationMessage).mockResolvedValue(turn)
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.resetAllMocks()
+  })
+
+  it('預設 Jev＋LLM', () => {
+    const c = startChat()
+    expect(c.adviceMode.value).toBe('jev')
+  })
+
+  it('選純 LLM，建立對話時帶 llm', async () => {
+    const c = startChat()
+    c.setAdviceMode('llm')
+    await c.send('做週報')
+    expect(api.openConversation).toHaveBeenCalledWith('llm')
+  })
+
+  it('沒選就帶 jev', async () => {
+    const c = startChat()
+    await c.send('做週報')
+    expect(api.openConversation).toHaveBeenCalledWith('jev')
+  })
+
+  it('對話開始後鎖住，切換無效', async () => {
+    const c = startChat()
+    c.setAdviceMode('llm')
+    expect(c.adviceModeLocked.value).toBe(false)
+    await c.send('做週報')
+    expect(c.adviceModeLocked.value).toBe(true)
+    c.setAdviceMode('jev')
+    expect(c.adviceMode.value).toBe('llm')
+  })
+
+  it('重開新對話：解鎖並回到預設', async () => {
+    const c = startChat()
+    c.setAdviceMode('llm')
+    await c.send('做週報')
+    c.startCreate()
+    expect(c.adviceModeLocked.value).toBe(false)
+    expect(c.adviceMode.value).toBe('jev')
+  })
+
+  it('建立對話失敗時不鎖，還能改選', async () => {
+    vi.mocked(api.openConversation).mockRejectedValueOnce(Object.assign(new Error('x'), { isAxiosError: true }))
+    const c = startChat()
+    await c.send('做週報')
+    expect(c.adviceModeLocked.value).toBe(false)
+  })
+})
+
 describe('describeConversationError', () => {
   it('後端 detail 原文帶出', () => {
     const err = Object.assign(new Error('x'), { isAxiosError: true, response: { status: 409, data: { detail: '對話已結束' } } })
