@@ -4,6 +4,12 @@ import type { ChatMessage, Skill, SkillCapability, SkillFile, AITestReport } fro
 export type { Skill }
 import { REPORT_CATEGORIES, SECTION_MAP } from '@/constants/reportSections'
 import { parseHashtags } from '@/utils/hashtags'
+import type { BackendNote } from '@/services/skillConversationApi'
+import {
+  describeConversationError,
+  openConversation,
+  sendConversationMessage,
+} from '@/services/skillConversationApi'
 
 // AI 賦能（SkillStudio）的對話狀態與規則式 mock 回覆。
 // 這裡是頁面唯一的狀態來源：左側對話、右側預覽都只讀這裡的 draft／messages。
@@ -13,6 +19,7 @@ export type StudioMethod = 'chat' | 'blocks'
 
 export interface SkillDraft {
   name: string
+  skillCode?: string            // 後端對話的技能代號（agent 用的英文代號）；name 放給使用者看的顯示名稱
   description: string
   instructions: string
   triggerHint: string
@@ -409,6 +416,15 @@ export function useSkillStudioConversation() {
   const isRunning = ref(false)
   let seq = 0
 
+  // 後端對話（VITE_SKILL_AGENT_API=true 才啟用，沒開就維持下面的模擬回覆）：
+  // 只有「新建＋對話方式」走後端；修改既有技能要後端的技能代號與版本，等技能清單接上後端再接
+  const conversationId = ref<string | null>(null)
+  const note = ref<BackendNote>({ topic: '', steps: [] })   // 便利貼：後端暫存，儲存前顯示在預覽
+  const blockedReasons = ref<string[]>([])   // 最近一輪被硬閘門擋下的白話原因，沒被擋是空陣列
+  const errorHint = ref('')                  // 最近一次後端失敗的白話提示，成功後清空
+  const backendEnabled = () => import.meta.env.VITE_SKILL_AGENT_API === 'true'
+  const usesBackend = () => backendEnabled() && mode.value === 'create' && draft.value.method === 'chat'
+
   const gateStage = ref<GateStage>('active')
   const pendingSimilarSkillId = ref<string | null>(null)
   const pausedDraft = ref<PausedDraft | null>(null)
@@ -740,6 +756,10 @@ export function useSkillStudioConversation() {
   function startCreate(prefill?: Partial<SkillDraft>, openingMessage?: string): void {
     mode.value = 'create'
     savedSkillId.value = null
+    conversationId.value = null
+    note.value = { topic: '', steps: [] }
+    blockedReasons.value = []
+    errorHint.value = ''
     draftTestId.value = generateDraftTestId()
     const base = emptyDraft()
     draft.value = {
@@ -770,7 +790,8 @@ export function useSkillStudioConversation() {
     if (draft.value.method) return
     draft.value = { ...draft.value, method }
     if (method === 'chat' && messages.value.length === 0) {
-      gateStage.value = 'intent'
+      // 後端自己有階段，不用前端的關卡分流
+      gateStage.value = backendEnabled() ? 'active' : 'intent'
       push({ role: 'agent', content: GATE_OPENING_MESSAGE })
     }
   }
@@ -843,11 +864,48 @@ export function useSkillStudioConversation() {
     return true
   }
 
+  // 一句話交給後端：第一句才開對話，之後都用同一個對話代號。
+  // 草稿以後端回傳的為準；被擋或失敗都在對話裡講清楚，不靜默
+  async function sendToBackend(text: string): Promise<void> {
+    try {
+      if (!conversationId.value) {
+        const opened = await openConversation()
+        conversationId.value = opened.conversation_id
+      }
+      const turn = await sendConversationMessage(conversationId.value, text)
+      errorHint.value = ''
+      blockedReasons.value = turn.blocked
+      note.value = turn.note
+      if (turn.draft) {
+        draft.value = {
+          ...draft.value,
+          name: turn.draft.display_name || turn.draft.name,
+          skillCode: turn.draft.name,
+          description: turn.draft.description,
+          instructions: turn.draft.content,
+        }
+      }
+      if (turn.reply) push({ role: 'agent', content: turn.reply })
+      if (turn.blocked.length) {
+        // 同一個原因可能被擋多次（模型同一輪重試），去重後一條一行
+        push({ role: 'agent', content: `這一步先不能做：\n${[...new Set(turn.blocked)].join('\n')}` })
+      }
+    } catch (error) {
+      errorHint.value = describeConversationError(error)
+      push({ role: 'agent', content: errorHint.value })
+    }
+  }
+
   async function send(text: string): Promise<void> {
     const t = text.trim()
     if (!t || isRunning.value) return
     push({ role: 'user', content: t })
     isRunning.value = true
+    if (usesBackend()) {
+      await sendToBackend(t)
+      isRunning.value = false
+      return
+    }
     await new Promise(r => setTimeout(r, 800))
 
     if (pausedDraft.value && wantsToResume(t, pausedDraft.value)) {
@@ -1004,7 +1062,7 @@ export function useSkillStudioConversation() {
   }
 
   return {
-    mode, savedSkillId, testSkillId, draft, messages, isRunning, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestTestTab, requestNewSkillDrawer,
+    mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, note, blockedReasons, errorHint, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestTestTab, requestNewSkillDrawer,
     startCreate, chooseMethod, updateBlocks, updateBlockDescription, updateBlockTriggerHint, updateBlockCapabilities, updateBlockAssignedAgents, updateBlockKeywords,
     loadSkill, send, save, updateFiles, notifyTestResult, toSnapshot, hydrate, detachSavedSkill,
   }

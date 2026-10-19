@@ -95,6 +95,7 @@
         hide-nav-links
         hide-footer
         :draft="conv.draft.value"
+        :note="conv.note.value"
         :mode="conv.mode.value"
         :saved-skill-id="conv.savedSkillId.value"
         :test-skill-id="conv.testSkillId.value"

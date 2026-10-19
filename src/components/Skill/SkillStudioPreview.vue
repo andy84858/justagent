@@ -29,6 +29,15 @@
           </div>
           <span :class="['ssp-status-badge', `ssp-status-badge--${status.tone}`]">{{ status.label }}</span>
         </div>
+        <div v-if="props.draft.skillCode" class="ssp-skill-code">代號：{{ props.draft.skillCode }}</div>
+
+        <div v-if="props.note?.steps.length" class="ssp-section">
+          <div class="ssp-section-label">便利貼（整理中，還不是正式內容）</div>
+          <p v-if="props.note.topic" class="ssp-text">{{ props.note.topic }}</p>
+          <ol class="ssp-text">
+            <li v-for="(step, i) in props.note.steps" :key="`${i}-${step}`">{{ step }}</li>
+          </ol>
+        </div>
 
         <div class="ssp-section">
           <div class="ssp-section-label">說明</div>
@@ -176,6 +185,8 @@ const props = defineProps<{
   // 轉傳給 SkillTestAI 的「儲存並啟用」用：同步存草稿、回傳新技能 id（見
   // useSkillStudioConversation.ts 的 save()）。這裡純轉手，不自己呼叫
   requestSaveDraft?: () => string | null
+  // 後端對話的便利貼（儲存前的暫存）；有步驟才顯示，沒傳就不顯示
+  note?: { topic: string; steps: string[] }
 }>()
 
 const emit = defineEmits<{
