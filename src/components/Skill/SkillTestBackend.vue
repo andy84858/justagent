@@ -124,8 +124,3 @@ function start() {
   if (props.conversationId) testStore.start(props.conversationId)
 }
 </script>
-
-<style scoped lang="scss">
-.tb-error { display: flex; gap: 6px; align-items: center; font-size: 13px; color: #b3261e; }
-.tb-hint { font-size: 12px; color: #666; margin-top: 6px; }
-</style>

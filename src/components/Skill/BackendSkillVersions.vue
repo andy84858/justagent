@@ -44,7 +44,3 @@ function formatDate(iso: string): string {
 
 watch(() => props.skillId, id => store.loadVersions(id), { immediate: true })
 </script>
-
-<style scoped lang="scss">
-.bsv-error { display: flex; gap: 6px; align-items: center; font-size: 13px; color: #b3261e; }
-</style>

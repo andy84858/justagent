@@ -41,7 +41,7 @@ describe('canEnableSkill', () => {
 
 describe('describeAiTestGateReason', () => {
   it('沒測過：說清楚要先測試，交卷就算、不用全對', () => {
-    const reason = describeAiTestGateReason(baseSkill())
+    const reason = describeAiTestGateReason()
     expect(reason).toContain('還沒測過')
     expect(reason).toContain('不用全部答對')
   })

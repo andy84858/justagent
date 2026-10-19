@@ -158,32 +158,3 @@ watch(() => props.messages.length, async () => {
   if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
 })
 </script>
-
-<style scoped lang="scss">
-.ssc-advice-mode {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-.ssc-advice-btn {
-  padding: 2px 10px;
-  border: 1px solid #c9c9c9;
-  border-radius: 12px;
-  background: transparent;
-  font-size: 12px;
-  cursor: pointer;
-  &.is-active {
-    border-color: #4a6cf7;
-    background: #eef1ff;
-    color: #4a6cf7;
-  }
-}
-.ssc-advice-badge {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  font-size: 12px;
-  color: #666;
-  .material-symbols-outlined { font-size: 14px; }
-}
-</style>

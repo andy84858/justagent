@@ -7,7 +7,7 @@
             <i class="material-symbols-outlined">rule</i>
           </div>
           <h4>還不能啟用「{{ gateSkill.name }}」</h4>
-          <p>{{ describeAiTestGateReason(gateSkill) }}</p>
+          <p>{{ describeAiTestGateReason() }}</p>
           <div class="confirm-actions confirm-actions--column">
             <button class="custom-btn" @click="resolveGoToTest">
               <i class="material-symbols-outlined">science</i>前往測試

@@ -1182,8 +1182,8 @@ export function canEnableSkill(skill: Skill): boolean {
 }
 
 // 啟用前的檢查沒過時，決策對話框要顯示的說明文字
-export function describeAiTestGateReason(skill: Skill): string {
-  return `這顆技能這一版還沒測過。請先做一次 AI 快速測試，交卷就算測過，不用全部答對。`
+export function describeAiTestGateReason(): string {
+  return '這顆技能這一版還沒測過。請先做一次 AI 快速測試，交卷就算測過，不用全部答對。'
 }
 
 export const useSkillStore = defineStore('skillStore', () => {
