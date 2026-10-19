@@ -104,7 +104,12 @@ const inputText = ref('')
 const inputEl = ref<HTMLInputElement | null>(null)
 const messagesEl = ref<HTMLElement | null>(null)
 
-const showSuggestions = computed(() => !props.messages.some(m => m.role === 'user'))
+// 原本用「有沒有使用者訊息」判斷對話是不是還停在剛打開的乾淨狀態——但現在開場白之後
+// 還可能被動推進第二則 agent 訊息（例如測試生成中的敘事文字，見
+// useSkillStudioConversation.ts 的 notifyTestGenerating），不是只有使用者回話這一種
+// 情況會讓對話「已經不是乾淨狀態了」。改成只看訊息數：開場白只有一則時才顯示建議，
+// 不管接下來多出來的是使用者回話還是 Agent 自己又講了一句
+const showSuggestions = computed(() => props.messages.length <= 1)
 
 function applySuggestion(chip: StudioSuggestion) {
   inputText.value = chip.prefill

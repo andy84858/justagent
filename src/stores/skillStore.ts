@@ -860,17 +860,47 @@ function bigramOverlapScore(a: string, b: string): number {
   return score
 }
 
-function findCompetingSkills(skill: Skill, candidates: Skill[]): Skill[] {
-  const agents = new Set(skill.assignedAgents ?? [])
-  if (agents.size === 0) return []
+function bestTextMatch(haystack: string, candidates: Skill[]): { skill: Skill; score: number } | null {
+  let best: { skill: Skill; score: number } | null = null
+  for (const s of candidates) {
+    const score = bigramOverlapScore(haystack, `${s.name}${s.triggerHint ?? ''}${s.instructions ?? ''}`)
+    if (score > 0 && (!best || score > best.score)) best = { skill: s, score }
+  }
+  return best
+}
+
+// 跟這顆技能「搶觸發」風險最高的候選：先看這顆技能指派給哪些 Agent，再從其他技能裡找出
+// 「也指派給至少一個同樣 Agent」的——同一個 Agent 要是能同時調用兩顆內容很像的技能，
+// 使用者講一句話時 Agent 该選哪一顆就會卡住。用 bigram 文字重疊比對（跟
+// useSkillStudioConversation.ts 的 findSimilarSkill 同一套比對邏輯，這裡不直接 import
+// 那邊的函式，避免 store 回頭依賴 composable）在這些候選裡挑重疊分數最高的最多兩顆。
+//
+// 這顆技能自己還沒有指派任何 Agent 時不直接放棄：改用純內容相似度在團隊內找最像的一顆，
+// 「索引」回它指派的 Agent 當線索借來用——inferredFrom 記下是借用了哪一顆，讓呼叫端
+// 可以在敘事文字裡講清楚這個推測從哪來，不是憑空冒出一群 Agent
+function findCompetingSkills(
+  skill: Skill,
+  candidates: Skill[],
+): { competing: Skill[]; inferredFrom?: Skill } {
   const haystack = `${skill.name}${skill.triggerHint ?? ''}${skill.instructions ?? ''}`
-  return candidates
+  let agents = new Set(skill.assignedAgents ?? [])
+  let inferredFrom: Skill | undefined
+
+  if (agents.size === 0) {
+    const best = bestTextMatch(haystack, candidates.filter(s => s.id !== skill.id && (s.assignedAgents ?? []).length > 0))
+    if (!best) return { competing: [] }
+    inferredFrom = best.skill
+    agents = new Set(best.skill.assignedAgents ?? [])
+  }
+
+  const competing = candidates
     .filter(s => s.id !== skill.id && (s.assignedAgents ?? []).some(a => agents.has(a)))
     .map(s => ({ skill: s, score: bigramOverlapScore(haystack, `${s.name}${s.triggerHint ?? ''}${s.instructions ?? ''}`) }))
     .filter(x => x.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 2)
     .map(x => x.skill)
+  return { competing, inferredFrom }
 }
 
 // 生成題目期間給使用者看的敘事文字，讓「生成中」不只是一顆乾乾的轉圈圈——
@@ -880,12 +910,17 @@ function buildGenerationNarration(
   source: TriggerEdgeSource | undefined,
   skill: Skill | undefined,
   competingSkills: Skill[],
+  inferredFrom: Skill | undefined,
 ): string[] {
   const name = source?.name?.trim() || '這顆技能'
   const agents = skill?.assignedAgents ?? []
   const lines: string[] = []
   if (agents.length === 0) {
-    lines.push(`「${name}」目前還沒有指派 Agent，先用技能本身的內容出題。`)
+    lines.push(
+      inferredFrom
+        ? `「${name}」目前還沒有指派 Agent，依技能內容判斷，推測與團隊內的「${inferredFrom.name}」相似，索引回它指派的 Agent：${(inferredFrom.assignedAgents ?? []).join('、')}，抓來作為測試，避免搶著被觸發。`
+        : `「${name}」目前還沒有指派 Agent，團隊內也找不到內容相近的技能，先用技能本身的內容出題。`,
+    )
   } else {
     lines.push(`正在查看「${name}」可調用的 Agent：${agents.join('、')}。`)
     lines.push(
@@ -2077,12 +2112,12 @@ export const useSkillStore = defineStore('skillStore', () => {
     // 找相似技能）要在這裡先算好，不是等 900ms 的模擬延遲結束後才算
     const skill = findSkill(skillId)
     const source: TriggerEdgeSource | undefined = skill ?? draftContext
-    const competingSkills = skill
+    const { competing: competingSkills, inferredFrom } = skill
       ? findCompetingSkills(skill, [...myPersonalSkills.value, ...flatSkills.value])
-      : []
+      : { competing: [], inferredFrom: undefined }
     aiTestGenerationNarration.value = MOCK_AI_SCENARIO_TEMPLATES[skillId]
       ? [`正在為「${source?.name?.trim() || '這顆技能'}」產生測試情境...`]
-      : buildGenerationNarration(source, skill, competingSkills)
+      : buildGenerationNarration(source, skill, competingSkills, inferredFrom)
     aiTestIsGenerating.value = true
 
     await new Promise(r => setTimeout(r, 900))
@@ -2154,6 +2189,20 @@ export const useSkillStore = defineStore('skillStore', () => {
     scenario.userAnswer = userAnswer
     scenario.status = userAnswer === scenario.expectedTrigger ? 'correct' : 'incorrect'
 
+    _computeAITestReport(skillId)
+  }
+
+  // 統一送答案：使用者先把每一題都選好（還沒送出前都算 pending，不逐題判分），
+  // 按「送出答案」才一次全部計分、只算一次報告。answers 沒涵蓋到的題目（理論上
+  // 不該發生，呼叫端要先確定全部選過才能按送出）維持 pending，不會被誤判
+  function submitAITestAnswers(skillId: string, answers: Record<string, boolean>): void {
+    for (const scenario of aiTestScenarios.value) {
+      if (scenario.status !== 'pending') continue
+      const userAnswer = answers[scenario.id]
+      if (userAnswer === undefined) continue
+      scenario.userAnswer = userAnswer
+      scenario.status = userAnswer === scenario.expectedTrigger ? 'correct' : 'incorrect'
+    }
     _computeAITestReport(skillId)
   }
 
@@ -2288,6 +2337,7 @@ export const useSkillStore = defineStore('skillStore', () => {
     ensureAITestStateForSkill,
     resetAITestState,
     answerAITestScenario,
+    submitAITestAnswers,
     resetConversation,
     sendChatMessage,
   }

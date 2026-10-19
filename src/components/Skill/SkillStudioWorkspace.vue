@@ -94,6 +94,7 @@
         hide-files
         hide-nav-links
         hide-footer
+        :hide-generation-narration="conv.draft.value.method === 'chat'"
         :draft="conv.draft.value"
         :mode="conv.mode.value"
         :saved-skill-id="conv.savedSkillId.value"
@@ -173,6 +174,22 @@ const saveClickEnabled = computed(() => hasTestRecord.value ? conv.canSave.value
 // 要不要在左側對話主動引導使用者調整內容
 watch(() => store.aiTestReport, report => {
   if (report) conv.notifyTestResult(report)
+})
+
+// 生成／重新生成測試情境中的敘事文字：對話建立的技能有真正的對話串，讓 Agent
+// 在裡面講這段話；conv.notifyTestGenerating 自己會判斷 method 是不是 'chat'，
+// 積木方式會是 no-op（維持顯示在右側測試 tab 自己的敘事泡泡）
+watch(() => store.aiTestGenerationNarration, narration => {
+  conv.notifyTestGenerating(narration)
+})
+
+// 題目真的生成完成的那一刻（aiTestIsGenerating 從 true 變 false，且確實生出了題目——
+// 跟「測試步驟按上一步被重設」那種 true→false 區分開，重設不會留下任何題目）：
+// 讓 Agent 在對話裡講一句「題目生成完成」，不是生成中的訊息講完就沒下文
+watch(() => store.aiTestIsGenerating, (isGenerating, wasGenerating) => {
+  if (!isGenerating && wasGenerating && store.aiTestScenarios.length > 0) {
+    conv.notifyTestGenerated()
+  }
 })
 
 // 使用者在引導訊息點「重新測試」：conv 自己呼叫得到 store.generateAITestScenarios，

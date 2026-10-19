@@ -139,8 +139,12 @@ describe('generateAITestScenarios', () => {
       capabilities: ['會員人物誌'],
     })
     await store.generateAITestScenarios(id)
-    expect(store.aiTestScenarios.some(s => s.input.includes('會員人物誌'))).toBe(true)
-    expect(store.aiTestScenarios.some(s => s.input.includes('庫存查詢'))).toBe(false)
+    // 只檢查正例（這顆技能自己的關鍵字來源）：反例現在可能因為「沒指派 Agent 時
+    // 借用團隊內最相似技能的 Agent」這個新功能，合理地帶進剛好也含「庫存查詢」
+    // 字樣的其他技能關鍵字，不代表觸發情境蓋過了覆蓋能力的優先順序
+    const positives = store.aiTestScenarios.filter(s => s.expectedTrigger)
+    expect(positives.some(s => s.input.includes('會員人物誌'))).toBe(true)
+    expect(positives.some(s => s.input.includes('庫存查詢'))).toBe(false)
   })
 
   it('動態產生的觸發邊緣題目，不管關鍵字多寡都至少 5 題（反例題庫會補齊）', async () => {
@@ -181,7 +185,7 @@ describe('generateAITestScenarios', () => {
     expect(store.findSkill(aId)).toBeDefined() // 只是確認上面建立成功，避免 aId 被當成未用變數
   })
 
-  it('搶觸發偵測：沒有指派 Agent 時不比對任何競爭技能，反例全部退回無關關鍵字池', async () => {
+  it('搶觸發偵測：沒有指派 Agent、團隊內也找不到內容相近的技能可借用時，反例全部退回無關關鍵字池', async () => {
     const store = useSkillStore()
     store.createPersonalSkill({
       name: '沒指派助手A', instructions: 'x', triggerHint: '當使用者詢問測試時', assignedAgents: [], capabilities: ['測試能力'],
@@ -190,7 +194,34 @@ describe('generateAITestScenarios', () => {
       name: '沒指派助手B', instructions: 'x', triggerHint: '當使用者詢問測試時', assignedAgents: [], capabilities: ['測試能力'],
     })
     await store.generateAITestScenarios(bId)
+    // 沒指派助手A 自己也沒有 Agent，不符合「借用」的候選資格（候選一定要本身有指派
+    // Agent 才借得到線索），所以不該出現在反例裡
     expect(store.aiTestScenarios.some(s => s.expectedBehavior.includes('沒指派助手A'))).toBe(false)
+  })
+
+  it('搶觸發偵測：沒有指派 Agent 時改用純內容相似度在團隊內找最像的技能，索引回它指派的 Agent 借來測試', async () => {
+    const store = useSkillStore()
+    const aId = store.createPersonalSkill({
+      name: '庫存盤點助手A', instructions: '盤點庫存數量與調撥記錄', triggerHint: '當使用者詢問庫存盤點或調撥時',
+      assignedAgents: ['倉儲管理助理'], capabilities: ['庫存盤點'],
+    })
+    const bId = store.createPersonalSkill({
+      name: '庫存盤點助手B', instructions: '盤點庫存數量與調撥記錄', triggerHint: '當使用者詢問庫存盤點或調撥時',
+      assignedAgents: [], capabilities: ['庫存覆核'],
+    })
+    await store.generateAITestScenarios(bId)
+
+    // 敘事文字要講出「推測相似」「借用的 Agent 是誰」，不是憑空冒出來的
+    const narration = store.aiTestGenerationNarration.join(' ')
+    expect(narration).toContain('庫存盤點助手A')
+    expect(narration).toContain('倉儲管理助理')
+    expect(narration).toContain('庫存盤點助手B')
+
+    // 借來的 Agent 要真的拿去找競爭技能：庫存盤點助手A 自己就是借用來源，
+    // 理所當然也會被抓進來當反例關鍵字
+    const negatives = store.aiTestScenarios.filter(s => !s.expectedTrigger)
+    expect(negatives.some(s => s.input.includes('庫存盤點'))).toBe(true)
+    expect(store.findSkill(aId)).toBeDefined() // 確認上面建立成功，避免 aId 被當成未用變數
   })
 
   it('搶觸發偵測：競爭技能的關鍵字剛好跟自己的正例一字不差時，直接丟掉這題，不會同一句輸入正反例矛盾', async () => {
@@ -410,5 +441,51 @@ describe('answerAITestScenario', () => {
     expect(skill.aiTestPassRate).toBeNull()
     expect(skill.aiTestOverridden).toBe(false)
     expect(skill.isEnabled).toBe(true) // 不會因為重新測驗就被打回停用
+  })
+})
+
+describe('submitAITestAnswers：統一送答案，一次全部計分', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('一次送出全部答案：每一題照各自答案計分，只算一次報告', async () => {
+    const store = useSkillStore()
+    await store.generateAITestScenarios('ext-erp-001')
+    const scenarios = [...store.aiTestScenarios]
+    const answers: Record<string, boolean> = {}
+    for (let i = 0; i < scenarios.length; i++) {
+      // 故意把最後一題答錯，確認批次計分真的是照各題各自的答案、不是全部當同一個值處理
+      answers[scenarios[i].id] = i === scenarios.length - 1 ? !scenarios[i].expectedTrigger : scenarios[i].expectedTrigger
+    }
+    store.submitAITestAnswers('ext-erp-001', answers)
+
+    expect(store.aiTestScenarios.every(s => s.status !== 'pending')).toBe(true)
+    expect(store.aiTestReport).not.toBeNull()
+    expect(store.aiTestReport!.total).toBe(scenarios.length)
+    expect(store.aiTestReport!.correct).toBe(scenarios.length - 1)
+  })
+
+  it('answers 沒涵蓋到的題目維持 pending，不產生報告（呼叫端要自己保證送出前已經全選）', async () => {
+    const store = useSkillStore()
+    await store.generateAITestScenarios('ext-erp-001')
+    const scenarios = [...store.aiTestScenarios]
+    const answers: Record<string, boolean> = { [scenarios[0].id]: scenarios[0].expectedTrigger }
+    store.submitAITestAnswers('ext-erp-001', answers)
+
+    expect(store.aiTestScenarios[0].status).not.toBe('pending')
+    expect(store.aiTestScenarios.slice(1).every(s => s.status === 'pending')).toBe(true)
+    expect(store.aiTestReport).toBeNull()
+  })
+
+  it('答對比例寫回技能的 aiTestPassRate，跟逐題作答的既有行為一致', async () => {
+    const store = useSkillStore()
+    const id = store.createPersonalSkill({ name: '批次送出技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    await store.generateAITestScenarios(id)
+    const scenarios = [...store.aiTestScenarios]
+    const answers = Object.fromEntries(scenarios.map(sc => [sc.id, sc.expectedTrigger]))
+    store.submitAITestAnswers(id, answers)
+
+    expect(store.findSkill(id)!.aiTestPassRate).toBe(1)
   })
 })

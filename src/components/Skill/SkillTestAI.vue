@@ -7,8 +7,12 @@
         <span></span><span></span><span></span>
       </div>
       <!-- 敘事文字講「正在做什麼」（查可調用 Agent、比對搶觸發的相似技能），不是一句
-           固定不變的罐頭字——每次生成／重新生成都會照當下掃描結果重算 -->
-      <div class="ai-generation-narration">
+           固定不變的罐頭字——每次生成／重新生成都會照當下掃描結果重算。對話建立的技能
+           有真正的對話串可以講這句話（見 SkillStudioWorkspace.vue 的
+           conv.notifyTestGenerating），這裡用 hideGenerationNarration 隱藏掉自己這份，
+           避免同一段話左右兩欄同時出現 -->
+      <div v-if="!props.hideGenerationNarration" class="ai-generation-narration">
+        <div class="ai-generation-narration-label">AI Agent</div>
         <p v-for="(line, i) in store.aiTestGenerationNarration" :key="i">{{ line }}</p>
       </div>
     </div>
@@ -26,9 +30,17 @@
     <template v-else>
       <div class="ai-toolbar">
         <div class="ai-toolbar-left">
-          <span class="ai-progress-text">已作答 {{ answeredCount }} / {{ store.aiTestScenarios.length }}</span>
+          <span class="ai-progress-text">已選 {{ answeredCount }} / {{ store.aiTestScenarios.length }}</span>
+          <button
+            v-if="!store.aiTestReport"
+            class="custom-btn custom-main-btn ai-submit-btn"
+            :disabled="!allAnswersSelected"
+            @click="submitAnswers"
+          >
+            送出答案
+          </button>
         </div>
-        <button class="custom-btn" @click="regenerate">
+        <button class="custom-btn ai-regenerate-btn" @click="regenerate">
           <i class="material-symbols-outlined">refresh</i>
           重新生成
         </button>
@@ -56,16 +68,36 @@
           <p class="scenario-question">這句話該不該觸發這顆技能？</p>
 
           <div v-if="sc.status === 'pending'" class="scenario-answer-btns">
-            <button class="custom-btn custom-btn--sm" @click="answer(sc.id, true)">該觸發</button>
-            <button class="custom-btn custom-btn--sm" @click="answer(sc.id, false)">不該觸發</button>
+            <button
+              type="button"
+              class="custom-btn custom-btn--sm"
+              :class="{ 'is-selected': draftAnswers[sc.id] === true }"
+              @click="selectAnswer(sc.id, true)"
+            >該觸發</button>
+            <button
+              type="button"
+              class="custom-btn custom-btn--sm"
+              :class="{ 'is-selected': draftAnswers[sc.id] === false }"
+              @click="selectAnswer(sc.id, false)"
+            >不該觸發</button>
           </div>
 
           <div v-else :class="['result-judgment', sc.status === 'correct' ? 'judgment--pass' : 'judgment--fail']">
-            <i class="material-symbols-outlined">
-              {{ sc.status === 'correct' ? 'check_circle' : 'cancel' }}
-            </i>
-            <strong>{{ sc.status === 'correct' ? '答對了' : '答錯了' }}</strong>
-            <span>正確答案是「{{ sc.expectedTrigger ? '該觸發' : '不該觸發' }}」。{{ sc.expectedBehavior }}</span>
+            <div class="result-judgment-head">
+              <i class="material-symbols-outlined">
+                {{ sc.status === 'correct' ? 'check_circle' : 'cancel' }}
+              </i>
+              <strong>{{ sc.status === 'correct' ? '答對了' : '答錯了' }}</strong>
+            </div>
+            <div class="result-answer-row">
+              <span :class="['result-answer-pill', sc.status === 'correct' ? 'pill--pass' : 'pill--fail']">
+                <span class="result-answer-pill-label">你的答案</span>{{ sc.userAnswer ? '該觸發' : '不該觸發' }}
+              </span>
+              <span class="result-answer-pill pill--neutral">
+                <span class="result-answer-pill-label">正確答案</span>{{ sc.expectedTrigger ? '該觸發' : '不該觸發' }}
+              </span>
+            </div>
+            <p class="result-explanation">{{ sc.expectedBehavior }}</p>
           </div>
         </div>
 
@@ -80,7 +112,7 @@
           </div>
           <div class="report-by-tag">
             <div
-              v-for="(label, tag) in TAG_LABELS"
+              v-for="(label, tag) in REPORT_TAG_LABELS"
               :key="tag"
               class="report-tag-row"
             >
@@ -128,6 +160,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useSkillStore } from '@/stores/skillStore'
 import type { AITestTag, TriggerEdgeSource } from '@/stores/skillStore'
 import SkillEnableFlow from '@/components/Skill/SkillEnableFlow.vue'
+import popDialog from '@/services/popDialog'
 
 // draftContext：抽屜裡測試還沒存檔的草稿時，store 裡找不到這顆技能（或技能存在
 // 但草稿已經改過還沒存），用這個當作組題關鍵字的來源。獨立測試沙盒（一定是已存檔
@@ -146,6 +179,9 @@ const props = defineProps<{
   draftContext?: TriggerEdgeSource
   canSave?: boolean
   requestSaveDraft?: () => string | null
+  // 呼叫端（SkillStudioPreview）有真正的對話串可以顯示生成中的敘事文字時傳 true，
+  // 隱藏掉這裡自己的敘事泡泡，避免同一段話左右兩欄同時出現
+  hideGenerationNarration?: boolean
 }>()
 const store = useSkillStore()
 const enableFlowRef = ref<InstanceType<typeof SkillEnableFlow> | null>(null)
@@ -201,24 +237,52 @@ const TAG_LABELS: Record<AITestTag, string> = {
   trigger_edge: '觸發邊緣',
 }
 
+// 測試報告只列「觸發邊緣」的分類統計，「正常流程」「邊界情況」不放進報告
+const REPORT_TAG_LABELS: Partial<Record<AITestTag, string>> = {
+  trigger_edge: TAG_LABELS.trigger_edge,
+}
+
 function tagLabel(tag: AITestTag): string {
   return TAG_LABELS[tag]
 }
 
+// 統一送答案：每一題先選答案（draftAnswers，純前端暫存、還沒送出前不計分），
+// 全部選完才能按「送出答案」一次送出、一次計分出報告——不是選一題就立刻知道對錯
+const draftAnswers = ref<Record<string, boolean>>({})
+
 const answeredCount = computed(() =>
-  store.aiTestScenarios.filter(s => s.status !== 'pending').length
+  store.aiTestScenarios.filter(s => s.status !== 'pending' || draftAnswers.value[s.id] !== undefined).length
 )
+
+const allAnswersSelected = computed(() => {
+  const pending = store.aiTestScenarios.filter(s => s.status === 'pending')
+  return pending.length > 0 && pending.every(s => draftAnswers.value[s.id] !== undefined)
+})
 
 const ratePercent = computed(() => {
   if (!store.aiTestReport || !store.aiTestReport.total) return 0
   return Math.round((store.aiTestReport.correct / store.aiTestReport.total) * 100)
 })
 
-function regenerate() {
-  store.generateAITestScenarios(props.skillId, props.draftContext)
+// 題目生成完成要讓使用者知道，不是生成中的敘事文字講完就沒下文。對話建立的技能
+// 有真正的對話串，由 SkillStudioWorkspace.vue 的 watcher 呼叫 conv.notifyTestGenerated()
+// 在裡面講這句話（見 hideGenerationNarration 同一組判斷）；這裡沒有對話串可用的
+// 其他畫面（自行建立精靈／積木方式／就地測試／獨立沙盒）用 toast 簡單提示一下
+async function regenerate() {
+  draftAnswers.value = {}
+  await store.generateAITestScenarios(props.skillId, props.draftContext)
+  if (!props.hideGenerationNarration) {
+    popDialog.toast('測試情境生成完成，開始作答吧！')
+  }
 }
 
-function answer(scenarioId: string, userAnswer: boolean) {
-  store.answerAITestScenario(props.skillId, scenarioId, userAnswer)
+function selectAnswer(scenarioId: string, userAnswer: boolean) {
+  draftAnswers.value = { ...draftAnswers.value, [scenarioId]: userAnswer }
+}
+
+function submitAnswers() {
+  if (!allAnswersSelected.value) return
+  store.submitAITestAnswers(props.skillId, draftAnswers.value)
+  draftAnswers.value = {}
 }
 </script>

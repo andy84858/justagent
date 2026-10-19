@@ -1388,6 +1388,66 @@ describe('notifyTestResult：AI 快速測試沒有全對時，左側對話主動
   })
 })
 
+describe('notifyTestGenerating：生成測試情境中的敘事文字，對話建立的技能要推進對話串', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('method 為 chat：推一則 agent 訊息，內容是敘事文字合併成一段', () => {
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('chat')
+    const before = c.messages.value.length
+    c.notifyTestGenerating(['正在查看可調用的 Agent：客服中心助理。', '正在產生測試情境...'])
+    expect(c.messages.value.length).toBe(before + 1)
+    const last = c.messages.value.at(-1)!
+    expect(last.role).toBe('agent')
+    expect(last.content).toContain('客服中心助理')
+    expect(last.content).toContain('正在產生測試情境')
+  })
+
+  it('method 為 blocks：no-op，不會推訊息（積木方式沒有對話串，維持顯示在測試 tab 自己的敘事泡泡）', () => {
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('blocks')
+    const before = c.messages.value.length
+    c.notifyTestGenerating(['正在查看可調用的 Agent：客服中心助理。'])
+    expect(c.messages.value.length).toBe(before)
+  })
+
+  it('空陣列（例如測試狀態被清空時）：no-op，不會推空白訊息', () => {
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('chat')
+    const before = c.messages.value.length
+    c.notifyTestGenerating([])
+    expect(c.messages.value.length).toBe(before)
+  })
+})
+
+describe('notifyTestGenerated：題目真的生成完成時，對話建立的技能要推一句完成訊息', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('method 為 chat：推一則 agent 訊息，內容提到生成完成', () => {
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('chat')
+    const before = c.messages.value.length
+    c.notifyTestGenerated()
+    expect(c.messages.value.length).toBe(before + 1)
+    const last = c.messages.value.at(-1)!
+    expect(last.role).toBe('agent')
+    expect(last.content).toContain('生成完成')
+  })
+
+  it('method 為 blocks：no-op，不會推訊息（積木方式沒有對話串）', () => {
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('blocks')
+    const before = c.messages.value.length
+    c.notifyTestGenerated()
+    expect(c.messages.value.length).toBe(before)
+  })
+})
+
 describe('修改模式下明確說要建立新技能：先確認，確認後捨棄目前修改開新流程', () => {
   beforeEach(() => setActivePinia(createPinia()))
 

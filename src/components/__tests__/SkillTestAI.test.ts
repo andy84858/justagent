@@ -4,10 +4,14 @@ import { setActivePinia, createPinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
 import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
 import { useSkillStore } from '@/stores/skillStore'
+import popDialog from '@/services/popDialog'
+
+vi.mock('@/services/popDialog', () => ({ default: { toast: vi.fn(), confirm: vi.fn(), alert: vi.fn() } }))
 
 describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.clearAllMocks()
   })
 
   it('初始空狀態：顯示「生成測試情境」按鈕', () => {
@@ -32,7 +36,49 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     expect(w.find('.ai-report').exists()).toBe(false)
   }, 10000)
 
-  it('答對：卡片顯示「答對了」，答案按鈕消失', async () => {
+  it('沒有 hideGenerationNarration（沒有對話串可用）：題目生成完成後跳 toast 提示；重新生成也一樣', async () => {
+    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
+    await w.find('button').trigger('click')
+    await new Promise(r => setTimeout(r, 950))
+    await w.vm.$nextTick()
+    expect(popDialog.toast).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(popDialog.toast).mock.calls[0][0]).toContain('生成完成')
+
+    await w.find('.ai-regenerate-btn').trigger('click')
+    await new Promise(r => setTimeout(r, 950))
+    await w.vm.$nextTick()
+    expect(popDialog.toast).toHaveBeenCalledTimes(2)
+  }, 10000)
+
+  it('hideGenerationNarration=true（對話建立的技能，由真正的對話串接手）：不跳 toast', async () => {
+    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001', hideGenerationNarration: true } })
+    await w.find('button').trigger('click')
+    await new Promise(r => setTimeout(r, 950))
+    await w.vm.$nextTick()
+    expect(popDialog.toast).not.toHaveBeenCalled()
+  }, 10000)
+
+  it('選答案：按鈕變選中樣式，但還不計分（不會立刻顯示答對／答錯）', async () => {
+    const store = useSkillStore()
+    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
+    await store.generateAITestScenarios('sys-cs-001')
+    await w.vm.$nextTick()
+
+    const sc = store.aiTestScenarios[0]
+    const card = w.findAll('.scenario-card')[0]
+    const correctBtnIndex = sc.expectedTrigger ? 0 : 1
+    const btns = card.findAll('.scenario-answer-btns button')
+    await btns[correctBtnIndex].trigger('click')
+    await w.vm.$nextTick()
+
+    expect(btns[correctBtnIndex].classes()).toContain('is-selected')
+    expect(btns[correctBtnIndex === 0 ? 1 : 0].classes()).not.toContain('is-selected')
+    expect(card.find('.scenario-answer-btns').exists()).toBe(true) // 還沒送出，按鈕沒消失
+    expect(card.text()).not.toContain('答對了')
+    expect(store.aiTestScenarios[0].status).toBe('pending')
+  }, 10000)
+
+  it('還沒全部選完：「送出答案」反灰，點了也不會計分', async () => {
     const store = useSkillStore()
     const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
     await store.generateAITestScenarios('sys-cs-001')
@@ -44,26 +90,74 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     await card.findAll('.scenario-answer-btns button')[correctBtnIndex].trigger('click')
     await w.vm.$nextTick()
 
-    expect(card.find('.scenario-answer-btns').exists()).toBe(false)
-    expect(card.text()).toContain('答對了')
-    expect(card.text()).toContain(sc.expectedTrigger ? '該觸發' : '不該觸發')
+    const submitBtn = w.find('.ai-submit-btn')
+    expect(submitBtn.attributes('disabled')).toBeDefined()
+    await submitBtn.trigger('click')
+    await w.vm.$nextTick()
+    expect(store.aiTestReport).toBeNull()
   }, 10000)
 
-  it('答錯：卡片顯示「答錯了」與正確答案說明', async () => {
+  it('全部選完按「送出答案」：一次計分，答對的卡片顯示「答對了」、答案按鈕消失', async () => {
     const store = useSkillStore()
     const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
     await store.generateAITestScenarios('sys-cs-001')
     await w.vm.$nextTick()
 
-    const sc = store.aiTestScenarios[0]
-    const card = w.findAll('.scenario-card')[0]
-    // 選跟正確答案相反的按鈕
-    const wrongBtnIndex = sc.expectedTrigger ? 1 : 0
-    await card.findAll('.scenario-answer-btns button')[wrongBtnIndex].trigger('click')
+    const scenarios = [...store.aiTestScenarios]
+    const cards = w.findAll('.scenario-card')
+    for (let i = 0; i < scenarios.length; i++) {
+      const correctBtnIndex = scenarios[i].expectedTrigger ? 0 : 1
+      await cards[i].findAll('.scenario-answer-btns button')[correctBtnIndex].trigger('click')
+    }
     await w.vm.$nextTick()
 
+    const submitBtn = w.find('.ai-submit-btn')
+    expect(submitBtn.attributes('disabled')).toBeUndefined()
+    await submitBtn.trigger('click')
+    await w.vm.$nextTick()
+
+    const sc = scenarios[0]
+    const card = cards[0]
+    expect(card.find('.scenario-answer-btns').exists()).toBe(false)
+    expect(card.text()).toContain('答對了')
+    expect(card.text()).toContain(sc.expectedTrigger ? '該觸發' : '不該觸發')
+    // 答對時，使用者自己選的答案 pill 跟正確答案 pill 應該顯示同一個字樣，且用「對」的樣式
+    const pills = card.findAll('.result-answer-pill')
+    expect(pills[0].classes()).toContain('pill--pass')
+    expect(pills[0].text()).toContain(sc.expectedTrigger ? '該觸發' : '不該觸發')
+    expect(store.aiTestReport).not.toBeNull()
+  }, 10000)
+
+  it('全部選完送出，其中一題答錯：卡片顯示「答錯了」、使用者自己選的答案，與正確答案說明', async () => {
+    const store = useSkillStore()
+    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
+    await store.generateAITestScenarios('sys-cs-001')
+    await w.vm.$nextTick()
+
+    const scenarios = [...store.aiTestScenarios]
+    const cards = w.findAll('.scenario-card')
+    for (let i = 0; i < scenarios.length; i++) {
+      // 第一題故意選跟正確答案相反的，其餘都選對，確保送出按鈕會啟用且第一題一定答錯
+      const btnIndex = i === 0
+        ? (scenarios[i].expectedTrigger ? 1 : 0)
+        : (scenarios[i].expectedTrigger ? 0 : 1)
+      await cards[i].findAll('.scenario-answer-btns button')[btnIndex].trigger('click')
+    }
+    await w.vm.$nextTick()
+    await w.find('.ai-submit-btn').trigger('click')
+    await w.vm.$nextTick()
+
+    const sc = scenarios[0]
+    const card = cards[0]
     expect(card.text()).toContain('答錯了')
-    expect(card.text()).toContain(sc.expectedBehavior)
+    expect(card.find('.result-explanation').text()).toBe(sc.expectedBehavior)
+    // 使用者自己選的答案跟正確答案各自是獨立的 UI 樣式（pill），不是埋在一句話裡——
+    // 選跟正確答案相反，所以這裡斷言兩顆 pill 的文字剛好相反
+    const pills = card.findAll('.result-answer-pill')
+    expect(pills[0].text()).toContain(sc.expectedTrigger ? '不該觸發' : '該觸發')
+    expect(pills[0].classes()).toContain('pill--fail')
+    expect(pills[1].text()).toContain(sc.expectedTrigger ? '該觸發' : '不該觸發')
+    expect(pills[1].classes()).toContain('pill--neutral')
   }, 10000)
 
   it('全部答完後顯示測試報告：答對題數、分類統計、總結文字', async () => {
@@ -82,6 +176,10 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     expect(report.text()).toContain(`${store.aiTestScenarios.length} / ${store.aiTestScenarios.length} 答對`)
     expect(report.text()).toContain('100%')
     expect(w.find('.report-summary').text()).toBeTruthy()
+    // 分類統計只留「觸發邊緣」，不列「正常流程」「邊界情況」
+    const tagRows = w.findAll('.report-tag-row').map(r => r.text())
+    expect(tagRows).toHaveLength(1)
+    expect(tagRows[0]).toContain('觸發邊緣')
   }, 10000)
 
   it('「重新生成」會清空已作答的情境重新出題', async () => {
@@ -92,7 +190,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     await w.vm.$nextTick()
     expect(w.findAll('.status-badge').length).toBeGreaterThan(0)
 
-    await w.find('.ai-toolbar button').trigger('click')
+    await w.find('.ai-regenerate-btn').trigger('click')
     await new Promise(r => setTimeout(r, 950))
     await w.vm.$nextTick()
 

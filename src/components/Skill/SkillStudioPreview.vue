@@ -129,6 +129,7 @@
           :draft-context="testDraftContext"
           :can-save="props.canSave"
           :request-save-draft="props.requestSaveDraft"
+          :hide-generation-narration="props.hideGenerationNarration"
         />
         <div v-if="props.savedSkillId" class="ssp-test-foot">
           <span class="ssp-test-foot-text">想手動模擬使用者對話，或比較不同版本？</span>
@@ -176,6 +177,10 @@ const props = defineProps<{
   // 轉傳給 SkillTestAI 的「儲存並啟用」用：同步存草稿、回傳新技能 id（見
   // useSkillStudioConversation.ts 的 save()）。這裡純轉手，不自己呼叫
   requestSaveDraft?: () => string | null
+  // 對話建立的技能有真正的對話串可以顯示生成中的敘事文字（見 SkillStudioWorkspace.vue
+  // 的 conv.notifyTestGenerating），這裡轉傳給 SkillTestAI 隱藏掉它自己的敘事泡泡，
+  // 避免同一段話在左右兩欄同時出現
+  hideGenerationNarration?: boolean
 }>()
 
 const emit = defineEmits<{

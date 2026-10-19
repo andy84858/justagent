@@ -1003,9 +1003,25 @@ export function useSkillStudioConversation() {
     snapshot.value = serialize(emptyDraft())
   }
 
+  // 生成／重新生成測試情境期間的敘事文字：只有對話建立的技能才有一個真正的對話串
+  // 可以推——把這段話當成 Agent 在對話裡講的一句話，而不是右側測試 tab 自己顯示的
+  // 敘事泡泡（那邊會依 method === 'chat' 隱藏掉，避免同一段話重複出現兩個地方）。
+  // 積木方式沒有對話串，維持顯示在測試 tab 自己的敘事泡泡，不會呼叫到這裡
+  function notifyTestGenerating(narration: string[]): void {
+    if (!narration.length || draft.value.method !== 'chat') return
+    push({ role: 'agent', content: narration.join('\n') })
+  }
+
+  // 題目真的生成完成（跟上面「生成中」的敘事文字是兩個時間點）：一樣只有對話建立的
+  // 技能才推這句話，讓使用者知道可以開始作答了，不是生成中的訊息講完就沒下文
+  function notifyTestGenerated(): void {
+    if (draft.value.method !== 'chat') return
+    push({ role: 'agent', content: '題目生成完成，可以開始作答囉！' })
+  }
+
   return {
     mode, savedSkillId, testSkillId, draft, messages, isRunning, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestTestTab, requestNewSkillDrawer,
     startCreate, chooseMethod, updateBlocks, updateBlockDescription, updateBlockTriggerHint, updateBlockCapabilities, updateBlockAssignedAgents, updateBlockKeywords,
-    loadSkill, send, save, updateFiles, notifyTestResult, toSnapshot, hydrate, detachSavedSkill,
+    loadSkill, send, save, updateFiles, notifyTestResult, notifyTestGenerating, notifyTestGenerated, toSnapshot, hydrate, detachSavedSkill,
   }
 }
