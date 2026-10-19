@@ -70,3 +70,47 @@ export async function sendConversationMessage(
   )
   return res.data
 }
+
+// 後端存的一個技能版本（SkillVersion）。同一技能的所有版本共用 skill_id
+export interface BackendSkillVersion {
+  skill_id: string
+  version: number
+  name: string          // 技能代號
+  display_name: string  // 給使用者看的名稱
+  description: string
+  content: string
+  tested: boolean       // 這一版是否測過
+  created_at: string
+}
+
+// 修改既有技能：從指定來源版本開對話，存回去會是新版本、來源版本不動
+export async function openModifyConversation(
+  skillId: string,
+  version: number,
+  adviceMode: AdviceMode = 'jev',
+): Promise<OpenedConversation> {
+  const res = await httpService.post<OpenedConversation>(
+    '/conversations',
+    { mode: 'modify', skill_id: skillId, version, advice_mode: adviceMode },
+    { timeout: AGENT_TIMEOUT_MS },
+  )
+  return res.data
+}
+
+// 按「儲存為個人技能」：後端把目前草稿寫成一個新版本
+export async function saveConversation(conversationId: string): Promise<BackendSkillVersion> {
+  const res = await httpService.post<BackendSkillVersion>(`/conversations/${conversationId}/save`)
+  return res.data
+}
+
+// 每個技能一筆，是它的最新版
+export async function listBackendSkills(): Promise<BackendSkillVersion[]> {
+  const res = await httpService.get<BackendSkillVersion[]>('/skills')
+  return res.data
+}
+
+// 某技能的所有版本，由舊到新
+export async function listBackendSkillVersions(skillId: string): Promise<BackendSkillVersion[]> {
+  const res = await httpService.get<BackendSkillVersion[]>(`/skills/${skillId}/versions`)
+  return res.data
+}

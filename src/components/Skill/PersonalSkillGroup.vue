@@ -23,7 +23,7 @@
     <div class="tile-foot">
       <div class="tile-meta">
         <span :class="['status-dot', skill.isEnabled ? 'dot--on' : 'dot--off']"></span>
-        <span class="status-text">{{ skill.isEnabled ? '啟用中' : (skill.aiTestPassRate == null ? '尚未測試' : '停用中') }}</span>
+        <span class="status-text">{{ statusText }}</span>
       </div>
     </div>
   </div>
@@ -50,6 +50,14 @@ const statusTagClass = computed(() => {
   if (props.skill.personalStatus === 'draft') return 'tag--draft'
   if (props.skill.personalStatus === 'reviewing') return 'tag--reviewing'
   return ''
+})
+
+// 後端技能卡片顯示最新版與有沒有測過；其餘維持原本的啟用／測試狀態文字
+const statusText = computed(() => {
+  const bv = props.skill.backendVersion
+  if (bv) return `第 ${bv.version} 版 · ${bv.tested ? '測過' : '沒測過'}`
+  if (props.skill.isEnabled) return '啟用中'
+  return props.skill.aiTestPassRate == null ? '尚未測試' : '停用中'
 })
 
 function formatCount(n: number): string {

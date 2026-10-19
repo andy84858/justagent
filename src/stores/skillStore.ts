@@ -135,6 +135,7 @@ export interface Skill {
   auditLog?: OperationRecord[]
   upstreamConflicts?: ConflictItem[]
   zone?: 'personal' | 'library'
+  backendVersion?: { version: number; tested: boolean }   // 後端技能的最新版與「測過」記號；只有後端模式的卡片會有
   personalStatus?: 'draft' | 'available' | 'reviewing' | 'has_library'
   derivedFrom?: string
   hasLibraryUpdate?: boolean

@@ -193,12 +193,15 @@
             </div>
           </div>
 
-          <div v-if="store.myPersonalSkills.length" class="my-skills-list">
+          <p v-if="backendSkills && backendStore.errorHint" class="my-skills-error">
+            <i class="material-symbols-outlined">error</i>{{ backendStore.errorHint }}
+          </p>
+          <div v-if="displaySkills.length" class="my-skills-list">
             <PersonalSkillGroup
               v-for="skill in pagedSkills"
               :key="skill.id"
               :skill="skill"
-              @manage="detailFromLibrary = false; detailFromTemplateManage = false; detailSkillId = $event.id"
+              @manage="onManageSkill"
             />
             <!-- 分頁 -->
             <div v-if="totalPages > 1" class="my-skills-pagination">
@@ -247,6 +250,7 @@
       :condensed="detailFromTemplateManage"
       @toggle="handleToggle"
       @edit="handleEdit"
+      @edit-version="openBackendModify"
       @delete="handlePersonalDelete"
       @duplicate="handleDuplicate"
       @submit="handlePersonalSubmit"
@@ -538,7 +542,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import AppBreadcrumb from '@/components/AppBreadcrumb.vue'
 import SkillTile from '@/components/Skill/SkillTile.vue'
@@ -550,6 +554,8 @@ import SkillReviewDrawer from '@/components/Skill/SkillReviewDrawer.vue'
 import UpstreamUpdateDrawer from '@/components/Skill/UpstreamUpdateDrawer.vue'
 import BatchUpdateModal from '@/components/Skill/BatchUpdateModal.vue'
 import { useSkillStore } from '@/stores/skillStore'
+import { useBackendSkillStore } from '@/stores/backendSkillStore'
+import type { BackendSkillVersion } from '@/services/skillConversationApi'
 import type { Skill, ConflictResolution, SkillSuggestionEntry } from '@/stores/skillStore'
 import { suggestionToPrefill, suggestionOpeningMessage } from '@/composables/useSkillSuggestion'
 import { setSkillHandoff } from '@/composables/useSkillHandoff'
@@ -563,9 +569,11 @@ const drawerRef = ref<InstanceType<typeof SkillStudioDrawer> | null>(null)
 
 // 抽屜開關與內容完全由這三個既有 query 參數決定，不新增額外旗標——
 // 跟 SkillStudioWorkspace.applyQuery() 判斷式用的是同一組參數
-const drawerOpen = computed(() => !!(route.query.skillId || route.query.method || route.query.from))
+const drawerOpen = computed(() => !!(route.query.skillId || route.query.method || route.query.from || route.query.backendSkillId))
 const drawerQuery = computed(() => ({
   skillId: route.query.skillId,
+  backendSkillId: route.query.backendSkillId,
+  version: route.query.version,
   method: route.query.method,
   from: route.query.from,
   tab: route.query.tab,
@@ -581,11 +589,11 @@ function closeDrawer() {
 // 因為抽屜開關本身就是同一個 /view/Skills 路由上的 query 變化
 onBeforeRouteUpdate((to, _from, next) => {
   if (!drawerRef.value?.isDirty) {
-    drawerRef.value?.applyQuery({ skillId: to.query.skillId, method: to.query.method, from: to.query.from, tab: to.query.tab, intent: to.query.intent })
+    drawerRef.value?.applyQuery({ skillId: to.query.skillId, backendSkillId: to.query.backendSkillId, version: to.query.version, method: to.query.method, from: to.query.from, tab: to.query.tab, intent: to.query.intent })
     return next()
   }
   popDialog.confirm('有未儲存的變更，確定要放棄嗎？', '放棄變更', '留下', () => {
-    drawerRef.value?.applyQuery({ skillId: to.query.skillId, method: to.query.method, from: to.query.from, tab: to.query.tab, intent: to.query.intent })
+    drawerRef.value?.applyQuery({ skillId: to.query.skillId, backendSkillId: to.query.backendSkillId, version: to.query.version, method: to.query.method, from: to.query.from, tab: to.query.tab, intent: to.query.intent })
     next()
   }, () => next(false))
 })
@@ -607,7 +615,7 @@ const detailFromLibrary = ref(false)
 const detailFromTemplateManage = ref(false)
 const detailSkill = computed<Skill | null>(() => {
   if (!detailSkillId.value) return null
-  return store.myPersonalSkills.find(s => s.id === detailSkillId.value)
+  return displaySkills.value.find(s => s.id === detailSkillId.value)
     ?? store.flatSkills.find(s => s.id === detailSkillId.value)
     ?? null
 })
@@ -643,11 +651,55 @@ const reviewSubTab = ref<'pending' | 'library'>('pending')
 // 分頁
 const PAGE_SIZE = 10
 const currentPage = ref(1)
+// 後端模式（VITE_SKILL_AGENT_API=true）：卡片資料換成後端技能，版面不變
+const backendSkills = import.meta.env.VITE_SKILL_AGENT_API === 'true'
+const backendStore = useBackendSkillStore()
+
+// 後端技能對到卡片用的 Skill：名稱、描述、最新版與測過記號；其餘卡片欄位沒有後端資料，用預設值
+function toTileSkill(v: BackendSkillVersion): Skill {
+  return {
+    id: v.skill_id,
+    name: v.display_name,
+    description: v.description,
+    type: 'extension',
+    origin: 'manually_created',
+    creationMethod: 'ai_assisted',
+    version: `第 ${v.version} 版`,
+    instructions: v.content,      // 後端的 content 對到前端的 instructions
+    triggerHint: v.description,   // 後端的 description（何時用）對到 triggerHint
+    isEnabled: false,
+    usageCount: 0,
+    testPassRate: 0,
+    avgLatencyMs: 0,
+    zone: 'personal',
+    backendVersion: { version: v.version, tested: v.tested },
+  }
+}
+const displaySkills = computed<Skill[]>(() =>
+  backendSkills ? backendStore.skills.map(toTileSkill) : store.myPersonalSkills
+)
+
+function onManageSkill(skill: Skill) {
+  detailFromLibrary.value = false
+  detailFromTemplateManage.value = false
+  detailSkillId.value = skill.id
+}
+
+// 從後端某一版進修改：用那一版開修改對話（存回去是新版本）
+function openBackendModify(skill: Skill, version: number) {
+  detailSkillId.value = null
+  router.push({ query: { backendSkillId: skill.id, version: String(version) } })
+}
+
+onMounted(() => {
+  if (backendSkills) backendStore.loadSkills()
+})
+
 const pagedSkills = computed(() => {
   const start = (currentPage.value - 1) * PAGE_SIZE
-  return store.myPersonalSkills.slice(start, start + PAGE_SIZE)
+  return displaySkills.value.slice(start, start + PAGE_SIZE)
 })
-const totalPages = computed(() => Math.max(1, Math.ceil(store.myPersonalSkills.length / PAGE_SIZE)))
+const totalPages = computed(() => Math.max(1, Math.ceil(displaySkills.value.length / PAGE_SIZE)))
 watch(totalPages, (tp) => {
   if (currentPage.value > tp) currentPage.value = tp
 })
@@ -751,6 +803,11 @@ function handleCreateManually() {
 }
 
 function handleEdit(skill: Skill) {
+  // 後端技能：編輯＝從最新版開修改對話
+  if (skill.backendVersion) {
+    openBackendModify(skill, skill.backendVersion.version)
+    return
+  }
   if (skill.zone !== 'personal') {
     router.push({ path: '/view/SkillEditor', query: { skillId: skill.id } })
     return
