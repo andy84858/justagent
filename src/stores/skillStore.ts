@@ -116,7 +116,6 @@ export interface Skill {
   usageCount: number
   testPassRate: number
   aiTestPassRate?: number | null   // AI 快速測試（選擇題）最近一次的答對比例；null／未定義＝從沒測過
-  aiTestOverridden?: boolean       // 使用者是否曾在測試沒有全對的情況下，選擇「視為通過，直接啟用」
   avgLatencyMs: number
   forkSourceId?: string
   forkSourceVersion?: string
@@ -1168,20 +1167,23 @@ const MOCK_DRAFTS: DraftSkill[] = [
   },
 ]
 
-// 個人技能是否可以啟用：AI 快速測試全對，或使用者已明確選擇「視為通過」。
+// 這一版有沒有「測過」：交過卷就算，不看對錯。後端技能看後端記的記號；
+// 假資料的技能看有沒有做完一輪 AI 快速測試（aiTestPassRate 有值）
+export function isSkillTested(skill: Skill): boolean {
+  if (skill.backendVersion) return skill.backendVersion.tested
+  return skill.aiTestPassRate != null
+}
+
+// 個人技能是否可以啟用：只看這一版測過沒有，不要求全對（ADR 0014）。
 // Library／系統技能（zone 不是 'personal'）不受這條規則限制，一律視為可以啟用。
 export function canEnableSkill(skill: Skill): boolean {
   if (skill.zone !== 'personal') return true
-  return skill.aiTestPassRate === 1 || !!skill.aiTestOverridden
+  return isSkillTested(skill)
 }
 
 // 啟用前的檢查沒過時，決策對話框要顯示的說明文字
 export function describeAiTestGateReason(skill: Skill): string {
-  if (skill.aiTestPassRate == null) {
-    return '這顆技能還沒有做過 AI 快速測試。'
-  }
-  const percent = Math.round(skill.aiTestPassRate * 100)
-  return `上次 AI 快速測試只有 ${percent}% 答對，還沒有全部答對。`
+  return `這顆技能這一版還沒測過。請先做一次 AI 快速測試，交卷就算測過，不用全部答對。`
 }
 
 export const useSkillStore = defineStore('skillStore', () => {
@@ -1344,22 +1346,6 @@ export const useSkillStore = defineStore('skillStore', () => {
     }
   }
 
-  // 使用者在啟用前的決策對話框裡選「視為通過，直接啟用」：跳過 AI 快速測試全對的要求，
-  // 記下這個選擇（aiTestOverridden），並直接把技能設成啟用
-  function overrideAndEnableSkill(id: string): void {
-    const skill = findSkill(id)
-    if (!skill) return
-    skill.aiTestOverridden = true
-    skill.isEnabled = true
-    skill.auditLog ??= []
-    skill.auditLog.unshift({
-      action: 'ENABLED',
-      by: '管理員',
-      time: new Date().toISOString(),
-    })
-    if (skill.auditLog.length > 20) skill.auditLog.length = 20
-  }
-
   function assignSkillToAgent(skillId: string, agentName: string): void {
     const skill = findSkill(skillId)
     if (!skill) return
@@ -1416,7 +1402,7 @@ export const useSkillStore = defineStore('skillStore', () => {
   // 用（submitDraft()），不再由這裡呼叫。
   //
   // isEnabled 不採用 data.isEnabled：個人技能建立時一律未啟用、未測試，要先通過
-  // AI 快速測試（或使用者明確選擇略過）才能開，見 canEnableSkill()／overrideAndEnableSkill()。
+  // 這一版測過（交卷即可，不用全對）才能開，見 canEnableSkill()。
   function createPersonalSkill(data: CreateSkillPayload): string {
     const id = `personal-${Date.now()}-${++personalSeq}`
     myPersonalSkillsRef.value.unshift({
@@ -1432,7 +1418,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       version: '初始版本',
       isEnabled: false,
       aiTestPassRate: null,
-      aiTestOverridden: false,
       usageCount: 0,
       testPassRate: 0,
       avgLatencyMs: 0,
@@ -1966,7 +1951,6 @@ export const useSkillStore = defineStore('skillStore', () => {
     if (!skill) return
     const rate = report.correct / report.total
     skill.aiTestPassRate = rate
-    if (rate === 1) skill.aiTestOverridden = false
   }
 
   async function generateAITestScenarios(skillId: string, draftContext?: TriggerEdgeSource): Promise<void> {
@@ -1993,7 +1977,6 @@ export const useSkillStore = defineStore('skillStore', () => {
     // 已經啟用的技能不會因為重新出題就被打回停用，見 canEnableSkill 只管「切成啟用」這個動作本身）
     if (skill) {
       skill.aiTestPassRate = null
-      skill.aiTestOverridden = false
     }
   }
 
@@ -2027,12 +2010,10 @@ export const useSkillStore = defineStore('skillStore', () => {
 
     aiTestReport.value = { total, correct, byTag, summary }
 
-    // 把這輪測驗的答對比例寫回技能記錄，供 canEnableSkill() 判斷能不能啟用；
-    // 全對的話順便把先前的「視為通過」覆蓋標記清掉——這次是真的靠自己過關，不需要再靠 override
+    // 把這輪測驗的答對比例寫回技能記錄；有值就代表這一版測過，供 canEnableSkill() 判斷能不能啟用
     const skill = findSkill(skillId)
     if (skill) {
       skill.aiTestPassRate = rate
-      if (rate === 1) skill.aiTestOverridden = false
     }
   }
 
@@ -2142,7 +2123,6 @@ export const useSkillStore = defineStore('skillStore', () => {
     updateSkill,
     updateSkillFiles,
     toggleSkill,
-    overrideAndEnableSkill,
     assignSkillToAgent,
     setAssignedAgents,
     mergeUpstreamUpdate,

@@ -114,3 +114,54 @@ export async function listBackendSkillVersions(skillId: string): Promise<Backend
   const res = await httpService.get<BackendSkillVersion[]>(`/skills/${skillId}/versions`)
   return res.data
 }
+
+export type TestAnswer = '該用' | '不該用'
+
+export interface TestQuestion {
+  id: string
+  text: string
+}
+
+// 出題：只有題號與題目文字，沒有標準答案與出題理由
+export interface StartedTest {
+  questions: TestQuestion[]
+  options: TestAnswer[]
+}
+
+export interface TestResultItem {
+  id: string
+  text: string
+  user_answer: TestAnswer
+  consistent: boolean   // 使用者的答案跟後端比對是否一致
+  failed: boolean       // 這題後端答題失敗（不算一致也不算不一致）
+}
+
+export interface SubmittedTest {
+  results: TestResultItem[]
+  tested: boolean
+}
+
+// 按「測試」：後端讀目前草稿重新出一批題，每次都是新的一批
+export async function startConversationTest(conversationId: string): Promise<StartedTest> {
+  const res = await httpService.post<StartedTest>(`/conversations/${conversationId}/test`, undefined, { timeout: AGENT_TIMEOUT_MS })
+  return res.data
+}
+
+// 交卷：每題都要有答案；後端逐題比對，交過卷這份草稿就算測過，不看對錯
+export async function submitConversationTest(
+  conversationId: string,
+  answers: Record<string, TestAnswer>,
+): Promise<SubmittedTest> {
+  const res = await httpService.post<SubmittedTest>(
+    `/conversations/${conversationId}/test/submit`,
+    { answers },
+    { timeout: AGENT_TIMEOUT_MS },
+  )
+  return res.data
+}
+
+// 啟用技能：後端只檢查最新一版有沒有測過（不要求全對）。沒測過回 409 加白話原因
+export async function activateBackendSkill(skillId: string): Promise<{ skill_id: string; version: number; activated: boolean }> {
+  const res = await httpService.post<{ skill_id: string; version: number; activated: boolean }>(`/skills/${skillId}/activate`)
+  return res.data
+}

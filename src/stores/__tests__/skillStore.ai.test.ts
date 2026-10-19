@@ -301,10 +301,9 @@ describe('answerAITestScenario', () => {
     expect(byTagCorrect).toBe(scenarios.length - 1)
   })
 
-  it('答完一輪後，答對比例會寫回這顆技能的 aiTestPassRate；aiTestOverridden 若曾為 true 且這次全對會被清掉', async () => {
+  it('答完一輪後，答對比例會寫回這顆技能的 aiTestPassRate（有值就是測過）', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '測試技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    store.overrideAndEnableSkill(id) // 模擬先前 override 過
     await store.generateAITestScenarios(id)
     const scenarios = [...store.aiTestScenarios]
     for (const sc of scenarios) {
@@ -312,13 +311,12 @@ describe('answerAITestScenario', () => {
     }
     const skill = store.findSkill(id)!
     expect(skill.aiTestPassRate).toBe(1)
-    expect(skill.aiTestOverridden).toBe(false)
   })
 
-  it('重新生成測驗：該技能的 aiTestPassRate／aiTestOverridden 重設為未測試狀態，isEnabled 不受影響', async () => {
+  it('重新生成測驗：該技能的 aiTestPassRate 重設為未測試狀態，isEnabled 不受影響', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '測試技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    store.overrideAndEnableSkill(id)
+    store.toggleSkill(id)
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
       store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
@@ -329,7 +327,6 @@ describe('answerAITestScenario', () => {
 
     const skill = store.findSkill(id)!
     expect(skill.aiTestPassRate).toBeNull()
-    expect(skill.aiTestOverridden).toBe(false)
     expect(skill.isEnabled).toBe(true) // 不會因為重新測驗就被打回停用
   })
 })

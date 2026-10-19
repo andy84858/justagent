@@ -667,7 +667,7 @@ function toTileSkill(v: BackendSkillVersion): Skill {
     version: `第 ${v.version} 版`,
     instructions: v.content,      // 後端的 content 對到前端的 instructions
     triggerHint: v.description,   // 後端的 description（何時用）對到 triggerHint
-    isEnabled: false,
+    isEnabled: backendStore.activatedIds.includes(v.skill_id),
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
@@ -752,6 +752,12 @@ const upstreamVersionForDetail = computed(() => {
 
 
 function handleTest(skill: Skill) {
+  // 後端技能：用最新版開對話並直接進測試 tab（題目、交卷都走後端）
+  if (skill.backendVersion) {
+    detailSkillId.value = null
+    router.push({ query: { backendSkillId: skill.id, version: String(skill.backendVersion.version), tab: 'test' } })
+    return
+  }
   router.push({ path: '/view/SkillTest', query: { skillId: skill.id } })
 }
 
@@ -939,6 +945,12 @@ function handleReject(skill: Skill, feedback: string) {
 }
 
 async function handleToggle(skill: Skill) {
+  // 後端技能：啟用交給後端檢查「這一版測過沒有」，沒測過就把原因講給使用者聽；後端沒有停用
+  if (skill.backendVersion) {
+    const result = await backendStore.activate(skill.id)
+    popDialog.toast(result.message)
+    return
+  }
   // 停用方向永遠允許，不用檢查、不用確認 Agent
   if (skill.isEnabled) {
     store.toggleSkill(skill.id)
@@ -955,8 +967,7 @@ async function handleToggle(skill: Skill) {
     return
   }
   store.setAssignedAgents(skill.id, outcome.agents)
-  if (outcome.wasOverridden) store.overrideAndEnableSkill(skill.id)
-  else store.toggleSkill(skill.id)
+  store.toggleSkill(skill.id)
 }
 
 function getDerivedFromName(derivedFrom: string): string {

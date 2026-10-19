@@ -35,14 +35,16 @@ describe('SkillDetailDrawer：後端技能', () => {
     expect(w.find('.markdown-body').text()).toContain('步驟')
   })
 
-  it('還沒接後端的操作不顯示：測試、複製、送審、啟用、刪除', async () => {
+  it('還沒接後端的操作不顯示：複製、送審、刪除；測試、編輯與啟用可用', async () => {
     const w = mountDrawer(backendSkill)
     await flushPromises()
     const text = w.text()
-    for (const label of ['測試', '複製', '送審', '啟用技能', '刪除此技能']) {
+    for (const label of ['複製', '送審', '刪除此技能']) {
       expect(text).not.toContain(label)
     }
     expect(text).toContain('編輯')
+    expect(text).toContain('測試')
+    expect(text).toContain('啟用技能')
   })
 
   it('版本歷史來自後端，從某一版修改會發出事件', async () => {
@@ -53,5 +55,27 @@ describe('SkillDetailDrawer：後端技能', () => {
     await flushPromises()
     await w.find('.vt-item button').trigger('click')
     expect(w.emitted('editVersion')![0]).toEqual([backendSkill, 1])
+  })
+})
+
+describe('SkillDetailDrawer：後端技能啟用', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.resetAllMocks()
+    vi.mocked(api.listBackendSkillVersions).mockResolvedValue([])
+  })
+
+  it('按「啟用技能」發出 toggle 事件，交給外殼呼叫後端', async () => {
+    const w = mountDrawer(backendSkill)
+    await flushPromises()
+    await w.find('.dm-toggle-btn').trigger('click')
+    expect(w.emitted('toggle')![0]).toEqual([backendSkill])
+  })
+
+  it('已啟用：不顯示停用鈕（後端沒有停用），狀態寫啟用中', async () => {
+    const w = mountDrawer({ ...backendSkill, isEnabled: true, backendVersion: { version: 2, tested: true } })
+    await flushPromises()
+    expect(w.find('.dm-toggle-btn').exists()).toBe(false)
+    expect(w.find('.dh-status').text()).toContain('啟用中')
   })
 })

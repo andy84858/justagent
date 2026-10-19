@@ -53,9 +53,11 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
     expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(true)
   })
 
-  it('決策對話框選「視為通過」，Agent 確認對話框勾選並送出：技能被啟用，接著照原本流程導回技能管理頁', async () => {
+  it('測過但有題目不一致：不擋，Agent 確認對話框勾選並送出後技能被啟用，接著照原本流程導回技能管理頁', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    await store.generateAITestScenarios(id)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.expectedTrigger) // 全部不一致
     const { wrapper, router } = await mountEditFor(id)
     ;(wrapper.findComponent(SkillEditor).vm as any).currentStep = 2
     await wrapper.vm.$nextTick()
@@ -63,10 +65,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
     await wrapper.find('.se-footer button.custom-main-btn').trigger('click')
     await flushPromises()
 
-    const overrideBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('視為通過'))!
-    await overrideBtn.trigger('click')
-    await flushPromises()
-
+    expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
     expect(store.findSkill(id)!.isEnabled).toBe(false) // 還在 Agent 確認步驟，還沒真的啟用
     const agentDialog = new DOMWrapper(document.body).find('.enable-agent-dialog')
     expect(agentDialog.exists()).toBe(true)
@@ -76,7 +75,6 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
     await flushPromises()
 
     expect(store.findSkill(id)!.isEnabled).toBe(true)
-    expect(store.findSkill(id)!.aiTestOverridden).toBe(true)
     expect(store.findSkill(id)!.assignedAgents).toEqual(['通用助理'])
     expect(router.currentRoute.value.path).toBe('/view/Skills')
   })

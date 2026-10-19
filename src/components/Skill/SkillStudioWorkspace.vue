@@ -85,7 +85,13 @@
         </button>
         <p v-if="backendSave && conv.savedVersion.value" class="studio-saved-hint">
           <i class="material-symbols-outlined">check_circle</i>
-          已存成第 {{ conv.savedVersion.value.version }} 版，{{ conv.savedVersion.value.tested ? '這一版測過' : '這一版還沒測過' }}
+          {{ conv.lastSaveKind.value === 'marked' ? '已記下' : '已存成' }}第 {{ conv.savedVersion.value.version }} 版，{{ conv.savedVersion.value.tested ? '這一版測過' : '這一版還沒測過' }}
+        </p>
+        <p v-if="backendSave && conv.testedNote.value" class="studio-saved-hint">
+          <i class="material-symbols-outlined">check_circle</i>這份草稿已測過。{{ conv.testedNote.value }}
+        </p>
+        <p v-if="backendSave && conv.backendSaveAction.value.hint" class="studio-missing-hint">
+          <i class="material-symbols-outlined">info</i>{{ conv.backendSaveAction.value.hint }}
         </p>
         <p v-if="backendSave && conv.errorHint.value" class="studio-missing-hint">
           <i class="material-symbols-outlined">error</i>{{ conv.errorHint.value }}
@@ -114,6 +120,9 @@
         :can-save="conv.canSave.value"
         :name-conflict="nameConflict"
         :request-save-draft="conv.save"
+        :backend-test="backendSave"
+        :conversation-id="conv.conversationId.value"
+        :tested-note="conv.testedNote.value"
         @save="onSave"
         @discard="onDiscard"
       />
@@ -174,7 +183,7 @@ const hasTestRecord = computed(() =>
 )
 
 const saveButtonLabel = computed(() => {
-  if (backendSave.value) return conv.backendSkillId.value ? '儲存為新版本' : '儲存為個人技能'
+  if (backendSave.value) return conv.backendSaveAction.value.label
   if (hasTestRecord.value) return '儲存並啟用'
   return conv.mode.value === 'create' ? '儲存為個人技能' : '儲存修改'
 })
@@ -184,7 +193,7 @@ const saveButtonLabel = computed(() => {
 // 流程（例如重新確認 Agent 指派）。沒有測試紀錄的一般存檔維持原本 saveEnabled
 // 的規則（要有改動才能按）
 const saveClickEnabled = computed(() => {
-  if (backendSave.value) return conv.canSave.value && (conv.isDirty.value || !conv.savedVersion.value)
+  if (backendSave.value) return conv.backendSaveAction.value.enabled
   return hasTestRecord.value ? conv.canSave.value : conv.saveEnabled.value
 })
 
@@ -282,6 +291,10 @@ async function onBackendSave() {
     popDialog.toast(conv.errorHint.value || '儲存失敗，請稍後再試')
     return
   }
+  if (conv.lastSaveKind.value === 'marked') {
+    popDialog.toast(`已記下第 ${saved.version} 版測過，沒有新增版本`)
+    return
+  }
   popDialog.toast(wasCreate ? `已儲存為個人技能（第 ${saved.version} 版）` : `已存成新版本（第 ${saved.version} 版），舊版本沒有動`)
 }
 
@@ -314,8 +327,7 @@ async function handleSaveAndEnable() {
   // 「去修改技能內容」「前往測試」沒有別的地方好導過去，單純關掉對話框就好
   if (outcome.type !== 'confirmed') return
   store.setAssignedAgents(skill.id, outcome.agents)
-  if (outcome.wasOverridden) store.overrideAndEnableSkill(skill.id)
-  else if (!skill.isEnabled) store.toggleSkill(skill.id)
+  if (!skill.isEnabled) store.toggleSkill(skill.id)
 }
 
 function handleSaveClick() {

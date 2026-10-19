@@ -29,11 +29,6 @@
       <div class="skill-card-meta">
         <span :class="['status-dot', skill.isEnabled ? 'dot--on' : 'dot--off']"></span>
         <span class="status-text">{{ skill.isEnabled ? '啟用中' : (skill.zone === 'personal' && skill.aiTestPassRate == null ? '尚未測試' : '已停用') }}</span>
-        <i
-          v-if="skill.isEnabled && skill.aiTestOverridden"
-          class="material-symbols-outlined status-override-icon"
-          title="測試沒有全對，使用者選擇直接啟用"
-        >warning</i>
       </div>
       <div class="skill-card-actions" @click.stop>
         <button

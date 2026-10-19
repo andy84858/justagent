@@ -353,7 +353,6 @@ async function handleSubmit() {
       return
     }
     form.assignedAgents = outcome.agents
-    if (outcome.wasOverridden) store.overrideAndEnableSkill(editSkillId)
     store.updateSkill(editSkillId, { ...buildPayload(), isEnabled: true })
     router.push('/view/Skills')
     return

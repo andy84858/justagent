@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
+  activateBackendSkill,
   describeConversationError,
   listBackendSkills,
   listBackendSkillVersions,
@@ -14,6 +15,8 @@ export const useBackendSkillStore = defineStore('backendSkills', () => {
   const skills = ref<BackendSkillVersion[]>([])                       // 每個技能的最新版
   const versionsBySkill = ref<Record<string, BackendSkillVersion[]>>({})
   const loading = ref(false)
+  // 啟用中的技能代號。後端的啟用只做「測過」檢查、不記啟用狀態，所以這裡只在這次開啟期間有效
+  const activatedIds = ref<string[]>([])
   const errorHint = ref('')                                           // 最近一次讀取失敗的白話提示
 
   async function loadSkills(): Promise<void> {
@@ -42,5 +45,16 @@ export const useBackendSkillStore = defineStore('backendSkills', () => {
     await Promise.all([loadSkills(), loadVersions(skillId)])
   }
 
-  return { skills, versionsBySkill, loading, errorHint, loadSkills, loadVersions, refreshAfterSave }
+  // 啟用：交給後端檢查最新一版測過沒有（不要求全對）；沒測過就把後端的白話原因帶回給畫面
+  async function activate(skillId: string): Promise<{ ok: boolean; message: string }> {
+    try {
+      const done = await activateBackendSkill(skillId)
+      if (!activatedIds.value.includes(skillId)) activatedIds.value = [...activatedIds.value, skillId]
+      return { ok: true, message: `已啟用（第 ${done.version} 版）` }
+    } catch (error) {
+      return { ok: false, message: describeConversationError(error) }
+    }
+  }
+
+  return { skills, versionsBySkill, loading, errorHint, activatedIds, loadSkills, loadVersions, refreshAfterSave, activate }
 })

@@ -2,6 +2,7 @@ import { setActivePinia, createPinia } from 'pinia'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useSkillStudioConversation } from '@/composables/useSkillStudioConversation'
 import * as api from '@/services/skillConversationApi'
+import { useBackendTestStore } from '@/stores/backendTestStore'
 
 vi.mock('@/services/skillConversationApi', async importOriginal => ({
   ...(await importOriginal<typeof import('@/services/skillConversationApi')>()),
@@ -11,6 +12,8 @@ vi.mock('@/services/skillConversationApi', async importOriginal => ({
   saveConversation: vi.fn(),
   listBackendSkills: vi.fn().mockResolvedValue([]),
   listBackendSkillVersions: vi.fn().mockResolvedValue([]),
+  startConversationTest: vi.fn(),
+  submitConversationTest: vi.fn(),
 }))
 
 const opened: api.OpenedConversation = { conversation_id: 'c1', mode: 'create', advice_mode: 'jev', reply: '', draft: null, note: { topic: '', steps: [] }, stage: 'START', blocked: [] }
@@ -258,6 +261,30 @@ describe('儲存與修改（後端技能）', () => {
     expect(c.errorHint.value).toBe('找不到這個版本')
   })
 
+  it('草稿被改過：該場對話已出的題與答案作廢，要重新測', async () => {
+    vi.mocked(api.startConversationTest).mockResolvedValue({ questions: [{ id: '1', text: 'q' }], options: ['該用', '不該用'] })
+    const c = startChat()
+    await c.send('做週報')
+    const tests = useBackendTestStore()
+    await tests.start('c1')
+    expect(tests.stateOf('c1').phase).toBe('answering')
+    vi.mocked(api.sendConversationMessage).mockResolvedValue({
+      ...draftTurn, draft: { ...draftTurn.draft, content: '# 改過的步驟' },
+    })
+    await c.send('步驟改一下')
+    expect(tests.stateOf('c1').phase).toBe('idle')
+  })
+
+  it('草稿沒變：測試不受影響', async () => {
+    vi.mocked(api.startConversationTest).mockResolvedValue({ questions: [{ id: '1', text: 'q' }], options: ['該用', '不該用'] })
+    const c = startChat()
+    await c.send('做週報')
+    const tests = useBackendTestStore()
+    await tests.start('c1')
+    await c.send('隨口問一句')
+    expect(tests.stateOf('c1').phase).toBe('answering')
+  })
+
   it('startCreate 重開：技能代號與已存版本清掉', async () => {
     vi.mocked(api.saveConversation).mockResolvedValue(savedV1)
     const c = startChat()
@@ -266,6 +293,82 @@ describe('儲存與修改（後端技能）', () => {
     c.startCreate()
     expect(c.backendSkillId.value).toBeNull()
     expect(c.savedVersion.value).toBeNull()
+  })
+})
+
+describe('儲存按鈕的狀態（沒改內容時不新增版本）', () => {
+  const modifyOpened = { ...opened, conversation_id: 'c9', mode: 'modify' as const, draft: draftTurn.draft }
+  async function openedModify() {
+    vi.mocked(api.openModifyConversation).mockResolvedValue(modifyOpened)
+    const c = useSkillStudioConversation()
+    await c.loadBackendSkill('s1', 1)
+    return c
+  }
+  const markTested = (id: string) => {
+    useBackendTestStore().states = { [id]: { phase: 'submitted', questions: [], options: [], answers: {}, results: [], tested: true, errorHint: '' } }
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.stubEnv('VITE_SKILL_AGENT_API', 'true')
+    vi.mocked(api.listBackendSkills).mockResolvedValue([])
+    vi.mocked(api.listBackendSkillVersions).mockResolvedValue([])
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.resetAllMocks()
+  })
+
+  it('修改、沒改內容、沒測過：不能存，講原因', async () => {
+    const c = await openedModify()
+    expect(c.backendSaveAction.value.enabled).toBe(false)
+    expect(c.backendSaveAction.value.hint).toContain('沒有新版本可存')
+  })
+
+  it('修改、沒改內容、測過：按鈕變「記下測過」可按', async () => {
+    const c = await openedModify()
+    markTested('c9')
+    expect(c.backendSaveAction.value).toMatchObject({ label: '記下測過', enabled: true })
+    expect(c.testedNote.value).toContain('記下測過')
+  })
+
+  it('修改、有改內容：存成新版本，提示測過會一起記在新版本', async () => {
+    const c = await openedModify()
+    vi.mocked(api.sendConversationMessage).mockResolvedValue({ ...draftTurn, draft: { ...draftTurn.draft, content: '# 改過' } })
+    await c.send('改一下')
+    markTested('c9')
+    expect(c.backendSaveAction.value).toMatchObject({ label: '儲存為新版本', enabled: true })
+    expect(c.testedNote.value).toContain('新版本')
+  })
+
+  it('記下測過：不當成新版本，回報是標記', async () => {
+    const c = await openedModify()
+    markTested('c9')
+    vi.mocked(api.saveConversation).mockResolvedValue({ ...savedV1, version: 1, tested: true })
+    const saved = await c.saveToBackend()
+    expect(saved?.version).toBe(1)
+    expect(c.lastSaveKind.value).toBe('marked')
+    expect(c.backendSaveAction.value.enabled).toBe(false)
+  })
+
+  it('存了新版本之後沒改、又去測過：能「記下測過」標在剛存的那一版', async () => {
+    const c = await openedModify()
+    vi.mocked(api.sendConversationMessage).mockResolvedValue({ ...draftTurn, draft: { ...draftTurn.draft, content: '# 改過' } })
+    await c.send('改一下')
+    vi.mocked(api.saveConversation).mockResolvedValue({ ...savedV1, version: 2, tested: false })
+    await c.saveToBackend()
+    expect(c.lastSaveKind.value).toBe('new')
+    expect(c.backendSaveAction.value.enabled).toBe(false)
+    markTested('c9')
+    expect(c.backendSaveAction.value).toMatchObject({ label: '記下測過', enabled: true })
+  })
+
+  it('新建、還沒存：維持「儲存為個人技能」，有草稿就能存', async () => {
+    vi.mocked(api.openConversation).mockResolvedValue({ ...opened })
+    vi.mocked(api.sendConversationMessage).mockResolvedValue(draftTurn)
+    const c = startChat()
+    await c.send('做週報')
+    expect(c.backendSaveAction.value).toMatchObject({ label: '儲存為個人技能', enabled: true })
   })
 })
 

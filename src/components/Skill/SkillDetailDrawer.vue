@@ -34,11 +34,6 @@
                     <span class="dh-status-dot"></span>
                     {{ statusText }}
                   </span>
-                  <i
-                    v-if="!libraryView && skill.isEnabled && skill.aiTestOverridden"
-                    class="material-symbols-outlined dh-status-override-icon"
-                    title="測試沒有全對，使用者選擇直接啟用"
-                  >warning</i>
                 </div>
               </div>
             </div>
@@ -52,6 +47,9 @@
                 </button>
               </template>
               <template v-else-if="isBackend">
+                <button class="custom-btn dh-btn" @click="emit('test', skill!)">
+                  <i class="material-symbols-outlined">science</i>測試
+                </button>
                 <button class="custom-btn dh-btn" @click="emit('edit', skill!)">
                   <i class="material-symbols-outlined">edit</i>編輯
                 </button>
@@ -122,7 +120,7 @@
               <div class="dm-lbl">本月使用</div>
             </div>
             <!-- 個人技能審核中不能切換啟用/停用，避免動到正在被審核的內容 -->
-            <div v-if="!isBackend && ((isPersonal && skill.personalStatus !== 'reviewing') || manageable)" class="dm-toggle">
+            <div v-if="(!isBackend || !skill.isEnabled) && ((isPersonal && skill.personalStatus !== 'reviewing') || manageable)" class="dm-toggle">
               <button
                 class="custom-btn dm-toggle-btn btn--danger-ghost"
                 @click="emit('toggle', skill!)"
@@ -452,13 +450,13 @@ const compareV2Id = ref('')
 const md = new MarkdownIt({ html: false, breaks: true, linkify: false })
 
 const isPersonal = computed(() => props.skill?.zone === 'personal')
-// 後端技能：只有編輯與版本可用，測試／啟用／複製／送審／刪除還沒接後端
+// 後端技能：編輯、測試、啟用（只能啟用，後端沒有停用）與版本可用，複製／送審／刪除還沒接後端
 const isBackend = computed(() => !!props.skill?.backendVersion)
 
 const statusText = computed(() => {
   const s = props.skill
   if (!s) return ''
-  if (s.backendVersion) return `第 ${s.backendVersion.version} 版 · ${s.backendVersion.tested ? '測過' : '沒測過'}`
+  if (s.backendVersion) return `${s.isEnabled ? '啟用中 · ' : ''}第 ${s.backendVersion.version} 版 · ${s.backendVersion.tested ? '測過' : '沒測過'}`
   if (s.isEnabled) return '啟用中'
   return isPersonal.value && s.aiTestPassRate == null ? '尚未測試' : '已停用'
 })

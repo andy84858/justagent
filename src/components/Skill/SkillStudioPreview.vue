@@ -128,7 +128,11 @@
     <!-- ── 測試：不用先存檔，草稿內容就能先測；題目跟目前草稿內容不一致時
          （改過 name／triggerHint／覆蓋能力）才提示重新生成，跟存不存檔無關 ── -->
     <template v-else>
-      <div v-if="effectiveTestId" class="ssp-test-body">
+      <!-- 後端模式：測試走後端（題目、交卷比對都在後端），不用下面的假資料測試 -->
+      <div v-if="props.backendTest" class="ssp-test-body">
+        <SkillTestBackend :conversation-id="props.conversationId ?? null" :tested-note="props.testedNote" />
+      </div>
+      <div v-else-if="effectiveTestId" class="ssp-test-body">
         <div v-if="testContentStale" class="ssp-stale-banner">
           <i class="material-symbols-outlined">info</i>
           內容已變更，建議重新生成測試情境
@@ -159,6 +163,7 @@ import { useSkillStore } from '@/stores/skillStore'
 import type { SkillFile, TriggerEdgeSource } from '@/stores/skillStore'
 import type { SkillDraft, StudioMode } from '@/composables/useSkillStudioConversation'
 import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
+import SkillTestBackend from '@/components/Skill/SkillTestBackend.vue'
 import SkillFileUpload from '@/components/Skill/SkillFileUpload.vue'
 
 const store = useSkillStore()
@@ -185,6 +190,10 @@ const props = defineProps<{
   // 轉傳給 SkillTestAI 的「儲存並啟用」用：同步存草稿、回傳新技能 id（見
   // useSkillStudioConversation.ts 的 save()）。這裡純轉手，不自己呼叫
   requestSaveDraft?: () => string | null
+  // 後端模式的測試：用這場後端對話出題與交卷；testedNote 是測過之後怎麼把記號記下來的說明
+  backendTest?: boolean
+  conversationId?: string | null
+  testedNote?: string
   // 後端對話的便利貼（儲存前的暫存）；有步驟才顯示，沒傳就不顯示
   note?: { topic: string; steps: string[] }
 }>()

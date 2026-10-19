@@ -151,7 +151,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     expect(store.findSkill(id)!.assignedAgents).toEqual(['通用助理'])
   })
 
-  it('confirmed outcome 帶 wasOverridden=true 時呼叫 overrideAndEnableSkill 而非 toggleSkill', async () => {
+  it('confirmed outcome：指派 Agent 並啟用技能', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能3', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
@@ -168,7 +168,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     // 所以改成透過 SkillTestAI 自己的 enableFlowRef（在其未呼叫 defineExpose 的完整 dev proxy 上可讀到）
     // 取得同一個 exposed 物件來 stub，才能真正攔截 handleEnableClick 內的呼叫。
     const enableFlowRef = (wrapper.vm as any).enableFlowRef
-    vi.spyOn(enableFlowRef, 'requestEnable').mockResolvedValue({ type: 'confirmed', agents: ['通用助理'], wasOverridden: true })
+    vi.spyOn(enableFlowRef, 'requestEnable').mockResolvedValue({ type: 'confirmed', agents: ['通用助理'] })
 
     await wrapper.find('.ai-enable-btn').trigger('click')
     await wrapper.vm.$nextTick()
@@ -176,7 +176,6 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
 
     const skill = store.findSkill(id)!
     expect(skill.isEnabled).toBe(true)
-    expect(skill.aiTestOverridden).toBe(true)
     expect(skill.assignedAgents).toEqual(['通用助理'])
   })
 
@@ -206,7 +205,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
   it('已經啟用的技能：即使報告 100% 全對，也不顯示「啟用技能」按鈕（避免誤按變成停用）', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '已啟用技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    store.overrideAndEnableSkill(id) // 繞過閘門直接啟用，模擬「已經是上線中的技能」
+    store.toggleSkill(id) // 模擬「已經是上線中的技能」
     expect(store.findSkill(id)!.isEnabled).toBe(true)
 
     await store.generateAITestScenarios(id)
@@ -389,7 +388,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
       expect(new DOMWrapper(document.body).find('.enable-agent-dialog').exists()).toBe(false)
     })
 
-    it('沒全對：存檔後看到「還不能啟用」閘門對話框，選「視為通過」接著走 Agent 確認', async () => {
+    it('沒全對：存檔後照樣測過，不擋，直接走 Agent 確認', async () => {
       const store = useSkillStore()
       await store.generateAITestScenarios('draft-xyz', { name: '草稿技能2', triggerHint: 'y', capabilities: [] })
       const scenarios = [...store.aiTestScenarios]
@@ -400,7 +399,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
       store.answerAITestScenario('draft-xyz', scenarios.at(-1)!.id, scenarios.at(-1)!.expectedTrigger)
       expect(store.aiTestReport!.correct).not.toBe(store.aiTestReport!.total)
 
-      // migrateAITestState 不會寫入 aiTestPassRate（沒有全對），canEnableSkill 仍是 false
+      // 存檔時 migrateAITestState 把這輪結果記到新技能上：測過就能啟用，不看對錯
       const requestSaveDraft = () => {
         const realId = store.createPersonalSkill({ name: '草稿技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
         store.migrateAITestState('draft-xyz', realId)
@@ -412,12 +411,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
       await wrapper.find('.ai-save-enable-btn').trigger('click')
       await wrapper.vm.$nextTick()
 
-      const gateDialog = new DOMWrapper(document.body).find('.enable-gate-dialog')
-      expect(gateDialog.exists()).toBe(true)
-      const overrideBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('視為通過'))!
-      await overrideBtn.trigger('click')
-      await wrapper.vm.$nextTick()
-
+      expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
       const agentDialog = new DOMWrapper(document.body).find('.enable-agent-dialog')
       expect(agentDialog.exists()).toBe(true)
       await agentDialog.findAll('.se-agent-chip').find(c => c.text().includes('通用助理'))!.trigger('click')
@@ -425,7 +419,6 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
 
       const realId = store.aiTestScenariosSkillId!
       expect(store.findSkill(realId)!.isEnabled).toBe(true)
-      expect(store.findSkill(realId)!.aiTestOverridden).toBe(true)
     })
   })
 })

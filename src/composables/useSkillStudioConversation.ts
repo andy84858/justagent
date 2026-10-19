@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { useSkillStore } from '@/stores/skillStore'
+import { useSkillStore, canEnableSkill } from '@/stores/skillStore'
 import type { ChatMessage, Skill, SkillCapability, SkillFile, AITestReport } from '@/stores/skillStore'
 export type { Skill }
 import { REPORT_CATEGORIES, SECTION_MAP } from '@/constants/reportSections'
@@ -13,6 +13,7 @@ import {
   sendConversationMessage,
 } from '@/services/skillConversationApi'
 import { useBackendSkillStore } from '@/stores/backendSkillStore'
+import { useBackendTestStore } from '@/stores/backendTestStore'
 
 // AI 賦能（SkillStudio）的對話狀態與規則式 mock 回覆。
 // 這裡是頁面唯一的狀態來源：左側對話、右側預覽都只讀這裡的 draft／messages。
@@ -432,10 +433,39 @@ export function useSkillStudioConversation() {
   // 後端技能：存過或從清單載入的技能代號，與最近一次存下的版本（記得「這一版測過」與否）
   const backendSkillId = ref<string | null>(null)
   const savedVersion = ref<BackendSkillVersion | null>(null)
+  // 最近一次儲存是「存成新版本」還是「沒改內容、只把那一版標成測過」
+  const lastSaveKind = ref<'new' | 'marked' | null>(null)
   // 新建＋對話方式走後端；從後端載入的修改對話（已有對話代號）也走後端
   const usesBackend = () => backendEnabled() && draft.value.method === 'chat'
     && (mode.value === 'create' || conversationId.value !== null)
   const showAdviceModeSwitch = computed(() => usesBackend())
+
+  // 這場對話的草稿交過卷了（記號在儲存時寫進版本）
+  const draftTested = computed(() =>
+    !!conversationId.value && useBackendTestStore().stateOf(conversationId.value).tested
+  )
+
+  // 後端模式下儲存按鈕該長什麼樣：內容沒改就不新增版本，測過的話只把那一版標成測過
+  const backendSaveAction = computed<{ label: string; enabled: boolean; hint: string }>(() => {
+    const first = !backendSkillId.value
+    const newLabel = first ? '儲存為個人技能' : '儲存為新版本'
+    if (isDirty.value || (first && !savedVersion.value)) {
+      return { label: newLabel, enabled: canSave.value, hint: '' }
+    }
+    // 內容跟已存的（或來源）那一版一樣
+    const alreadyTested = savedVersion.value?.tested ?? false
+    if (draftTested.value && !alreadyTested) return { label: '記下測過', enabled: true, hint: '' }
+    if (savedVersion.value) return { label: newLabel, enabled: false, hint: '' }
+    return { label: newLabel, enabled: false, hint: '內容還沒修改，沒有新版本可存。要啟用請先到「測試」做一次測試。' }
+  })
+
+  // 測過之後，告訴使用者這個記號會怎麼記下來；已經記下就不用說
+  const testedNote = computed(() => {
+    if (!draftTested.value || (savedVersion.value?.tested ?? false)) return ''
+    return isDirty.value || !backendSkillId.value
+      ? '按「儲存」時，這個記號會一起記在新版本上。'
+      : '按「記下測過」，這一版就算測過（不會多出新版本）。'
+  })
 
   function setAdviceMode(next: AdviceMode): void {
     if (adviceModeLocked.value) return
@@ -713,10 +743,14 @@ export function useSkillStudioConversation() {
         return
       }
       if (t === ACTION_FORCE_ENABLE.label || /不改.{0,4}啟用|直接啟用|先不改|先不用改/.test(t)) {
-        if (savedSkillId.value) {
-          store.overrideAndEnableSkill(savedSkillId.value)
-        }
+        // 已經測過就能啟用，不要求全對；沒測過的話閘門不放行，維持停用並講清楚原因
+        const saved = savedSkillId.value ? store.findSkill(savedSkillId.value) : null
         gateStage.value = 'active'
+        if (!saved || !canEnableSkill(saved)) {
+          push({ role: 'agent', content: '這一版還沒測過，要先到「測試」tab 做一次測試（交卷就算測過，不用全對），才能啟用。' })
+          return
+        }
+        if (!saved.isEnabled) store.toggleSkill(saved.id)
         push({ role: 'agent', content: `已啟用「${draft.value.name}」，之後想再調整的話隨時都可以跟我說。` })
         return
       }
@@ -773,9 +807,11 @@ export function useSkillStudioConversation() {
   function startCreate(prefill?: Partial<SkillDraft>, openingMessage?: string): void {
     mode.value = 'create'
     savedSkillId.value = null
+    if (conversationId.value) useBackendTestStore().reset(conversationId.value)
     conversationId.value = null
     backendSkillId.value = null
     savedVersion.value = null
+    lastSaveKind.value = null
     adviceMode.value = 'jev'
     note.value = { topic: '', steps: [] }
     blockedReasons.value = []
@@ -924,9 +960,12 @@ export function useSkillStudioConversation() {
       return null
     }
     try {
+      // 沒改內容時後端不新增版本，只標記；先記下來，存完才知道要怎麼跟使用者說
+      const wasClean = !isDirty.value && (backendSkillId.value !== null || savedVersion.value !== null)
       const saved = await saveConversation(conversationId.value)
       backendSkillId.value = saved.skill_id
       savedVersion.value = saved
+      lastSaveKind.value = wasClean ? 'marked' : 'new'
       errorHint.value = ''
       snapshot.value = serialize(draft.value)
       await useBackendSkillStore().refreshAfterSave(saved.skill_id)
@@ -950,7 +989,13 @@ export function useSkillStudioConversation() {
       errorHint.value = ''
       blockedReasons.value = turn.blocked
       note.value = turn.note
-      if (turn.draft) applyBackendDraft(turn.draft)
+      if (turn.draft) {
+        const before = JSON.stringify([draft.value.skillCode, draft.value.name, draft.value.description, draft.value.instructions])
+        applyBackendDraft(turn.draft)
+        const after = JSON.stringify([draft.value.skillCode, draft.value.name, draft.value.description, draft.value.instructions])
+        // 草稿改過，已出的題與答案不再對得上，後端也會拒收交卷；作廢讓使用者重新測
+        if (before !== after) useBackendTestStore().reset(conversationId.value)
+      }
       if (turn.reply) push({ role: 'agent', content: turn.reply })
       if (turn.blocked.length) {
         // 同一個原因可能被擋多次（模型同一輪重試），去重後一條一行
@@ -1128,7 +1173,7 @@ export function useSkillStudioConversation() {
   }
 
   return {
-    mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, backendSkillId, savedVersion, loadBackendSkill, saveToBackend, usesBackend, adviceMode, adviceModeLocked, showAdviceModeSwitch, setAdviceMode, note, blockedReasons, errorHint, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestTestTab, requestNewSkillDrawer,
+    mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, backendSkillId, savedVersion, loadBackendSkill, saveToBackend, usesBackend, backendSaveAction, testedNote, lastSaveKind, draftTested, adviceMode, adviceModeLocked, showAdviceModeSwitch, setAdviceMode, note, blockedReasons, errorHint, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestTestTab, requestNewSkillDrawer,
     startCreate, chooseMethod, updateBlocks, updateBlockDescription, updateBlockTriggerHint, updateBlockCapabilities, updateBlockAssignedAgents, updateBlockKeywords,
     loadSkill, send, save, updateFiles, notifyTestResult, toSnapshot, hydrate, detachSavedSkill,
   }
