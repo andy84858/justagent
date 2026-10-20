@@ -74,7 +74,7 @@ describe('SkillEnableFlow', () => {
 
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
-      store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+      store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     }
     await wrapper.vm.$nextTick()
     expect(continueBtn().attributes('disabled')).toBeUndefined()
@@ -93,7 +93,7 @@ describe('SkillEnableFlow', () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能3', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
-    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.expectedTrigger) // 全部不一致
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.agentAnswer) // 全部不一致
     expect(store.findSkill(id)!.aiTestPassRate).toBe(0)
     const wrapper = mountFlow()
     ;(wrapper.vm as any).requestEnable(store.findSkill(id), ['客服中心助理'])
@@ -110,7 +110,7 @@ describe('SkillEnableFlow', () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
-    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     const wrapper = mountFlow()
     ;(wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()
@@ -123,7 +123,7 @@ describe('SkillEnableFlow', () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能4', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
-    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     const wrapper = mountFlow()
     const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()
@@ -143,7 +143,7 @@ describe('SkillEnableFlow', () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能6', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
-    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     const wrapper = mountFlow()
     const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()

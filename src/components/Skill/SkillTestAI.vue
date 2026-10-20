@@ -17,20 +17,58 @@
       </div>
     </div>
 
-    <div v-else-if="!store.aiTestScenarios.length" class="ai-idle">
+    <!-- 生成前先選答題 Agent：候選是可以調用這顆技能的 Agent（見 store.getAITestCallableAgents）。
+         「重新生成」也回到這裡，讓使用者可以換一個 Agent 再測 -->
+    <div v-else-if="!store.aiTestScenarios.length || pickingAgent" class="ai-idle">
       <i class="material-symbols-outlined ai-idle-icon">auto_awesome</i>
-      <p class="ai-idle-hint">AI 將依技能描述自動產生 6–8 個測試案例</p>
-      <button class="custom-btn custom-main-btn" @click="regenerate">
-        <i class="material-symbols-outlined">play_circle</i>
-        生成測試情境
-      </button>
+      <p class="ai-idle-hint">AI 依技能描述產生測試情境，由你選的 Agent 逐題判斷該不該觸發，你再標註正確答案</p>
+      <div class="ai-agent-picker">
+        <p class="ai-agent-picker-label">選擇答題 Agent</p>
+        <p v-if="callable.source === 'inferred'" class="ai-agent-picker-note">
+          這顆技能還沒有指派 Agent，先列出相似技能「{{ callable.inferredFrom }}」可調用的 Agent
+        </p>
+        <p v-else-if="callable.source === 'all'" class="ai-agent-picker-note">
+          這顆技能還沒有指派 Agent，可以從所有 Agent 中挑一個來答題
+        </p>
+        <div class="se-agent-grid ai-agent-options">
+          <button
+            v-for="agent in callable.agents"
+            :key="agent"
+            type="button"
+            :class="['se-agent-chip', 'ai-agent-option', { 'is-selected': selectedAgent === agent }]"
+            @click="selectedAgent = agent"
+          >
+            <i class="material-symbols-outlined">smart_toy</i>
+            {{ agent }}
+            <i v-if="selectedAgent === agent" class="material-symbols-outlined se-chip-check">check</i>
+          </button>
+        </div>
+      </div>
+      <div class="ai-idle-actions">
+        <button v-if="pickingAgent" type="button" class="custom-btn ai-cancel-pick-btn" @click="pickingAgent = false">
+          取消
+        </button>
+        <button
+          type="button"
+          class="custom-btn custom-main-btn ai-generate-btn"
+          :disabled="!selectedAgent"
+          @click="regenerate"
+        >
+          <i class="material-symbols-outlined">play_circle</i>
+          生成測試情境
+        </button>
+      </div>
     </div>
 
-    <!-- ② Scenarios：選擇題形式，AI 出題、使用者判斷該不該觸發 -->
+    <!-- ② Scenarios：AI 出題、答題 Agent 作答，使用者標註每一題的正確答案 -->
     <template v-else>
       <div class="ai-toolbar">
         <div class="ai-toolbar-left">
-          <span class="ai-progress-text">已選 {{ answeredCount }} / {{ store.aiTestScenarios.length }}</span>
+          <span class="ai-answering-agent">
+            <i class="material-symbols-outlined">smart_toy</i>
+            答題 Agent：<strong>{{ store.aiTestAnsweringAgent }}</strong>
+          </span>
+          <span class="ai-progress-text">已標註 {{ answeredCount }} / {{ store.aiTestScenarios.length }}</span>
           <button
             v-if="!store.aiTestReport"
             class="custom-btn custom-main-btn ai-submit-btn"
@@ -40,7 +78,7 @@
             送出答案
           </button>
         </div>
-        <button class="custom-btn ai-regenerate-btn" @click="regenerate">
+        <button class="custom-btn ai-regenerate-btn" @click="startPickAgent">
           <i class="material-symbols-outlined">refresh</i>
           重新生成
         </button>
@@ -56,48 +94,53 @@
             <span :class="['scenario-tag', `tag--${sc.tag}`]">{{ tagLabel(sc.tag) }}</span>
             <div class="scenario-actions">
               <span v-if="sc.status === 'correct'" class="status-badge badge--pass">
-                <i class="material-symbols-outlined">check_circle</i>答對了
+                <i class="material-symbols-outlined">check_circle</i>Agent 答對了
               </span>
               <span v-else-if="sc.status === 'incorrect'" class="status-badge badge--fail">
-                <i class="material-symbols-outlined">cancel</i>答錯了
+                <i class="material-symbols-outlined">cancel</i>Agent 答錯了
               </span>
             </div>
           </div>
 
-          <div class="scenario-input">{{ sc.input }}</div>
-          <p class="scenario-question">這句話該不該觸發這顆技能？</p>
-
-          <div v-if="sc.status === 'pending'" class="scenario-answer-btns">
-            <button
-              type="button"
-              class="custom-btn custom-btn--sm"
-              :class="{ 'is-selected': draftAnswers[sc.id] === true }"
-              @click="selectAnswer(sc.id, true)"
-            >該觸發</button>
-            <button
-              type="button"
-              class="custom-btn custom-btn--sm"
-              :class="{ 'is-selected': draftAnswers[sc.id] === false }"
-              @click="selectAnswer(sc.id, false)"
-            >不該觸發</button>
+          <!-- 題目是一句使用者會講的話，Agent 的作答接在下面，讀起來像「使用者說 → Agent 判斷」 -->
+          <div class="scenario-input">
+            <span class="scenario-input-label">使用者輸入</span>
+            {{ sc.input }}
+          </div>
+          <div :class="['scenario-agent-answer', `is-${sc.status}`]">
+            <div class="scenario-agent-answer-head">
+              <i class="material-symbols-outlined">smart_toy</i>
+              <span class="scenario-agent-name">{{ store.aiTestAnsweringAgent }}</span>
+              <span class="scenario-agent-verdict">的判斷：<strong>{{ sc.agentAnswer ? '觸發' : '不觸發' }}</strong></span>
+            </div>
+            <p class="scenario-agent-reasoning">{{ sc.agentReasoning }}</p>
           </div>
 
-          <div v-else :class="['result-judgment', sc.status === 'correct' ? 'judgment--pass' : 'judgment--fail']">
-            <div class="result-judgment-head">
-              <i class="material-symbols-outlined">
-                {{ sc.status === 'correct' ? 'check_circle' : 'cancel' }}
-              </i>
-              <strong>{{ sc.status === 'correct' ? '答對了' : '答錯了' }}</strong>
+          <template v-if="sc.status === 'pending'">
+            <p class="scenario-question">這句話正確來說，該不該觸發這顆技能？</p>
+            <div class="scenario-answer-btns">
+              <button
+                type="button"
+                class="custom-btn custom-btn--sm"
+                :class="{ 'is-selected': draftAnswers[sc.id] === true }"
+                @click="selectAnswer(sc.id, true)"
+              >該觸發</button>
+              <button
+                type="button"
+                class="custom-btn custom-btn--sm"
+                :class="{ 'is-selected': draftAnswers[sc.id] === false }"
+                @click="selectAnswer(sc.id, false)"
+              >不該觸發</button>
             </div>
-            <div class="result-answer-row">
-              <span :class="['result-answer-pill', sc.status === 'correct' ? 'pill--pass' : 'pill--fail']">
-                <span class="result-answer-pill-label">你的答案</span>{{ sc.userAnswer ? '該觸發' : '不該觸發' }}
-              </span>
-              <span class="result-answer-pill pill--neutral">
-                <span class="result-answer-pill-label">正確答案</span>{{ sc.expectedTrigger ? '該觸發' : '不該觸發' }}
-              </span>
-            </div>
-            <p class="result-explanation">{{ sc.expectedBehavior }}</p>
+          </template>
+
+          <div v-else class="result-answer-row">
+            <span :class="['result-answer-pill', sc.status === 'correct' ? 'pill--pass' : 'pill--fail']">
+              <span class="result-answer-pill-label">Agent 判斷</span>{{ sc.agentAnswer ? '該觸發' : '不該觸發' }}
+            </span>
+            <span class="result-answer-pill pill--neutral">
+              <span class="result-answer-pill-label">正確答案（你標註）</span>{{ sc.userAnswer ? '該觸發' : '不該觸發' }}
+            </span>
           </div>
         </div>
 
@@ -106,7 +149,7 @@
           <div class="report-header">
             <span class="report-title">測試報告</span>
             <span class="report-rate">
-              {{ store.aiTestReport.correct }} / {{ store.aiTestReport.total }} 答對
+              Agent 答對 {{ store.aiTestReport.correct }} / {{ store.aiTestReport.total }}
               <em>（{{ ratePercent }}%）</em>
             </span>
           </div>
@@ -244,8 +287,25 @@ function tagLabel(tag: AITestTag): string {
   return TAG_LABELS[tag]
 }
 
-// 統一送答案：每一題先選答案（draftAnswers，純前端暫存、還沒送出前不計分），
-// 全部選完才能按「送出答案」一次送出、一次計分出報告——不是選一題就立刻知道對錯
+// 答題 Agent 候選：可以調用這顆技能的 Agent。只有一個候選就直接幫忙選好，
+// 有好幾個時要使用者自己挑（預設沿用上一次答題的 Agent——包含對話裡點「重新測試」
+// 直接由 store 沿用的那個——只要它仍在候選裡）
+const callable = computed(() => store.getAITestCallableAgents(props.skillId, props.draftContext))
+const selectedAgent = ref<string | null>(null)
+watch([callable, () => store.aiTestAnsweringAgent], ([{ agents }, last]) => {
+  if (last && agents.includes(last)) selectedAgent.value = last
+  else if (selectedAgent.value && agents.includes(selectedAgent.value)) return
+  else selectedAgent.value = agents.length === 1 ? agents[0] : null
+}, { immediate: true })
+
+// 「重新生成」先回到選答題 Agent 的畫面（可以換一個 Agent 再測），題目留著，按取消就回去
+const pickingAgent = ref(false)
+function startPickAgent() {
+  pickingAgent.value = true
+}
+
+// 統一送答案：每一題先標註正確答案（draftAnswers，純前端暫存、還沒送出前不計分），
+// 全部標完才能按「送出答案」一次送出、一次跟 Agent 的判斷比對出報告
 const draftAnswers = ref<Record<string, boolean>>({})
 
 const answeredCount = computed(() =>
@@ -267,13 +327,16 @@ const ratePercent = computed(() => {
 // 在裡面講這句話（見 hideGenerationNarration 同一組判斷）；這裡沒有對話串可用的
 // 其他畫面（自行建立精靈／積木方式／就地測試／獨立沙盒）用 toast 簡單提示一下
 async function regenerate() {
+  if (!selectedAgent.value) return
   draftAnswers.value = {}
-  await store.generateAITestScenarios(props.skillId, props.draftContext)
+  pickingAgent.value = false
+  await store.generateAITestScenarios(props.skillId, props.draftContext, selectedAgent.value)
   if (!props.hideGenerationNarration) {
-    popDialog.toast('測試情境生成完成，開始作答吧！')
+    popDialog.toast('測試情境生成完成，Agent 已作答，請標註正確答案！')
   }
 }
 
+// userAnswer：使用者標註的正確答案
 function selectAnswer(scenarioId: string, userAnswer: boolean) {
   draftAnswers.value = { ...draftAnswers.value, [scenarioId]: userAnswer }
 }

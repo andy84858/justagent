@@ -223,9 +223,11 @@ export interface AITestScenario {
   tag: AITestTag
   input: string
   expectedBehavior: string
-  expectedTrigger: boolean   // 正確答案：這句話該不該觸發這顆技能
-  status: 'pending' | 'correct' | 'incorrect'
-  userAnswer?: boolean       // 使用者選了「該」還是「不該」
+  expectedTrigger: boolean   // 出題時的參考答案（模擬 Agent 作答的依據），不是最終判定——正確答案由使用者標註
+  agentAnswer: boolean       // 答題 Agent 的判斷：這句話要不要觸發這顆技能
+  agentReasoning: string     // 答題 Agent 給出這個判斷的理由
+  status: 'pending' | 'correct' | 'incorrect'   // Agent 的判斷對不對（跟使用者標註的正確答案比）
+  userAnswer?: boolean       // 使用者標註的正確答案：該觸發還是不該觸發
 }
 
 export interface AITestReport {
@@ -754,7 +756,8 @@ const MOCK_SKILLS: Skill[] = [
   },
 ]
 
-type ScenarioTemplate = Omit<AITestScenario, 'id' | 'status'>
+// confusable：搶觸發反例（競爭技能的關鍵字），答題 Agent 最容易在這裡被搞混
+type ScenarioTemplate = Omit<AITestScenario, 'id' | 'status' | 'agentAnswer' | 'agentReasoning'> & { confusable?: boolean }
 
 const MOCK_AI_SCENARIO_TEMPLATES: Record<string, ScenarioTemplate[]> = {
   'sys-cs-001': [
@@ -827,7 +830,8 @@ const NEGATIVE_KEYWORD_SETS = ['天氣 心情 電影', '旅遊 美食 運動', '
 // 這一個）時正例可能只有 1 題，改從反例池多補幾題撐到底線，而不是讓題目少到沒驗證意義
 // 只收 name／triggerHint／capabilities／composition 四個欄位：草稿還沒存檔時沒有完整的
 // Skill 物件可用，只需要這四個就能組題目關鍵字，不用整顆 Skill
-export type TriggerEdgeSource = Pick<Skill, 'name' | 'triggerHint' | 'capabilities' | 'composition'>
+// assignedAgents 只用來決定「答題 Agent 可以選誰」，不參與組題關鍵字
+export type TriggerEdgeSource = Pick<Skill, 'name' | 'triggerHint' | 'capabilities' | 'composition' | 'assignedAgents'>
 
 // 積木組裝的技能（有 composition）：「觸發情境」是使用者在「基本設定」步驟手寫、
 // 專門描述「什麼時候該觸發」的必填欄位，比覆蓋能力（偏「這顆技能做什麼」而非
@@ -878,9 +882,13 @@ function bestTextMatch(haystack: string, candidates: Skill[]): { skill: Skill; s
 // 這顆技能自己還沒有指派任何 Agent 時不直接放棄：改用純內容相似度在團隊內找最像的一顆，
 // 「索引」回它指派的 Agent 當線索借來用——inferredFrom 記下是借用了哪一顆，讓呼叫端
 // 可以在敘事文字裡講清楚這個推測從哪來，不是憑空冒出一群 Agent
+//
+// answeringAgent：使用者選了哪個 Agent 來答題時，只有「這個 Agent 也能調用」的技能
+// 才會跟它搶觸發，候選範圍縮到這一個 Agent
 function findCompetingSkills(
   skill: Skill,
   candidates: Skill[],
+  answeringAgent?: string,
 ): { competing: Skill[]; inferredFrom?: Skill } {
   const haystack = `${skill.name}${skill.triggerHint ?? ''}${skill.instructions ?? ''}`
   let agents = new Set(skill.assignedAgents ?? [])
@@ -888,10 +896,13 @@ function findCompetingSkills(
 
   if (agents.size === 0) {
     const best = bestTextMatch(haystack, candidates.filter(s => s.id !== skill.id && (s.assignedAgents ?? []).length > 0))
-    if (!best) return { competing: [] }
-    inferredFrom = best.skill
-    agents = new Set(best.skill.assignedAgents ?? [])
+    if (best) {
+      inferredFrom = best.skill
+      agents = new Set(best.skill.assignedAgents ?? [])
+    }
   }
+  if (answeringAgent) agents = new Set([answeringAgent])
+  if (agents.size === 0) return { competing: [] }
 
   const competing = candidates
     .filter(s => s.id !== skill.id && (s.assignedAgents ?? []).some(a => agents.has(a)))
@@ -911,6 +922,7 @@ function buildGenerationNarration(
   skill: Skill | undefined,
   competingSkills: Skill[],
   inferredFrom: Skill | undefined,
+  answeringAgent: string,
 ): string[] {
   const name = source?.name?.trim() || '這顆技能'
   const agents = skill?.assignedAgents ?? []
@@ -929,6 +941,7 @@ function buildGenerationNarration(
         : '沒有發現其他搶著被觸發的相似技能。',
     )
   }
+  lines.push(`由「${answeringAgent}」擔任答題 Agent，逐題判斷該不該觸發這顆技能。`)
   lines.push('正在產生測試情境...')
   return lines
 }
@@ -972,6 +985,7 @@ function generateDynamicTriggerEdgeScenarios(
         input: otherKeywords,
         expectedTrigger: false,
         expectedBehavior: `這些關鍵字其實是「${otherName}」的，不是「${name}」的——同一個 Agent 也能調用「${otherName}」，不該被「${name}」搶走觸發。`,
+        confusable: true,
       }
     })
     // 競爭技能的關鍵字剛好跟這顆技能自己的某個正例一字不差時（例如兩顆技能不小心標了
@@ -987,6 +1001,35 @@ function generateDynamicTriggerEdgeScenarios(
       }))]
 
   return [...positives, ...negatives]
+}
+
+// 模擬答題 Agent 的作答：大部分照參考答案判斷，但不會每題都對，不然測試永遠 100%
+// 沒有意義——搶觸發反例（confusable）是最容易被搞混的情境，第一題固定答錯；其餘依
+// Agent 名稱＋題目算一個固定雜湊，大約每 7 題錯 1 題。換一個 Agent 答題結果就會不同，
+// 選誰來答題才有差別；同一個 Agent 重新生成同一批題目，答案維持一致
+function hashString(text: string): number {
+  let h = 0
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) >>> 0
+  return h
+}
+
+function simulateAgentAnswers(
+  templates: ScenarioTemplate[],
+  answeringAgent: string,
+  skillName: string,
+): Pick<AITestScenario, 'agentAnswer' | 'agentReasoning'>[] {
+  const firstConfusable = templates.findIndex(t => t.confusable)
+  return templates.map((t, i) => {
+    const misjudged = i === firstConfusable || hashString(`${answeringAgent}${t.input}`) % 7 === 0
+    if (!misjudged) return { agentAnswer: t.expectedTrigger, agentReasoning: t.expectedBehavior }
+    const agentAnswer = !t.expectedTrigger
+    return {
+      agentAnswer,
+      agentReasoning: agentAnswer
+        ? `判斷這句話跟「${skillName}」的能力範圍相關，選擇觸發。`
+        : `判斷這句話不在「${skillName}」的能力範圍內，選擇不觸發。`,
+    }
+  })
 }
 
 const MOCK_PERSONAL_SKILLS: Skill[] = [
@@ -1339,6 +1382,8 @@ export const useSkillStore = defineStore('skillStore', () => {
   // 生成題目期間給使用者看的敘事文字（掃可調用 Agent／找搶觸發的相似技能／出題），
   // 讓「生成中」不只是一顆乾乾的轉圈圈——每次 generateAITestScenarios() 都會重算
   const aiTestGenerationNarration = ref<string[]>([])
+  // 這一批題目是由哪個 Agent 作答（使用者生成前選的）；重新測試沒有另外指定時沿用
+  const aiTestAnsweringAgent = ref<string | null>(null)
 
   const flatSkills = computed<Skill[]>(() => {
     const result: Skill[] = []
@@ -2088,21 +2133,51 @@ export const useSkillStore = defineStore('skillStore', () => {
     skill.aiTestPassRate = rate
   }
 
-  async function generateAITestScenarios(skillId: string, draftContext?: TriggerEdgeSource): Promise<void> {
+  // 生成題目前讓使用者選「答題 Agent」的候選：可以調用這顆技能的 Agent。
+  // 還沒指派 Agent 時，比照搶觸發掃描借用團隊內最相似技能的 Agent（source: 'inferred'）；
+  // 連借都借不到（全新草稿、團隊內沒有相近技能）才開放所有 Agent 讓使用者自己挑
+  function getAITestCallableAgents(
+    skillId: string,
+    draftContext?: TriggerEdgeSource,
+  ): { agents: string[]; source: 'assigned' | 'inferred' | 'all'; inferredFrom?: string } {
+    const skill = findSkill(skillId)
+    const assigned = skill?.assignedAgents?.length ? skill.assignedAgents : (draftContext?.assignedAgents ?? [])
+    if (assigned.length) return { agents: [...assigned], source: 'assigned' }
+    if (skill) {
+      const { inferredFrom } = findCompetingSkills(skill, [...myPersonalSkills.value, ...flatSkills.value])
+      if (inferredFrom?.assignedAgents?.length) {
+        return { agents: [...inferredFrom.assignedAgents], source: 'inferred', inferredFrom: inferredFrom.name }
+      }
+    }
+    return { agents: [...AVAILABLE_AGENTS], source: 'all' }
+  }
+
+  async function generateAITestScenarios(
+    skillId: string,
+    draftContext?: TriggerEdgeSource,
+    answeringAgent?: string,
+  ): Promise<void> {
     aiTestScenarios.value = []
     aiTestReport.value = null
     aiTestScenariosSkillId.value = skillId
+
+    // 沒指定答題 Agent（例如對話裡點「重新測試」）：沿用上一次選的，上一次的不在
+    // 這顆技能的候選裡才退回第一個候選
+    const callable = getAITestCallableAgents(skillId, draftContext).agents
+    const agent = answeringAgent
+      ?? (aiTestAnsweringAgent.value && callable.includes(aiTestAnsweringAgent.value) ? aiTestAnsweringAgent.value : callable[0])
+    aiTestAnsweringAgent.value = agent
 
     // 敘事文字要在「生成中」那段時間就看得到，所以搶觸發的掃描（查可調用 Agent、
     // 找相似技能）要在這裡先算好，不是等 900ms 的模擬延遲結束後才算
     const skill = findSkill(skillId)
     const source: TriggerEdgeSource | undefined = skill ?? draftContext
     const { competing: competingSkills, inferredFrom } = skill
-      ? findCompetingSkills(skill, [...myPersonalSkills.value, ...flatSkills.value])
+      ? findCompetingSkills(skill, [...myPersonalSkills.value, ...flatSkills.value], agent)
       : { competing: [], inferredFrom: undefined }
     aiTestGenerationNarration.value = MOCK_AI_SCENARIO_TEMPLATES[skillId]
-      ? [`正在為「${source?.name?.trim() || '這顆技能'}」產生測試情境...`]
-      : buildGenerationNarration(source, skill, competingSkills, inferredFrom)
+      ? [`正在為「${source?.name?.trim() || '這顆技能'}」產生測試情境，由「${agent}」擔任答題 Agent...`]
+      : buildGenerationNarration(source, skill, competingSkills, inferredFrom, agent)
     aiTestIsGenerating.value = true
 
     await new Promise(r => setTimeout(r, 900))
@@ -2112,8 +2187,13 @@ export const useSkillStore = defineStore('skillStore', () => {
       capabilities: source?.capabilities ?? [],
     })
     const templates = MOCK_AI_SCENARIO_TEMPLATES[skillId] ?? generateDynamicTriggerEdgeScenarios(source, competingSkills)
+    const agentAnswers = simulateAgentAnswers(templates, agent, source?.name?.trim() || '這顆技能')
     aiTestScenarios.value = templates.map((t, i) => ({
-      ...t,
+      tag: t.tag,
+      input: t.input,
+      expectedBehavior: t.expectedBehavior,
+      expectedTrigger: t.expectedTrigger,
+      ...agentAnswers[i],
       id: `ai-sc-${skillId}-${i}`,
       status: 'pending',
     }))
@@ -2145,12 +2225,13 @@ export const useSkillStore = defineStore('skillStore', () => {
 
     const rate = total > 0 ? correct / total : 0
     let summary: string
+    const agent = aiTestAnsweringAgent.value ? `「${aiTestAnsweringAgent.value}」` : 'Agent'
     if (rate === 1) {
-      summary = '全部答對！你對這顆技能該不該觸發的時機掌握得很準確。'
+      summary = `${agent}全部判斷正確，這顆技能的觸發條件描述得夠清楚。`
     } else if (rate >= 0.7) {
-      summary = `答對 ${correct} / ${total} 題，整體掌握不錯，可以再看看答錯的題目，確認 triggerHint 有沒有需要補充的地方。`
+      summary = `${agent}判斷對 ${correct} / ${total} 題，整體不錯；看看判斷錯的題目，補強 triggerHint 或說明，讓 Agent 更容易分辨。`
     } else {
-      summary = `答對 ${correct} / ${total} 題，建議重新檢視這顆技能的 triggerHint 與說明，再挑戰一次。`
+      summary = `${agent}只判斷對 ${correct} / ${total} 題，建議重新檢視這顆技能的 triggerHint 與說明，修改後再測一次。`
     }
 
     aiTestReport.value = { total, correct, byTag, summary }
@@ -2162,20 +2243,20 @@ export const useSkillStore = defineStore('skillStore', () => {
     }
   }
 
-  // 使用者對某一題作答：這句話該不該觸發這顆技能？依 expectedTrigger 立刻計分。
-  // 已作答過的題目不再改動（one-shot，避免改答案影響報告）
+  // 使用者對某一題標註正確答案：這句話該不該觸發這顆技能？拿來跟答題 Agent 的判斷
+  // （agentAnswer）比，立刻算出 Agent 對不對。已標註過的題目不再改動（one-shot，避免改答案影響報告）
   function answerAITestScenario(skillId: string, scenarioId: string, userAnswer: boolean): void {
     const scenario = aiTestScenarios.value.find(s => s.id === scenarioId)
     if (!scenario || scenario.status !== 'pending') return
 
     scenario.userAnswer = userAnswer
-    scenario.status = userAnswer === scenario.expectedTrigger ? 'correct' : 'incorrect'
+    scenario.status = userAnswer === scenario.agentAnswer ? 'correct' : 'incorrect'
 
     _computeAITestReport(skillId)
   }
 
-  // 統一送答案：使用者先把每一題都選好（還沒送出前都算 pending，不逐題判分），
-  // 按「送出答案」才一次全部計分、只算一次報告。answers 沒涵蓋到的題目（理論上
+  // 統一送答案：使用者先把每一題的正確答案都標好（還沒送出前都算 pending，不逐題判分），
+  // 按「送出答案」才一次跟 Agent 的判斷比對、只算一次報告。answers 沒涵蓋到的題目（理論上
   // 不該發生，呼叫端要先確定全部選過才能按送出）維持 pending，不會被誤判
   function submitAITestAnswers(skillId: string, answers: Record<string, boolean>): void {
     for (const scenario of aiTestScenarios.value) {
@@ -2183,7 +2264,7 @@ export const useSkillStore = defineStore('skillStore', () => {
       const userAnswer = answers[scenario.id]
       if (userAnswer === undefined) continue
       scenario.userAnswer = userAnswer
-      scenario.status = userAnswer === scenario.expectedTrigger ? 'correct' : 'incorrect'
+      scenario.status = userAnswer === scenario.agentAnswer ? 'correct' : 'incorrect'
     }
     _computeAITestReport(skillId)
   }
@@ -2253,6 +2334,8 @@ export const useSkillStore = defineStore('skillStore', () => {
     migrateAITestState,
     aiTestIsGenerating,
     aiTestGenerationNarration,
+    aiTestAnsweringAgent,
+    getAITestCallableAgents,
     flatSkills,
     enabledCount,
     enterpriseExtensionCount,

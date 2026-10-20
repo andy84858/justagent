@@ -58,7 +58,7 @@ describe('SkillManagement 啟用前的測試閘門', () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
-    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.expectedTrigger) // 全部不一致
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.agentAnswer) // 全部不一致
     const { wrapper } = await mountPage()
     ;(wrapper.vm as any).detailSkillId = id
     await wrapper.vm.$nextTick()
@@ -84,7 +84,7 @@ describe('SkillManagement 啟用前的測試閘門', () => {
     const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
-      store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+      store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     }
     expect(store.findSkill(id)!.aiTestPassRate).toBe(1)
 

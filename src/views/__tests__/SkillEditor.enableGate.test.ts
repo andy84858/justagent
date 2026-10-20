@@ -57,7 +57,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [], capabilities: ['能力A'] })
     await store.generateAITestScenarios(id)
-    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.expectedTrigger) // 全部不一致
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.agentAnswer) // 全部不一致
     const { wrapper, router } = await mountEditFor(id)
     ;(wrapper.findComponent(SkillEditor).vm as any).currentStep = 2
     await wrapper.vm.$nextTick()
@@ -103,7 +103,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
     const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [], capabilities: ['能力A'] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
-      store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+      store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     }
     const { wrapper } = await mountEditFor(id)
     ;(wrapper.findComponent(SkillEditor).vm as any).currentStep = 2

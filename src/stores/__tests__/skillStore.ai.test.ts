@@ -11,7 +11,7 @@ describe('skillStore — AI test state', () => {
     const store = useSkillStore()
     // Seed some state
     store.aiTestScenarios.push({
-      id: 'x', tag: 'normal', input: 'test', expectedBehavior: 'ok', expectedTrigger: true,
+      id: 'x', tag: 'normal', input: 'test', expectedBehavior: 'ok', expectedTrigger: true, agentAnswer: true, agentReasoning: 'ok',
       status: 'correct', userAnswer: true,
     })
     store.aiTestReport = {
@@ -333,7 +333,7 @@ describe('migrateAITestState', () => {
     const id = store.createPersonalSkill({ name: '剛存檔的技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios('draft-abc', { name: '剛存檔的技能', triggerHint: 'y', capabilities: [] })
     for (const sc of [...store.aiTestScenarios]) {
-      store.answerAITestScenario('draft-abc', sc.id, sc.expectedTrigger)
+      store.answerAITestScenario('draft-abc', sc.id, sc.agentAnswer)
     }
     expect(store.aiTestReport!.correct).toBe(store.aiTestReport!.total)
 
@@ -357,30 +357,30 @@ describe('answerAITestScenario', () => {
     const store = useSkillStore()
     await store.generateAITestScenarios('sys-cs-001')
     const sc = store.aiTestScenarios[0]
-    store.answerAITestScenario('sys-cs-001', sc.id, sc.expectedTrigger)
+    store.answerAITestScenario('sys-cs-001', sc.id, sc.agentAnswer)
 
     const updated = store.aiTestScenarios.find(s => s.id === sc.id)!
     expect(updated.status).toBe('correct')
-    expect(updated.userAnswer).toBe(sc.expectedTrigger)
+    expect(updated.userAnswer).toBe(sc.agentAnswer)
   })
 
   it('答錯：status 變 incorrect', async () => {
     const store = useSkillStore()
     await store.generateAITestScenarios('sys-cs-001')
     const sc = store.aiTestScenarios[0]
-    store.answerAITestScenario('sys-cs-001', sc.id, !sc.expectedTrigger)
+    store.answerAITestScenario('sys-cs-001', sc.id, !sc.agentAnswer)
 
     const updated = store.aiTestScenarios.find(s => s.id === sc.id)!
     expect(updated.status).toBe('incorrect')
-    expect(updated.userAnswer).toBe(!sc.expectedTrigger)
+    expect(updated.userAnswer).toBe(!sc.agentAnswer)
   })
 
   it('已作答過的題目再次作答不生效（one-shot）', async () => {
     const store = useSkillStore()
     await store.generateAITestScenarios('sys-cs-001')
     const sc = store.aiTestScenarios[0]
-    store.answerAITestScenario('sys-cs-001', sc.id, sc.expectedTrigger)
-    store.answerAITestScenario('sys-cs-001', sc.id, !sc.expectedTrigger)
+    store.answerAITestScenario('sys-cs-001', sc.id, sc.agentAnswer)
+    store.answerAITestScenario('sys-cs-001', sc.id, !sc.agentAnswer)
     expect(store.aiTestScenarios.find(s => s.id === sc.id)!.status).toBe('correct')
   })
 
@@ -396,11 +396,11 @@ describe('answerAITestScenario', () => {
     await store.generateAITestScenarios('ext-erp-001')
     const scenarios = [...store.aiTestScenarios]
     for (let i = 0; i < scenarios.length - 1; i++) {
-      store.answerAITestScenario('ext-erp-001', scenarios[i].id, scenarios[i].expectedTrigger) // 全部答對
+      store.answerAITestScenario('ext-erp-001', scenarios[i].id, scenarios[i].agentAnswer) // 全部答對
       expect(store.aiTestReport).toBeNull() // 還沒答完，不該有報告
     }
     const last = scenarios[scenarios.length - 1]
-    store.answerAITestScenario('ext-erp-001', last.id, !last.expectedTrigger) // 故意答錯最後一題
+    store.answerAITestScenario('ext-erp-001', last.id, !last.agentAnswer) // 故意答錯最後一題
 
     expect(store.aiTestReport).not.toBeNull()
     expect(store.aiTestReport!.total).toBe(scenarios.length)
@@ -417,7 +417,7 @@ describe('answerAITestScenario', () => {
     await store.generateAITestScenarios(id)
     const scenarios = [...store.aiTestScenarios]
     for (const sc of scenarios) {
-      store.answerAITestScenario(id, sc.id, sc.expectedTrigger) // 全部答對
+      store.answerAITestScenario(id, sc.id, sc.agentAnswer) // 全部答對
     }
     const skill = store.findSkill(id)!
     expect(skill.aiTestPassRate).toBe(1)
@@ -429,7 +429,7 @@ describe('answerAITestScenario', () => {
     store.toggleSkill(id)
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
-      store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+      store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     }
     expect(store.findSkill(id)!.aiTestPassRate).toBe(1)
 
@@ -453,7 +453,7 @@ describe('submitAITestAnswers：統一送答案，一次全部計分', () => {
     const answers: Record<string, boolean> = {}
     for (let i = 0; i < scenarios.length; i++) {
       // 故意把最後一題答錯，確認批次計分真的是照各題各自的答案、不是全部當同一個值處理
-      answers[scenarios[i].id] = i === scenarios.length - 1 ? !scenarios[i].expectedTrigger : scenarios[i].expectedTrigger
+      answers[scenarios[i].id] = i === scenarios.length - 1 ? !scenarios[i].agentAnswer : scenarios[i].agentAnswer
     }
     store.submitAITestAnswers('ext-erp-001', answers)
 
@@ -480,9 +480,91 @@ describe('submitAITestAnswers：統一送答案，一次全部計分', () => {
     const id = store.createPersonalSkill({ name: '批次送出技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
     const scenarios = [...store.aiTestScenarios]
-    const answers = Object.fromEntries(scenarios.map(sc => [sc.id, sc.expectedTrigger]))
+    const answers = Object.fromEntries(scenarios.map(sc => [sc.id, sc.agentAnswer]))
     store.submitAITestAnswers(id, answers)
 
     expect(store.findSkill(id)!.aiTestPassRate).toBe(1)
+  })
+})
+
+describe('答題 Agent：使用者選 Agent 作答、自己標註正確答案', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('getAITestCallableAgents：有指派 Agent 就列指派的；沒指派但有相似技能就借用；都沒有才開放全部', () => {
+    const store = useSkillStore()
+    expect(store.getAITestCallableAgents('sys-cs-001')).toEqual({ agents: ['客服中心助理', '電商小幫手'], source: 'assigned' })
+
+    store.createPersonalSkill({
+      name: '庫存盤點助手A', instructions: '盤點庫存數量與調撥記錄', triggerHint: '當使用者詢問庫存盤點或調撥時',
+      assignedAgents: ['倉儲管理助理'], capabilities: ['庫存盤點'],
+    })
+    const bId = store.createPersonalSkill({
+      name: '庫存盤點助手B', instructions: '盤點庫存數量與調撥記錄', triggerHint: '當使用者詢問庫存盤點或調撥時',
+      assignedAgents: [], capabilities: ['庫存覆核'],
+    })
+    expect(store.getAITestCallableAgents(bId)).toEqual({ agents: ['倉儲管理助理'], source: 'inferred', inferredFrom: '庫存盤點助手A' })
+
+    // 還沒存檔的草稿：store 找不到技能，用草稿自己帶的 assignedAgents
+    expect(store.getAITestCallableAgents('draft-zzz', { name: 'd', assignedAgents: ['工程助理'] }).agents).toEqual(['工程助理'])
+    expect(store.getAITestCallableAgents('draft-zzz', { name: 'd' }).source).toBe('all')
+  })
+
+  it('generateAITestScenarios 帶入答題 Agent：記下 aiTestAnsweringAgent，每題都有 Agent 的判斷與理由，敘事文字講出是誰答題', async () => {
+    const store = useSkillStore()
+    await store.generateAITestScenarios('sys-cs-001', undefined, '電商小幫手')
+    expect(store.aiTestAnsweringAgent).toBe('電商小幫手')
+    expect(store.aiTestGenerationNarration.join(' ')).toContain('電商小幫手')
+    for (const sc of store.aiTestScenarios) {
+      expect(typeof sc.agentAnswer).toBe('boolean')
+      expect(sc.agentReasoning).toBeTruthy()
+    }
+  })
+
+  it('沒指定答題 Agent（例如對話裡點「重新測試」）：沿用上一次選的', async () => {
+    const store = useSkillStore()
+    await store.generateAITestScenarios('sys-cs-001', undefined, '電商小幫手')
+    await store.generateAITestScenarios('sys-cs-001')
+    expect(store.aiTestAnsweringAgent).toBe('電商小幫手')
+  })
+
+  it('搶觸發反例是 Agent 最容易搞混的地方：第一題搶觸發反例 Agent 會判斷錯（誤觸發）', async () => {
+    const store = useSkillStore()
+    store.createPersonalSkill({
+      name: '庫存查詢助手A', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      assignedAgents: ['客服中心助理'], capabilities: ['庫存查詢'],
+    })
+    const bId = store.createPersonalSkill({
+      name: '庫存查詢助手B', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      assignedAgents: ['客服中心助理'], capabilities: ['庫存盤點'],
+    })
+    await store.generateAITestScenarios(bId, undefined, '客服中心助理')
+    const confusable = store.aiTestScenarios.find(s => s.input === '庫存查詢')!
+    expect(confusable.expectedTrigger).toBe(false)
+    expect(confusable.agentAnswer).toBe(true)
+  })
+
+  it('答題 Agent 調用不到的競爭技能，不算搶觸發', async () => {
+    const store = useSkillStore()
+    store.createPersonalSkill({
+      name: '庫存查詢助手A', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      assignedAgents: ['客服中心助理'], capabilities: ['庫存查詢'],
+    })
+    const bId = store.createPersonalSkill({
+      name: '庫存查詢助手B', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      assignedAgents: ['客服中心助理', '工程助理'], capabilities: ['庫存盤點'],
+    })
+    await store.generateAITestScenarios(bId, undefined, '工程助理')
+    expect(store.aiTestScenarios.some(s => s.expectedBehavior.includes('庫存查詢助手A'))).toBe(false)
+  })
+
+  it('計分是拿使用者標註的正確答案跟 Agent 的判斷比：標註跟 Agent 一樣就是 Agent 答對', async () => {
+    const store = useSkillStore()
+    await store.generateAITestScenarios('ext-erp-001', undefined, '業務分析助理')
+    const answers = Object.fromEntries(store.aiTestScenarios.map(sc => [sc.id, sc.agentAnswer]))
+    store.submitAITestAnswers('ext-erp-001', answers)
+    expect(store.aiTestReport!.correct).toBe(store.aiTestReport!.total)
+    expect(store.aiTestReport!.summary).toContain('業務分析助理')
   })
 })

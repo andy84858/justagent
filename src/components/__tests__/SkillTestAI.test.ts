@@ -8,29 +8,57 @@ import popDialog from '@/services/popDialog'
 
 vi.mock('@/services/popDialog', () => ({ default: { toast: vi.fn(), confirm: vi.fn(), alert: vi.fn() } }))
 
-describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題', () => {
+describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確答案', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
   })
 
-  it('初始空狀態：顯示「生成測試情境」按鈕', () => {
-    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
-    expect(w.find('.ai-idle-hint').exists()).toBe(true)
-    const btn = w.find('button')
-    expect(btn.text()).toContain('生成測試情境')
-  })
-
-  it('點「生成測試情境」：每張情境卡顯示題目、問句，以及「該觸發」「不該觸發」兩個按鈕', async () => {
-    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
-    await w.find('button').trigger('click')
+  // sys-cs-001 指派給「客服中心助理」「電商小幫手」兩個 Agent，生成前要使用者自己挑一個
+  async function pickAgentAndGenerate(w: ReturnType<typeof mount>, agent = '客服中心助理') {
+    const chip = w.findAll('.ai-agent-option').find(b => b.text().includes(agent))!
+    await chip.trigger('click')
+    await w.find('.ai-generate-btn').trigger('click')
     await new Promise(r => setTimeout(r, 950))
     await w.vm.$nextTick()
+  }
 
+  it('初始空狀態：列出可調用這顆技能的 Agent 讓使用者選答題 Agent，還沒選之前不能生成', async () => {
+    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
+    expect(w.find('.ai-idle-hint').exists()).toBe(true)
+    expect(w.findAll('.ai-agent-option').map(b => b.text())).toEqual(['smart_toy 客服中心助理', 'smart_toy 電商小幫手'])
+    const btn = w.find('.ai-generate-btn')
+    expect(btn.text()).toContain('生成測試情境')
+    expect(btn.attributes('disabled')).toBeDefined()
+
+    await w.findAll('.ai-agent-option')[1].trigger('click')
+    expect(w.findAll('.ai-agent-option')[1].classes()).toContain('is-selected')
+    expect(w.find('.ai-generate-btn').attributes('disabled')).toBeUndefined()
+  })
+
+  it('只有一個可調用的 Agent：直接幫忙選好', () => {
+    const store = useSkillStore()
+    const id = store.createPersonalSkill({ name: '單一Agent技能', instructions: 'x', triggerHint: 'y', assignedAgents: ['工程助理'] })
+    const w = mount(SkillTestAI, { props: { skillId: id } })
+    expect(w.findAll('.ai-agent-option')).toHaveLength(1)
+    expect(w.find('.ai-agent-option').classes()).toContain('is-selected')
+    expect(w.find('.ai-generate-btn').attributes('disabled')).toBeUndefined()
+  })
+
+  it('點「生成測試情境」：由選的 Agent 作答，每張情境卡顯示題目、Agent 的判斷，以及標註正確答案的兩個按鈕', async () => {
+    const store = useSkillStore()
+    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
+    await pickAgentAndGenerate(w, '電商小幫手')
+
+    expect(store.aiTestAnsweringAgent).toBe('電商小幫手')
+    expect(w.find('.ai-answering-agent').text()).toContain('電商小幫手')
     const cards = w.findAll('.scenario-card')
     expect(cards.length).toBeGreaterThanOrEqual(6)
     const first = cards[0]
-    expect(first.text()).toContain('這句話該不該觸發這顆技能？')
+    const sc = store.aiTestScenarios[0]
+    expect(first.find('.scenario-agent-answer').text()).toContain('電商小幫手')
+    expect(first.find('.scenario-agent-answer').text()).toContain(sc.agentAnswer ? '觸發' : '不觸發')
+    expect(first.text()).toContain('這句話正確來說，該不該觸發這顆技能？')
     const btns = first.findAll('.scenario-answer-btns button')
     expect(btns.map(b => b.text())).toEqual(['該觸發', '不該觸發'])
     expect(w.find('.ai-report').exists()).toBe(false)
@@ -38,23 +66,35 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
 
   it('沒有 hideGenerationNarration（沒有對話串可用）：題目生成完成後跳 toast 提示；重新生成也一樣', async () => {
     const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
-    await w.find('button').trigger('click')
-    await new Promise(r => setTimeout(r, 950))
-    await w.vm.$nextTick()
+    await pickAgentAndGenerate(w)
     expect(popDialog.toast).toHaveBeenCalledTimes(1)
     expect(vi.mocked(popDialog.toast).mock.calls[0][0]).toContain('生成完成')
 
     await w.find('.ai-regenerate-btn').trigger('click')
-    await new Promise(r => setTimeout(r, 950))
     await w.vm.$nextTick()
+    await pickAgentAndGenerate(w, '電商小幫手')
     expect(popDialog.toast).toHaveBeenCalledTimes(2)
   }, 10000)
 
+  it('「重新生成」先回到選 Agent 的畫面，按取消回到原本的題目，不會清掉', async () => {
+    const store = useSkillStore()
+    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
+    await pickAgentAndGenerate(w)
+    const before = store.aiTestScenarios.map(s => s.id)
+
+    await w.find('.ai-regenerate-btn').trigger('click')
+    expect(w.find('.ai-agent-picker').exists()).toBe(true)
+    expect(w.find('.scenario-card').exists()).toBe(false)
+    await w.find('.ai-cancel-pick-btn').trigger('click')
+    expect(w.findAll('.scenario-card')).toHaveLength(before.length)
+    expect(store.aiTestScenarios.map(s => s.id)).toEqual(before)
+  }, 10000)
+
   it('hideGenerationNarration=true（對話建立的技能，由真正的對話串接手）：不跳 toast', async () => {
+    const store = useSkillStore()
     const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001', hideGenerationNarration: true } })
-    await w.find('button').trigger('click')
-    await new Promise(r => setTimeout(r, 950))
-    await w.vm.$nextTick()
+    await pickAgentAndGenerate(w)
+    expect(store.aiTestScenarios.length).toBeGreaterThan(0)
     expect(popDialog.toast).not.toHaveBeenCalled()
   }, 10000)
 
@@ -66,7 +106,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
 
     const sc = store.aiTestScenarios[0]
     const card = w.findAll('.scenario-card')[0]
-    const correctBtnIndex = sc.expectedTrigger ? 0 : 1
+    const correctBtnIndex = sc.agentAnswer ? 0 : 1
     const btns = card.findAll('.scenario-answer-btns button')
     await btns[correctBtnIndex].trigger('click')
     await w.vm.$nextTick()
@@ -86,7 +126,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
 
     const sc = store.aiTestScenarios[0]
     const card = w.findAll('.scenario-card')[0]
-    const correctBtnIndex = sc.expectedTrigger ? 0 : 1
+    const correctBtnIndex = sc.agentAnswer ? 0 : 1
     await card.findAll('.scenario-answer-btns button')[correctBtnIndex].trigger('click')
     await w.vm.$nextTick()
 
@@ -106,7 +146,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     const scenarios = [...store.aiTestScenarios]
     const cards = w.findAll('.scenario-card')
     for (let i = 0; i < scenarios.length; i++) {
-      const correctBtnIndex = scenarios[i].expectedTrigger ? 0 : 1
+      const correctBtnIndex = scenarios[i].agentAnswer ? 0 : 1
       await cards[i].findAll('.scenario-answer-btns button')[correctBtnIndex].trigger('click')
     }
     await w.vm.$nextTick()
@@ -139,8 +179,8 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     for (let i = 0; i < scenarios.length; i++) {
       // 第一題故意選跟正確答案相反的，其餘都選對，確保送出按鈕會啟用且第一題一定答錯
       const btnIndex = i === 0
-        ? (scenarios[i].expectedTrigger ? 1 : 0)
-        : (scenarios[i].expectedTrigger ? 0 : 1)
+        ? (scenarios[i].agentAnswer ? 1 : 0)
+        : (scenarios[i].agentAnswer ? 0 : 1)
       await cards[i].findAll('.scenario-answer-btns button')[btnIndex].trigger('click')
     }
     await w.vm.$nextTick()
@@ -150,13 +190,15 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     const sc = scenarios[0]
     const card = cards[0]
     expect(card.text()).toContain('答錯了')
-    expect(card.find('.result-explanation').text()).toBe(sc.expectedBehavior)
-    // 使用者自己選的答案跟正確答案各自是獨立的 UI 樣式（pill），不是埋在一句話裡——
-    // 選跟正確答案相反，所以這裡斷言兩顆 pill 的文字剛好相反
+    expect(card.find('.scenario-agent-reasoning').text()).toBe(sc.agentReasoning)
+    // Agent 的判斷跟使用者標註的正確答案各自是獨立的 UI 樣式（pill）——
+    // 標註跟 Agent 判斷相反，所以這裡斷言兩顆 pill 的文字剛好相反
     const pills = card.findAll('.result-answer-pill')
-    expect(pills[0].text()).toContain(sc.expectedTrigger ? '不該觸發' : '該觸發')
+    expect(pills[0].text()).toContain('Agent 判斷')
+    expect(pills[0].text()).toContain(sc.agentAnswer ? '該觸發' : '不該觸發')
     expect(pills[0].classes()).toContain('pill--fail')
-    expect(pills[1].text()).toContain(sc.expectedTrigger ? '該觸發' : '不該觸發')
+    expect(pills[1].text()).toContain('正確答案')
+    expect(pills[1].text()).toContain(sc.agentAnswer ? '不該觸發' : '該觸發')
     expect(pills[1].classes()).toContain('pill--neutral')
   }, 10000)
 
@@ -167,13 +209,13 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     await w.vm.$nextTick()
 
     for (const sc of [...store.aiTestScenarios]) {
-      store.answerAITestScenario('sys-cs-001', sc.id, sc.expectedTrigger)
+      store.answerAITestScenario('sys-cs-001', sc.id, sc.agentAnswer)
     }
     await w.vm.$nextTick()
 
     const report = w.find('.ai-report')
     expect(report.exists()).toBe(true)
-    expect(report.text()).toContain(`${store.aiTestScenarios.length} / ${store.aiTestScenarios.length} 答對`)
+    expect(report.text()).toContain(`Agent 答對 ${store.aiTestScenarios.length} / ${store.aiTestScenarios.length}`)
     expect(report.text()).toContain('100%')
     expect(w.find('.report-summary').text()).toBeTruthy()
     // 分類統計只留「觸發邊緣」，不列「正常流程」「邊界情況」
@@ -186,11 +228,14 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     const store = useSkillStore()
     const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
     await store.generateAITestScenarios('sys-cs-001')
-    store.answerAITestScenario('sys-cs-001', store.aiTestScenarios[0].id, store.aiTestScenarios[0].expectedTrigger)
+    store.answerAITestScenario('sys-cs-001', store.aiTestScenarios[0].id, store.aiTestScenarios[0].agentAnswer)
     await w.vm.$nextTick()
     expect(w.findAll('.status-badge').length).toBeGreaterThan(0)
 
     await w.find('.ai-regenerate-btn').trigger('click')
+    await w.vm.$nextTick()
+    // 重新生成先回到選答題 Agent 的畫面，上一次選過的 Agent 預設選好
+    await w.find('.ai-generate-btn').trigger('click')
     await new Promise(r => setTimeout(r, 950))
     await w.vm.$nextTick()
 
@@ -212,12 +257,12 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
 
     // 除了最後一題以外全部故意答錯，確定 correct !== total（不會意外全對）
     for (let i = 0; i < scenarios.length - 1; i++) {
-      store.answerAITestScenario(id, scenarios[i].id, !scenarios[i].expectedTrigger)
+      store.answerAITestScenario(id, scenarios[i].id, !scenarios[i].agentAnswer)
     }
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.ai-enable-btn').exists()).toBe(false) // 還有題目 pending，aiTestReport 仍是 null
 
-    store.answerAITestScenario(id, scenarios.at(-1)!.id, scenarios.at(-1)!.expectedTrigger)
+    store.answerAITestScenario(id, scenarios.at(-1)!.id, scenarios.at(-1)!.agentAnswer)
     await wrapper.vm.$nextTick()
     expect(store.aiTestReport!.correct).not.toBe(store.aiTestReport!.total) // 確認這次真的不是 100%
     expect(wrapper.find('.ai-enable-btn').exists()).toBe(false)
@@ -228,7 +273,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
-      store.answerAITestScenario(id, sc.id, sc.expectedTrigger) // 全部答對
+      store.answerAITestScenario(id, sc.id, sc.agentAnswer) // 全部答對
     }
     expect(store.aiTestReport!.correct).toBe(store.aiTestReport!.total)
 
@@ -254,7 +299,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
     const id = store.createPersonalSkill({ name: '待測技能3', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
-      store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+      store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     }
 
     const wrapper = mount(SkillTestAI, { props: { skillId: id } })
@@ -285,7 +330,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
 
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
-      store.answerAITestScenario(id, sc.id, sc.expectedTrigger) // 全部答對
+      store.answerAITestScenario(id, sc.id, sc.agentAnswer) // 全部答對
     }
     expect(store.aiTestReport!.correct).toBe(store.aiTestReport!.total)
 
@@ -302,7 +347,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
 
     await store.generateAITestScenarios(idA)
     for (const sc of [...store.aiTestScenarios]) {
-      store.answerAITestScenario(idA, sc.id, sc.expectedTrigger) // A 全部答對
+      store.answerAITestScenario(idA, sc.id, sc.agentAnswer) // A 全部答對
     }
     expect(store.aiTestReport!.correct).toBe(store.aiTestReport!.total)
     expect(store.aiTestScenariosSkillId).toBe(idA)
@@ -328,7 +373,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
 
       await store.generateAITestScenarios('draft-xyz')
       for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('draft-xyz', sc.id, !sc.expectedTrigger) // 故意答錯，確認不限 100% 也會顯示
+        store.answerAITestScenario('draft-xyz', sc.id, !sc.agentAnswer) // 故意答錯，確認不限 100% 也會顯示
       }
       await wrapper.vm.$nextTick()
       expect(wrapper.find('.ai-save-enable-btn').exists()).toBe(true)
@@ -339,7 +384,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
       await store.generateAITestScenarios(id)
       const savedWrapper = mount(SkillTestAI, { props: { skillId: id } })
       for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario(id, sc.id, !sc.expectedTrigger)
+        store.answerAITestScenario(id, sc.id, !sc.agentAnswer)
       }
       await savedWrapper.vm.$nextTick()
       expect(savedWrapper.find('.ai-save-enable-btn').exists()).toBe(false)
@@ -350,7 +395,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
       const wrapper = mount(SkillTestAI, { props: { skillId: 'draft-xyz', canSave: false } })
       await store.generateAITestScenarios('draft-xyz')
       for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('draft-xyz', sc.id, sc.expectedTrigger)
+        store.answerAITestScenario('draft-xyz', sc.id, sc.agentAnswer)
       }
       await wrapper.vm.$nextTick()
       expect(wrapper.find('.ai-save-enable-btn').attributes('disabled')).toBeDefined()
@@ -360,7 +405,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
       const store = useSkillStore()
       await store.generateAITestScenarios('draft-xyz', { name: '草稿技能', triggerHint: 'y', capabilities: [] })
       for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('draft-xyz', sc.id, sc.expectedTrigger) // 全對
+        store.answerAITestScenario('draft-xyz', sc.id, sc.agentAnswer) // 全對
       }
 
       // requestSaveDraft 模擬呼叫端的 conv.save()：同步建立真正的技能、轉記測試結果、
@@ -393,7 +438,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
       const store = useSkillStore()
       await store.generateAITestScenarios('draft-xyz', { name: '草稿技能', triggerHint: 'y', capabilities: [] })
       for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('draft-xyz', sc.id, sc.expectedTrigger)
+        store.answerAITestScenario('draft-xyz', sc.id, sc.agentAnswer)
       }
       const requestSaveDraft = vi.fn(() => 'should-not-be-called')
       const wrapper = mount(SkillTestAI, { props: { skillId: 'draft-xyz', canSave: false, requestSaveDraft } })
@@ -409,7 +454,7 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
       const store = useSkillStore()
       await store.generateAITestScenarios('draft-xyz', { name: '草稿技能', triggerHint: 'y', capabilities: [] })
       for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('draft-xyz', sc.id, sc.expectedTrigger)
+        store.answerAITestScenario('draft-xyz', sc.id, sc.agentAnswer)
       }
       const requestSaveDraft = vi.fn(() => null)
       const wrapper = mount(SkillTestAI, { props: { skillId: 'draft-xyz', canSave: true, requestSaveDraft } })
@@ -429,9 +474,9 @@ describe('SkillTestAI：AI 出題、使用者判斷該不該觸發的選擇題',
       const scenarios = [...store.aiTestScenarios]
       expect(scenarios.length).toBeGreaterThan(1)
       for (let i = 0; i < scenarios.length - 1; i++) {
-        store.answerAITestScenario('draft-xyz', scenarios[i].id, !scenarios[i].expectedTrigger)
+        store.answerAITestScenario('draft-xyz', scenarios[i].id, !scenarios[i].agentAnswer)
       }
-      store.answerAITestScenario('draft-xyz', scenarios.at(-1)!.id, scenarios.at(-1)!.expectedTrigger)
+      store.answerAITestScenario('draft-xyz', scenarios.at(-1)!.id, scenarios.at(-1)!.agentAnswer)
       expect(store.aiTestReport!.correct).not.toBe(store.aiTestReport!.total)
 
       // 存檔時 migrateAITestState 把這輪結果記到新技能上：測過就能啟用，不看對錯

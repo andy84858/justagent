@@ -179,7 +179,7 @@ describe('SkillStudioWorkspace', () => {
       await flushPromises()
       await store.generateAITestScenarios('personal-001')
       for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('personal-001', sc.id, sc.expectedTrigger) // 全對
+        store.answerAITestScenario('personal-001', sc.id, sc.agentAnswer) // 全對
       }
       await flushPromises()
 
@@ -208,9 +208,9 @@ describe('SkillStudioWorkspace', () => {
       const scenarios = [...store.aiTestScenarios]
       expect(scenarios.length).toBeGreaterThan(1)
       for (let i = 0; i < scenarios.length - 1; i++) {
-        store.answerAITestScenario(id, scenarios[i].id, !scenarios[i].expectedTrigger)
+        store.answerAITestScenario(id, scenarios[i].id, !scenarios[i].agentAnswer)
       }
-      store.answerAITestScenario(id, scenarios.at(-1)!.id, scenarios.at(-1)!.expectedTrigger)
+      store.answerAITestScenario(id, scenarios.at(-1)!.id, scenarios.at(-1)!.agentAnswer)
       expect(store.aiTestReport!.correct).not.toBe(store.aiTestReport!.total)
       await flushPromises()
 
@@ -234,7 +234,7 @@ describe('SkillStudioWorkspace', () => {
       await flushPromises()
       await store.generateAITestScenarios('personal-001')
       for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('personal-001', sc.id, sc.expectedTrigger)
+        store.answerAITestScenario('personal-001', sc.id, sc.agentAnswer)
       }
       await flushPromises()
 

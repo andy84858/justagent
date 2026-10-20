@@ -1333,7 +1333,7 @@ describe('notifyTestResult：AI 快速測試沒有全對時，左側對話主動
       await p
       // 已存檔：testSkillId 就是真正的技能 id；draftContext 補上目前草稿的
       // name／triggerHint／capabilities，store 裡找不到技能或技能內容是舊版時可以退回用它
-      expect(spy).toHaveBeenCalledWith(id, { name: '待重測技能', triggerHint: 'y', capabilities: [] })
+      expect(spy).toHaveBeenCalledWith(id, { name: '待重測技能', triggerHint: 'y', capabilities: [], assignedAgents: [] })
       expect(c.requestTestTab.value).toBe(true)
       expect(c.gateStage.value).toBe('active')
       expect(c.messages.value.at(-1)!.content).toContain('換一批新題目')
@@ -1372,7 +1372,7 @@ describe('notifyTestResult：AI 快速測試沒有全對時，左側對話主動
       const gen = store.generateAITestScenarios(id)
       await vi.advanceTimersByTimeAsync(900)
       await gen
-      for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.expectedTrigger) // 全部不一致
+      for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.agentAnswer) // 全部不一致
       const c = useSkillStudioConversation()
       c.loadSkill(id)
       c.notifyTestResult({ total: 8, correct: 6, byTag: {} as any, summary: '' })

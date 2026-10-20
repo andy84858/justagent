@@ -236,6 +236,7 @@ const testDraftContext = computed<TriggerEdgeSource>(() => ({
   triggerHint: props.draft.triggerHint,
   capabilities: props.draft.capabilities,
   composition: props.draft.method === 'blocks' ? { sectionIds: [...props.draft.sectionIds] } : undefined,
+  assignedAgents: props.draft.assignedAgents,
 }))
 
 // 題目是不是跟不上最新的草稿內容了——不是看存不存檔，是看「產生題目當下的

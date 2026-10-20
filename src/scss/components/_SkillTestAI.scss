@@ -37,10 +37,48 @@
   }
 
   .ai-idle-hint {
+    max-width: 420px;
     font-size: 14px;
+    line-height: 1.6;
     margin: 0;
+    text-align: center;
     color: var(--text-muted);
   }
+
+  .ai-idle-actions {
+    display: flex;
+    gap: 8px;
+  }
+}
+
+// 生成前選答題 Agent：chip 本身沿用 .se-agent-grid／.se-agent-chip（_SkillEditor.scss），
+// 這裡只排版標題與說明文字
+.ai-agent-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 480px;
+  padding: 0 16px;
+
+  .ai-agent-picker-label {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .ai-agent-picker-note {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .ai-agent-options { justify-content: center; }
+}
+
+.ai-idle {
 
   .ai-idle-spinner {
     display: flex;
@@ -108,8 +146,21 @@
   .ai-toolbar-left {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 12px;
   }
+}
+
+.ai-answering-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+
+  .material-symbols-outlined { font-size: 16px; color: var(--primary); }
+  strong { font-weight: 600; color: var(--text); }
 }
 
 .ai-progress-text {
@@ -196,6 +247,46 @@
   font-size: 13.5px;
   color: var(--text);
   line-height: 1.5;
+
+  .scenario-input-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-faint);
+    margin-bottom: 2px;
+  }
+}
+
+// 答題 Agent 的作答：做成 Agent 對話泡泡的樣子，強調「這是 Agent 的答案」，
+// 使用者的角色是在下面標註正確答案、批改 Agent
+.scenario-agent-answer {
+  background: var(--page-bg);
+  border: 1px solid var(--divider-a50);
+  border-radius: 10px;
+  border-top-left-radius: 4px;
+  padding: 8px 12px;
+
+  &.is-correct { border-color: var(--success); }
+  &.is-incorrect { border-color: var(--danger); }
+}
+
+.scenario-agent-answer-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+
+  .material-symbols-outlined { font-size: 16px; color: var(--primary); }
+  .scenario-agent-name { font-weight: 600; color: var(--text); }
+  strong { color: var(--text); }
+}
+
+.scenario-agent-reasoning {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
 }
 
 .scenario-question {
@@ -225,21 +316,6 @@
   font-size: 13px;
   padding: 10px 12px;
   border-radius: 8px;
-
-  &.judgment--pass { background: rgba(0, 160, 120, 0.08); }
-  &.judgment--fail { background: rgba(221, 75, 57, 0.08); }
-}
-
-.result-judgment-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-
-  .material-symbols-outlined { font-size: 16px; flex-shrink: 0; }
-  strong { font-weight: 600; }
-
-  .judgment--pass & { color: $color_main_1; }
-  .judgment--fail & { color: $color_red_1; }
 }
 
 .result-answer-row {
@@ -263,7 +339,6 @@
   .result-answer-pill-label {
     font-size: 10px;
     font-weight: 700;
-    text-transform: uppercase;
     letter-spacing: 0.3px;
     opacity: 0.7;
   }
@@ -282,13 +357,6 @@
     border-color: var(--divider);
     color: var(--text-muted);
   }
-}
-
-.result-explanation {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.6;
 }
 
 // ── ③ Report ──

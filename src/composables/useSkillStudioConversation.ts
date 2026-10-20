@@ -726,7 +726,7 @@ export function useSkillStudioConversation() {
 
     if (stage === 'clarify') {
       // 測試沒全對引導訊息的兩個 action chip（也接受相近的自由輸入）：使用者可能是
-      // 自己答題答錯了想重新測，或根本不在意這次沒全對、先不改直接啟用——兩者都
+      // 自己標註正確答案時選錯了想重新測，或根本不在意這次沒全對、先不改直接啟用——兩者都
       // 不是要改技能內容，提早判斷掉，不要落到下面的自由文字編輯規則
       if (t === ACTION_RETEST.label || /重新測|重測|換一批|再測一次|重新出題/.test(t)) {
         // testSkillId：還沒存檔就用草稿佔位 id，draftContext 補上草稿目前的
@@ -736,10 +736,11 @@ export function useSkillStudioConversation() {
           name: draft.value.name,
           triggerHint: draft.value.triggerHint,
           capabilities: draft.value.capabilities,
+          assignedAgents: draft.value.assignedAgents,
         })
         requestTestTab.value = true
         gateStage.value = 'active'
-        push({ role: 'agent', content: '好，已經換一批新題目了，到「測試」tab 繼續作答。' })
+        push({ role: 'agent', content: '好，已經換一批新題目、請同一個 Agent 重新作答了，到「測試」tab 標註正確答案。' })
         return
       }
       if (t === ACTION_FORCE_ENABLE.label || /不改.{0,4}啟用|直接啟用|先不改|先不用改/.test(t)) {
@@ -1111,11 +1112,11 @@ export function useSkillStudioConversation() {
       const existingSkill = savedSkillId.value ? store.findSkill(savedSkillId.value) : null
       let content: string
       if (!savedSkillId.value) {
-        content = '太好了，這次全部答對了！先按左下角「儲存」，存檔後就能到測試報告點「啟用技能」了。'
+        content = '太好了，Agent 這次全部判斷正確！先按左下角「儲存」，存檔後就能到測試報告點「啟用技能」了。'
       } else if (existingSkill?.isEnabled) {
-        content = '太好了，這次全部答對了！這顆技能本來就是啟用中的狀態，不用再做其他動作。'
+        content = '太好了，Agent 這次全部判斷正確！這顆技能本來就是啟用中的狀態，不用再做其他動作。'
       } else {
-        content = '太好了，這次全部答對了！到右側的測試報告點「啟用技能」，確認一下哪些 Agent 可以用之後就能上線了。'
+        content = '太好了，Agent 這次全部判斷正確！到右側的測試報告點「啟用技能」，確認一下哪些 Agent 可以用之後就能上線了。'
       }
       push({ role: 'agent', content })
       return
@@ -1126,7 +1127,7 @@ export function useSkillStudioConversation() {
     // 「重新測試」「不改，直接啟用」這兩種意圖（含同義的自由輸入）
     push({
       role: 'agent',
-      content: `剛剛的測試沒有全部通過（答對 ${report.correct}/${report.total}，${rate}%），要不要跟我說說看哪裡需要調整？我會幫你補齊或修正做法內容。也可能是你剛剛答題時選錯了，或這次先不處理也沒關係。`,
+      content: `剛剛的測試沒有全部通過（Agent 判斷對 ${report.correct}/${report.total}，${rate}%），要不要跟我說說看哪裡需要調整？我會幫你補齊或修正做法內容，讓 Agent 更容易分辨。也可能是你剛剛標註正確答案時選錯了，或這次先不處理也沒關係。`,
     })
   }
 
@@ -1185,7 +1186,7 @@ export function useSkillStudioConversation() {
   // 技能才推這句話，讓使用者知道可以開始作答了，不是生成中的訊息講完就沒下文
   function notifyTestGenerated(): void {
     if (draft.value.method !== 'chat') return
-    push({ role: 'agent', content: '題目生成完成，可以開始作答囉！' })
+    push({ role: 'agent', content: '題目生成完成，Agent 也作答好了，到右側逐題標註正確答案吧！' })
   }
 
   return {
