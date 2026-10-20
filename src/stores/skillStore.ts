@@ -1050,6 +1050,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['會議記錄助理', '業務分析助理'],
     instructions: '你是一個週報助理，協助使用者根據本週資料自動生成結構化週報。',
     triggerHint: '週報、會議紀錄、任務清單、彙整',
     capabilities: [
@@ -1104,6 +1105,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['客服中心助理'],
     instructions: '你是客服品質評估助理，分析客服對話品質。',
     capabilities: [
       '多輪對話分析',
@@ -1138,6 +1140,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['知識管理助理'],
     instructions: '你是合約審核助理，負責擷取合約中的關鍵條款並評估潛在法律風險。請以條列方式輸出摘要，並標示高風險條款。',
     capabilities: [
       '關鍵條款擷取',
@@ -1172,6 +1175,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['會議記錄助理'],
     instructions: '你是會議記錄助理，根據逐字稿整理結構化會議記錄，包含主題、決議、行動項目與負責人。',
     capabilities: [
       '多發言人識別',
@@ -1201,6 +1205,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['客服中心助理', '電商小幫手'],
     instructions: '你是產品 FAQ 助理，根據內部文件與常見問題資料庫回答用戶問題，無法回答時請引導至人工客服。',
     capabilities: [
       'FAQ比對回覆',
@@ -1227,6 +1232,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['業務分析助理', '倉儲管理助理'],
     instructions: '你是 ERP 報表助理，整合多系統數據生成週期性報表。',
     capabilities: [
       '多系統資料彙整',
@@ -1256,7 +1262,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     avgLatencyMs: 0,
     instructions: '依序產出以下章節：\n1. 會員人物誌：性別 × 年齡層 × 主力購買品類 × RFM 行為分群的四維輪廓。\n2. 活動排行：各促銷活動帶動效果排行，並自動生成圖表。\n3. 渠道別流量與收益貢獻：各渠道流量佔比與收益貢獻對照，圖表自動生成。',
     triggerHint: '當使用者要求產出行銷報告，或提到「TA 用戶畫像、行銷活動成效、渠道績效」相關分析時',
-    assignedAgents: [],
+    assignedAgents: ['業務分析助理'],
     capabilities: [
       '會員人物誌',
       '活動排行',
@@ -1288,7 +1294,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     // 兩字重疊就可能被誤判成「找到相近技能」，見 useSkillStudioConversation.ts
     instructions: '這是示範用的一顆項目，內容可以隨時調整，主要用來展示啟用前的測試流程。',
     triggerHint: '示範用途，沒有特定觸發情境',
-    assignedAgents: [],
+    assignedAgents: ['通用助理'],
     capabilities: [
       '示範能力',
     ],

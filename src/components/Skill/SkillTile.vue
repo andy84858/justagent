@@ -12,6 +12,10 @@
     </div>
     <div class="tile-scope">{{ scopeLabel }}</div>
     <div v-if="tileDesc" class="tile-desc">{{ tileDesc }}</div>
+    <div v-if="skill.assignedAgents?.length" class="tile-agents" :title="`可調用 Agent：${skill.assignedAgents.join('、')}`">
+      <i class="material-symbols-outlined">smart_toy</i>
+      <span class="tile-agents-text">{{ skill.assignedAgents.join('、') }}</span>
+    </div>
 
     <div class="tile-foot">
       <div class="tile-actions" @click.stop>

@@ -65,7 +65,7 @@
           <p v-else class="ssp-empty">尚未拆解覆蓋能力項目</p>
         </div>
 
-        <div v-if="props.draft.method === 'blocks'" class="ssp-section">
+        <div class="ssp-section">
           <div class="ssp-section-label">指派 Agent</div>
           <div v-if="props.draft.assignedAgents.length" class="ssp-caps">
             <span v-for="agent in props.draft.assignedAgents" :key="agent" class="ssp-agent-chip">{{ agent }}</span>
@@ -142,7 +142,6 @@
           :draft-context="testDraftContext"
           :can-save="props.canSave"
           :request-save-draft="props.requestSaveDraft"
-          :hide-generation-narration="props.hideGenerationNarration"
         />
         <div v-if="props.savedSkillId" class="ssp-test-foot">
           <span class="ssp-test-foot-text">想手動模擬使用者對話，或比較不同版本？</span>
@@ -191,10 +190,6 @@ const props = defineProps<{
   // 轉傳給 SkillTestAI 的「儲存並啟用」用：同步存草稿、回傳新技能 id（見
   // useSkillStudioConversation.ts 的 save()）。這裡純轉手，不自己呼叫
   requestSaveDraft?: () => string | null
-  // 對話建立的技能有真正的對話串可以顯示生成中的敘事文字（見 SkillStudioWorkspace.vue
-  // 的 conv.notifyTestGenerating），這裡轉傳給 SkillTestAI 隱藏掉它自己的敘事泡泡，
-  // 避免同一段話在左右兩欄同時出現
-  hideGenerationNarration?: boolean
   // 後端模式的測試：用這場後端對話出題與交卷；testedNote 是測過之後怎麼把記號記下來的說明
   backendTest?: boolean
   conversationId?: string | null

@@ -45,7 +45,7 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     expect(w.find('.ai-generate-btn').attributes('disabled')).toBeUndefined()
   })
 
-  it('點「生成測試情境」：由選的 Agent 作答，每張情境卡顯示題目、Agent 的判斷，以及標註正確答案的兩個按鈕', async () => {
+  it('點「生成測試情境」：由選的 Agent 作答，每張情境卡只顯示題目與標註正確答案的兩個按鈕（Agent 的判斷送出後才揭曉）', async () => {
     const store = useSkillStore()
     const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
     await pickAgentAndGenerate(w, '電商小幫手')
@@ -55,16 +55,15 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     const cards = w.findAll('.scenario-card')
     expect(cards.length).toBeGreaterThanOrEqual(6)
     const first = cards[0]
-    const sc = store.aiTestScenarios[0]
-    expect(first.find('.scenario-agent-answer').text()).toContain('電商小幫手')
-    expect(first.find('.scenario-agent-answer').text()).toContain(sc.agentAnswer ? '觸發' : '不觸發')
+    // 送出答案前不顯示 Agent 的判斷，避免使用者被它影響
+    expect(first.find('.scenario-agent-answer').exists()).toBe(false)
     expect(first.text()).toContain('這句話正確來說，該不該觸發這顆技能？')
     const btns = first.findAll('.scenario-answer-btns button')
     expect(btns.map(b => b.text())).toEqual(['該觸發', '不該觸發'])
     expect(w.find('.ai-report').exists()).toBe(false)
   }, 10000)
 
-  it('沒有 hideGenerationNarration（沒有對話串可用）：題目生成完成後跳 toast 提示；重新生成也一樣', async () => {
+  it('題目生成完成後跳 toast 提示（不推進對話河道）；重新生成也一樣', async () => {
     const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
     await pickAgentAndGenerate(w)
     expect(popDialog.toast).toHaveBeenCalledTimes(1)
@@ -88,14 +87,6 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     await w.find('.ai-cancel-pick-btn').trigger('click')
     expect(w.findAll('.scenario-card')).toHaveLength(before.length)
     expect(store.aiTestScenarios.map(s => s.id)).toEqual(before)
-  }, 10000)
-
-  it('hideGenerationNarration=true（對話建立的技能，由真正的對話串接手）：不跳 toast', async () => {
-    const store = useSkillStore()
-    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001', hideGenerationNarration: true } })
-    await pickAgentAndGenerate(w)
-    expect(store.aiTestScenarios.length).toBeGreaterThan(0)
-    expect(popDialog.toast).not.toHaveBeenCalled()
   }, 10000)
 
   it('選答案：按鈕變選中樣式，但還不計分（不會立刻顯示答對／答錯）', async () => {
@@ -190,6 +181,8 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     const sc = scenarios[0]
     const card = cards[0]
     expect(card.text()).toContain('答錯了')
+    // 送出後才揭曉 Agent 的判斷與理由
+    expect(card.find('.scenario-agent-answer').text()).toContain(sc.agentAnswer ? '觸發' : '不觸發')
     expect(card.find('.scenario-agent-reasoning').text()).toBe(sc.agentReasoning)
     // Agent 的判斷跟使用者標註的正確答案各自是獨立的 UI 樣式（pill）——
     // 標註跟 Agent 判斷相反，所以這裡斷言兩顆 pill 的文字剛好相反

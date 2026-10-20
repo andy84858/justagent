@@ -7,11 +7,9 @@
         <span></span><span></span><span></span>
       </div>
       <!-- 敘事文字講「正在做什麼」（查可調用 Agent、比對搶觸發的相似技能），不是一句
-           固定不變的罐頭字——每次生成／重新生成都會照當下掃描結果重算。對話建立的技能
-           有真正的對話串可以講這句話（見 SkillStudioWorkspace.vue 的
-           conv.notifyTestGenerating），這裡用 hideGenerationNarration 隱藏掉自己這份，
-           避免同一段話左右兩欄同時出現 -->
-      <div v-if="!props.hideGenerationNarration" class="ai-generation-narration">
+           固定不變的罐頭字——每次生成／重新生成都會照當下掃描結果重算。一律顯示在這裡，
+           不推進 SkillStudio 左側的對話河道 -->
+      <div class="ai-generation-narration">
         <div class="ai-generation-narration-label">AI Agent</div>
         <p v-for="(line, i) in store.aiTestGenerationNarration" :key="i">{{ line }}</p>
       </div>
@@ -21,7 +19,7 @@
          「重新生成」也回到這裡，讓使用者可以換一個 Agent 再測 -->
     <div v-else-if="!store.aiTestScenarios.length || pickingAgent" class="ai-idle">
       <i class="material-symbols-outlined ai-idle-icon">auto_awesome</i>
-      <p class="ai-idle-hint">AI 依技能描述產生測試情境，由你選的 Agent 逐題判斷該不該觸發，你再標註正確答案</p>
+      <p class="ai-idle-hint">AI 依技能描述產生測試情境，由你選的 Agent 作答；你先標註每題的正確答案，送出後揭曉 Agent 的判斷</p>
       <div class="ai-agent-picker">
         <p class="ai-agent-picker-label">選擇答題 Agent</p>
         <p v-if="callable.source === 'inferred'" class="ai-agent-picker-note">
@@ -102,12 +100,13 @@
             </div>
           </div>
 
-          <!-- 題目是一句使用者會講的話，Agent 的作答接在下面，讀起來像「使用者說 → Agent 判斷」 -->
+          <!-- 題目是一句使用者會講的話。Agent 的作答要等使用者送出答案後才揭曉，
+               避免使用者看了 Agent 的判斷才標註、被它影響 -->
           <div class="scenario-input">
             <span class="scenario-input-label">使用者輸入</span>
             {{ sc.input }}
           </div>
-          <div :class="['scenario-agent-answer', `is-${sc.status}`]">
+          <div v-if="sc.status !== 'pending'" :class="['scenario-agent-answer', `is-${sc.status}`]">
             <div class="scenario-agent-answer-head">
               <i class="material-symbols-outlined">smart_toy</i>
               <span class="scenario-agent-name">{{ store.aiTestAnsweringAgent }}</span>
@@ -222,9 +221,6 @@ const props = defineProps<{
   draftContext?: TriggerEdgeSource
   canSave?: boolean
   requestSaveDraft?: () => string | null
-  // 呼叫端（SkillStudioPreview）有真正的對話串可以顯示生成中的敘事文字時傳 true，
-  // 隱藏掉這裡自己的敘事泡泡，避免同一段話左右兩欄同時出現
-  hideGenerationNarration?: boolean
 }>()
 const store = useSkillStore()
 const enableFlowRef = ref<InstanceType<typeof SkillEnableFlow> | null>(null)
@@ -322,18 +318,14 @@ const ratePercent = computed(() => {
   return Math.round((store.aiTestReport.correct / store.aiTestReport.total) * 100)
 })
 
-// 題目生成完成要讓使用者知道，不是生成中的敘事文字講完就沒下文。對話建立的技能
-// 有真正的對話串，由 SkillStudioWorkspace.vue 的 watcher 呼叫 conv.notifyTestGenerated()
-// 在裡面講這句話（見 hideGenerationNarration 同一組判斷）；這裡沒有對話串可用的
-// 其他畫面（自行建立精靈／積木方式／就地測試／獨立沙盒）用 toast 簡單提示一下
+// 題目生成完成要讓使用者知道，不是生成中的敘事文字講完就沒下文——用 toast 提示，
+// 不推進對話河道
 async function regenerate() {
   if (!selectedAgent.value) return
   draftAnswers.value = {}
   pickingAgent.value = false
   await store.generateAITestScenarios(props.skillId, props.draftContext, selectedAgent.value)
-  if (!props.hideGenerationNarration) {
-    popDialog.toast('測試情境生成完成，Agent 已作答，請標註正確答案！')
-  }
+  popDialog.toast('測試情境生成完成，請標註正確答案，送出後揭曉 Agent 的判斷！')
 }
 
 // userAnswer：使用者標註的正確答案

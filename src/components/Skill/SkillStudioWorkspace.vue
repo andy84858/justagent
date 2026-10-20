@@ -111,7 +111,6 @@
         hide-files
         hide-nav-links
         hide-footer
-        :hide-generation-narration="conv.draft.value.method === 'chat'"
         :draft="conv.draft.value"
         :note="conv.note.value"
         :mode="conv.mode.value"
@@ -198,28 +197,8 @@ const saveClickEnabled = computed(() => {
   return hasTestRecord.value ? conv.canSave.value : conv.saveEnabled.value
 })
 
-// AI 快速測試完成（store.aiTestReport 從 null 變成一份報告，一輪測驗只會發生一次
-// 這樣的轉換——見 _computeAITestReport 在所有題目答完前都是 no-op）：交給 conv 判斷
-// 要不要在左側對話主動引導使用者調整內容
-watch(() => store.aiTestReport, report => {
-  if (report) conv.notifyTestResult(report)
-})
-
-// 生成／重新生成測試情境中的敘事文字：對話建立的技能有真正的對話串，讓 Agent
-// 在裡面講這段話；conv.notifyTestGenerating 自己會判斷 method 是不是 'chat'，
-// 積木方式會是 no-op（維持顯示在右側測試 tab 自己的敘事泡泡）
-watch(() => store.aiTestGenerationNarration, narration => {
-  conv.notifyTestGenerating(narration)
-})
-
-// 題目真的生成完成的那一刻（aiTestIsGenerating 從 true 變 false，且確實生出了題目——
-// 跟「測試步驟按上一步被重設」那種 true→false 區分開，重設不會留下任何題目）：
-// 讓 Agent 在對話裡講一句「題目生成完成」，不是生成中的訊息講完就沒下文
-watch(() => store.aiTestIsGenerating, (isGenerating, wasGenerating) => {
-  if (!isGenerating && wasGenerating && store.aiTestScenarios.length > 0) {
-    conv.notifyTestGenerated()
-  }
-})
+// 測試相關的提示文字（生成中的敘事、生成完成、測試結果）一律留在右側測試 tab 裡
+// （敘事泡泡／toast／測試報告），不推進左側對話河道——河道只留建立／修改技能本身的對話
 
 // 使用者在引導訊息點「重新測試」：conv 自己呼叫得到 store.generateAITestScenarios，
 // 但切不了這裡才有的 activeTab——讀到這個單次訊號就切到測試 tab，讀完歸零

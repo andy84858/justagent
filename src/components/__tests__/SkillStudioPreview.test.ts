@@ -42,13 +42,14 @@ describe('SkillStudioPreview', () => {
     expect(text).toContain('尚未撰寫技能指令')
     expect(text).toContain('尚未拆解覆蓋能力項目')
     expect(w.find('.ssp-status-badge').text()).toBe('未儲存草稿')
-    expect(w.findAll('.ssp-section-label').length).toBe(5) // 說明／觸發條件／技能指令／覆蓋能力／附加檔案
+    expect(text).toContain('尚未指派 Agent')
+    expect(w.findAll('.ssp-section-label').length).toBe(6) // 說明／觸發條件／技能指令／覆蓋能力／指派 Agent／附加檔案
   })
 
-  it('hideFiles：不顯示「附加檔案」區塊，只剩四個區塊標籤', () => {
+  it('hideFiles：不顯示「附加檔案」區塊，只剩五個區塊標籤', () => {
     const w = mountPreview({ hideFiles: true })
     expect(w.text()).not.toContain('附加檔案')
-    expect(w.findAll('.ssp-section-label').length).toBe(4)
+    expect(w.findAll('.ssp-section-label').length).toBe(5)
   })
 
   it('有內容時渲染名稱、觸發、markdown 指令與能力 chip', () => {

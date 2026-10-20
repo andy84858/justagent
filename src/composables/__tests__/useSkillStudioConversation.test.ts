@@ -845,6 +845,8 @@ describe('CLARIFY 補齊與關卡三確認', () => {
     await sendAndWait(c, '沒有特殊例外')
     await sendAndWait(c, '照標準流程執行')
     await sendAndWait(c, '對，沒錯')
+    expect(c.gateStage.value).toBe('confirmAgents')
+    await sendAndWait(c, '先不指派，啟用時再選')
     expect(c.gateStage.value).toBe('gate3')
   }
 
@@ -1079,6 +1081,8 @@ describe('classifyGate3（模組內部邏輯，透過 gateStage 行為驗證，�
     await sendAndWait(c, '沒有特殊例外')
     await sendAndWait(c, '照標準流程執行')
     await sendAndWait(c, '對，沒錯')
+    expect(c.gateStage.value).toBe('confirmAgents')
+    await sendAndWait(c, '先不指派，啟用時再選')
     expect(c.gateStage.value).toBe('gate3')
   }
 
@@ -1209,11 +1213,11 @@ describe('confirmKnownInfo：白話摘要確認', () => {
     expect(c.gateStage.value).toBe('confirmKnownInfo')
   }
 
-  it('確認：用累積的原始文字產生結構化草稿，直接轉關卡三，不留在 clarify', async () => {
+  it('確認：用累積的原始文字產生結構化草稿，轉「確認可調用 Agent」，不留在 clarify', async () => {
     const c = useSkillStudioConversation()
     await toConfirmKnownInfo(c)
     await sendAndWait(c, '對，沒錯')
-    expect(c.gateStage.value).toBe('gate3')
+    expect(c.gateStage.value).toBe('confirmAgents')
     expect(c.draft.value.name).toBeTruthy()
     expect(c.draft.value.instructions).toBeTruthy()
   })
@@ -1233,7 +1237,7 @@ describe('confirmKnownInfo：白話摘要確認', () => {
 
     // 補充完後正常確認，草稿內容應該要包含補充進去的文字
     await sendAndWait(c, '對，沒錯')
-    expect(c.gateStage.value).toBe('gate3')
+    expect(c.gateStage.value).toBe('confirmAgents')
   })
 
   it('看不懂：換句話重述摘要，不清空草稿，不跳關', async () => {
@@ -1391,66 +1395,6 @@ describe('notifyTestResult：AI 快速測試沒有全對時，左側對話主動
   })
 })
 
-describe('notifyTestGenerating：生成測試情境中的敘事文字，對話建立的技能要推進對話串', () => {
-  beforeEach(() => setActivePinia(createPinia()))
-
-  it('method 為 chat：推一則 agent 訊息，內容是敘事文字合併成一段', () => {
-    const c = useSkillStudioConversation()
-    c.startCreate()
-    c.chooseMethod('chat')
-    const before = c.messages.value.length
-    c.notifyTestGenerating(['正在查看可調用的 Agent：客服中心助理。', '正在產生測試情境...'])
-    expect(c.messages.value.length).toBe(before + 1)
-    const last = c.messages.value.at(-1)!
-    expect(last.role).toBe('agent')
-    expect(last.content).toContain('客服中心助理')
-    expect(last.content).toContain('正在產生測試情境')
-  })
-
-  it('method 為 blocks：no-op，不會推訊息（積木方式沒有對話串，維持顯示在測試 tab 自己的敘事泡泡）', () => {
-    const c = useSkillStudioConversation()
-    c.startCreate()
-    c.chooseMethod('blocks')
-    const before = c.messages.value.length
-    c.notifyTestGenerating(['正在查看可調用的 Agent：客服中心助理。'])
-    expect(c.messages.value.length).toBe(before)
-  })
-
-  it('空陣列（例如測試狀態被清空時）：no-op，不會推空白訊息', () => {
-    const c = useSkillStudioConversation()
-    c.startCreate()
-    c.chooseMethod('chat')
-    const before = c.messages.value.length
-    c.notifyTestGenerating([])
-    expect(c.messages.value.length).toBe(before)
-  })
-})
-
-describe('notifyTestGenerated：題目真的生成完成時，對話建立的技能要推一句完成訊息', () => {
-  beforeEach(() => setActivePinia(createPinia()))
-
-  it('method 為 chat：推一則 agent 訊息，內容提到生成完成', () => {
-    const c = useSkillStudioConversation()
-    c.startCreate()
-    c.chooseMethod('chat')
-    const before = c.messages.value.length
-    c.notifyTestGenerated()
-    expect(c.messages.value.length).toBe(before + 1)
-    const last = c.messages.value.at(-1)!
-    expect(last.role).toBe('agent')
-    expect(last.content).toContain('生成完成')
-  })
-
-  it('method 為 blocks：no-op，不會推訊息（積木方式沒有對話串）', () => {
-    const c = useSkillStudioConversation()
-    c.startCreate()
-    c.chooseMethod('blocks')
-    const before = c.messages.value.length
-    c.notifyTestGenerated()
-    expect(c.messages.value.length).toBe(before)
-  })
-})
-
 describe('notifyTestResult：沒測過就不能「直接啟用」', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
@@ -1583,5 +1527,84 @@ describe('修改模式下明確說要建立新技能：先確認，確認後捨�
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('確認可調用 Agent：草稿產出後、最終確認前多一關', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function sendAndWait(c: ReturnType<typeof useSkillStudioConversation>, text: string) {
+    const p = c.send(text)
+    await vi.advanceTimersByTimeAsync(800)
+    await p
+  }
+
+  async function toConfirmAgents(c: ReturnType<typeof useSkillStudioConversation>) {
+    c.startCreate()
+    c.chooseMethod('chat')
+    await sendAndWait(c, '我要新增一份規定')
+    await sendAndWait(c, '沒有特殊例外')
+    await sendAndWait(c, '照標準流程執行')
+    await sendAndWait(c, '對，沒錯')
+    expect(c.gateStage.value).toBe('confirmAgents')
+  }
+
+  it('問題訊息帶建議 Agent 跟「先不指派」兩顆 chip', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    const last = c.messages.value.at(-1)!
+    expect(last.content).toContain('哪些 Agent 可以調用')
+    expect(last.actions!.map(a => a.label)).toContain('先不指派，啟用時再選')
+    expect(last.actions![0].label).toMatch(/^就用建議的：/)
+  })
+
+  it('直接打 Agent 名稱（可以好幾個）：寫進草稿，進最終確認，摘要列出可調用 Agent', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    await sendAndWait(c, '工程助理跟客服中心助理')
+    expect(c.draft.value.assignedAgents).toEqual(['客服中心助理', '工程助理'])
+    expect(c.gateStage.value).toBe('gate3')
+    expect(c.messages.value.at(-1)!.content).toContain('可調用 Agent：客服中心助理、工程助理')
+  })
+
+  it('點「就用建議的」：用建議的 Agent', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    const accept = c.messages.value.at(-1)!.actions![0].label
+    await sendAndWait(c, accept)
+    expect(c.draft.value.assignedAgents.length).toBeGreaterThan(0)
+    expect(c.gateStage.value).toBe('gate3')
+  })
+
+  it('對不到 Agent 名稱也不是同意／略過：留在這關再問一次', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    await sendAndWait(c, '嗯')
+    expect(c.gateStage.value).toBe('confirmAgents')
+  })
+
+  it('存檔時把可調用 Agent 寫進技能（對話方式也會存，不再固定空陣列）', async () => {
+    const store = useSkillStore()
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    await sendAndWait(c, '工程助理')
+    await sendAndWait(c, '可以')
+    expect(store.findSkill(c.savedSkillId.value!)!.assignedAgents).toEqual(['工程助理'])
+  })
+
+  it('最終確認退回 clarify 後再說「這樣就好」：不再重問 Agent；clarify 裡講 Agent 名稱可直接改', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    await sendAndWait(c, '先不指派')
+    await sendAndWait(c, '不對，我要改')
+    expect(c.gateStage.value).toBe('clarify')
+    await sendAndWait(c, 'Agent 改成倉儲管理助理')
+    expect(c.draft.value.assignedAgents).toEqual(['倉儲管理助理'])
+    await sendAndWait(c, '這樣就好')
+    expect(c.gateStage.value).toBe('gate3')
   })
 })
