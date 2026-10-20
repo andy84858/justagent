@@ -846,7 +846,7 @@ describe('CLARIFY 補齊與關卡三確認', () => {
     await sendAndWait(c, '照標準流程執行')
     await sendAndWait(c, '對，沒錯')
     expect(c.gateStage.value).toBe('confirmAgents')
-    await sendAndWait(c, '先不指派，啟用時再選')
+    await sendAndWait(c, '通用助理')
     expect(c.gateStage.value).toBe('gate3')
   }
 
@@ -1082,7 +1082,7 @@ describe('classifyGate3（模組內部邏輯，透過 gateStage 行為驗證，�
     await sendAndWait(c, '照標準流程執行')
     await sendAndWait(c, '對，沒錯')
     expect(c.gateStage.value).toBe('confirmAgents')
-    await sendAndWait(c, '先不指派，啟用時再選')
+    await sendAndWait(c, '通用助理')
     expect(c.gateStage.value).toBe('gate3')
   }
 
@@ -1553,13 +1553,22 @@ describe('確認可調用 Agent：草稿產出後、最終確認前多一關', (
     expect(c.gateStage.value).toBe('confirmAgents')
   }
 
-  it('問題訊息帶建議 Agent 跟「先不指派」兩顆 chip', async () => {
+  it('問題訊息只帶「就用建議的」chip，沒有略過的選項', async () => {
     const c = useSkillStudioConversation()
     await toConfirmAgents(c)
     const last = c.messages.value.at(-1)!
     expect(last.content).toContain('哪些 Agent 可以調用')
-    expect(last.actions!.map(a => a.label)).toContain('先不指派，啟用時再選')
+    expect(last.actions).toHaveLength(1)
     expect(last.actions![0].label).toMatch(/^就用建議的：/)
+  })
+
+  it('不能不指派：說「先不指派」會被擋下來，留在這關再問一次', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    await sendAndWait(c, '先不指派，啟用時再選')
+    expect(c.gateStage.value).toBe('confirmAgents')
+    expect(c.draft.value.assignedAgents).toEqual([])
+    expect(c.messages.value.at(-1)!.content).toContain('至少要指派一個 Agent')
   })
 
   it('直接打 Agent 名稱（可以好幾個）：寫進草稿，進最終確認，摘要列出可調用 Agent', async () => {
@@ -1599,12 +1608,76 @@ describe('確認可調用 Agent：草稿產出後、最終確認前多一關', (
   it('最終確認退回 clarify 後再說「這樣就好」：不再重問 Agent；clarify 裡講 Agent 名稱可直接改', async () => {
     const c = useSkillStudioConversation()
     await toConfirmAgents(c)
-    await sendAndWait(c, '先不指派')
+    await sendAndWait(c, '通用助理')
     await sendAndWait(c, '不對，我要改')
     expect(c.gateStage.value).toBe('clarify')
     await sendAndWait(c, 'Agent 改成倉儲管理助理')
     expect(c.draft.value.assignedAgents).toEqual(['倉儲管理助理'])
     await sendAndWait(c, '這樣就好')
     expect(c.gateStage.value).toBe('gate3')
+  })
+})
+
+describe('confirmAgentsBeforeSave：新建的對話技能直接按存檔鍵，也要先確認可調用 Agent', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function sendAndWait(c: ReturnType<typeof useSkillStudioConversation>, text: string) {
+    const p = c.send(text)
+    await vi.advanceTimersByTimeAsync(800)
+    await p
+  }
+
+  it('還沒問過 Agent（例如預填草稿直接按存檔）：攔下來在對話裡問，回答後直接存檔、寫進 Agent', async () => {
+    const store = useSkillStore()
+    const c = useSkillStudioConversation()
+    c.startCreate({ name: '預填技能', instructions: '1. 做事', triggerHint: '需要時' })
+    c.chooseMethod('chat')
+    expect(c.confirmAgentsBeforeSave()).toBe(true)
+    expect(c.gateStage.value).toBe('confirmAgents')
+    expect(c.savedSkillId.value).toBeNull()
+
+    await sendAndWait(c, '工程助理')
+    expect(c.savedSkillId.value).toBeTruthy()
+    expect(store.findSkill(c.savedSkillId.value!)!.assignedAgents).toEqual(['工程助理'])
+    expect(c.gateStage.value).toBe('active')
+    expect(c.messages.value.at(-1)!.content).toContain('已存成個人技能')
+  })
+
+  it('對話裡已經確認過 Agent：不再攔截', async () => {
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('chat')
+    await sendAndWait(c, '我要新增一份規定')
+    await sendAndWait(c, '沒有特殊例外')
+    await sendAndWait(c, '照標準流程執行')
+    await sendAndWait(c, '對，沒錯')
+    await sendAndWait(c, '通用助理')
+    expect(c.confirmAgentsBeforeSave()).toBe(false)
+  })
+
+  it('已經問了 Agent、還沒回答就按存檔：不直接存，提醒先回答，回答完就存檔', async () => {
+    const store = useSkillStore()
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('chat')
+    await sendAndWait(c, '我要新增一份規定')
+    await sendAndWait(c, '沒有特殊例外')
+    await sendAndWait(c, '照標準流程執行')
+    await sendAndWait(c, '對，沒錯')
+    expect(c.gateStage.value).toBe('confirmAgents')
+    expect(c.confirmAgentsBeforeSave()).toBe(true)
+    expect(c.savedSkillId.value).toBeNull()
+    await sendAndWait(c, '知識管理助理')
+    expect(store.findSkill(c.savedSkillId.value!)!.assignedAgents).toEqual(['知識管理助理'])
+  })
+
+  it('修改既有技能不攔截', () => {
+    const c = useSkillStudioConversation()
+    c.loadSkill('personal-002')
+    expect(c.confirmAgentsBeforeSave()).toBe(false)
   })
 })

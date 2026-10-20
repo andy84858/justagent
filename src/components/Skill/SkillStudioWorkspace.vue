@@ -326,6 +326,8 @@ async function handleSaveAndEnable() {
 }
 
 function handleSaveClick() {
+  // 新建的對話技能還沒確認過可調用 Agent：先在對話裡問，回答完由 conv 自己存檔
+  if (conv.confirmAgentsBeforeSave()) return
   if (hasTestRecord.value) {
     handleSaveAndEnable()
     return

@@ -28,7 +28,7 @@ export interface SkillDraft {
   instructions: string
   triggerHint: string
   capabilities: SkillCapability[]
-  assignedAgents: string[]      // 可調用這顆技能的 Agent：積木方式在基本設定填；對話方式在「確認可調用 Agent」關卡填（可以先不指派，啟用時再選）
+  assignedAgents: string[]      // 可調用這顆技能的 Agent：積木方式在基本設定填；對話方式在「確認可調用 Agent」關卡填（新建時必填，至少一個）
   keywords: string[]            // 只有積木方式會在這裡填寫，規則同 assignedAgents
   files: SkillFile[]
   method: StudioMethod | null   // null = 尚未選擇建立方式
@@ -53,6 +53,11 @@ export interface StudioSnapshot {
   gatheringRawText?: string
   gatheringRound?: number
   awaitingSupplement?: boolean
+  // 可調用 Agent 問過了沒／是不是按存檔鍵被攔下來在等回答：畫布上兩個實例共用同一份
+  // 快照，不帶這兩個值的話，另一個實例會以為還沒問過、按存檔又再問一次
+  agentsAsked?: boolean
+  saveAfterAgents?: boolean
+  suggestedAgents?: string[]
 }
 
 export const DEFAULT_OPENING_MESSAGE = '你好，我是技能建立助理。描述你想讓 Agent 幫你做什麼，我會先擬一版設定放在右側。'
@@ -192,15 +197,15 @@ export function formatDraftSummary(draft: SkillDraft): string {
   if (draft.capabilities.length) {
     lines.push(`覆蓋能力：${draft.capabilities.map(c => `#${c}`).join(' ')}`)
   }
-  lines.push(`可調用 Agent：${draft.assignedAgents.length ? draft.assignedAgents.join('、') : '（先不指派，啟用時再選）'}`)
+  lines.push(`可調用 Agent：${draft.assignedAgents.length ? draft.assignedAgents.join('、') : '（未指派）'}`)
   return lines.join('\n')
 }
 
 // 「確認可調用 Agent」關卡：使用者可以點建議的 chip、直接打 Agent 名稱（可以好幾個），
-// 或說先不指派。規則式比對，跟這個檔案其他關卡的分類器同一種風格
+// 或同意用建議的。新建技能至少要指派一個 Agent，不能略過——想略過的回覆會被擋下來再問一次。
+// 規則式比對，跟這個檔案其他關卡的分類器同一種風格
 const AGENTS_SKIP_HINT = /不指派|先不|之後再|跳過|啟用時再|不用指派/
 const AGENTS_ACCEPT_HINT = /建議|可以|好|對|沒問題|就這樣|確認/
-const ACTION_AGENTS_SKIP: StudioAction = { id: 'agents-skip', label: '先不指派，啟用時再選' }
 
 export function parseAgentNames(text: string): string[] {
   return AVAILABLE_AGENTS.filter(a => text.includes(a))
@@ -494,6 +499,9 @@ export function useSkillStudioConversation() {
   // 不用再問一次（已經選好的 Agent 會列在最終確認的摘要裡，要改直接說）
   const agentsAsked = ref(false)
   const suggestedAgents = ref<string[]>([])
+  // 使用者直接按存檔鍵（不是在對話裡說「可以」）時，先攔下來問可調用 Agent，
+  // 回答完就直接存檔，不用再多走一次最終確認
+  const saveAfterAgents = ref(false)
   // 測試沒全對時選「重新測試」：composable 自己呼叫得到 store.generateAITestScenarios，
   // 但切不了外殼（SkillStudioWorkspace）自己管的 activeTab——這個旗標讓外殼知道要
   // 切到測試 tab，讀到之後要自己歸零，單次訊號不是常駐狀態
@@ -563,6 +571,7 @@ export function useSkillStudioConversation() {
     gatheringRound.value = 0
     awaitingSupplement.value = false
     agentsAsked.value = false
+    saveAfterAgents.value = false
     gateStage.value = 'gathering'
     advanceGathering()
   }
@@ -631,7 +640,7 @@ export function useSkillStudioConversation() {
   }
 
   // 建議的 Agent：在團隊內找內容最相近、而且已經有指派 Agent 的技能，借用它的 Agent；
-  // 找不到就建議「通用助理」。只是建議，使用者可以改選別的或先不指派
+  // 找不到就建議「通用助理」。只是建議，使用者可以改選別的，但至少要選一個
   function askAgents(): void {
     agentsAsked.value = true
     gateStage.value = 'confirmAgents'
@@ -642,12 +651,13 @@ export function useSkillStudioConversation() {
     const reason = similar ? `（跟團隊內的「${similar.name}」內容相近，先參考它的設定）` : ''
     push({
       role: 'agent',
-      content: `這顆技能要讓哪些 Agent 可以調用？建議：${suggestedAgents.value.join('、')}${reason}。\n也可以直接打 Agent 名稱（可以好幾個）：${AVAILABLE_AGENTS.join('、')}。`,
-      actions: [
-        { id: 'agents-accept', label: `就用建議的：${suggestedAgents.value.join('、')}` },
-        ACTION_AGENTS_SKIP,
-      ],
+      content: `這顆技能要讓哪些 Agent 可以調用？（至少一個）建議：${suggestedAgents.value.join('、')}${reason}。\n也可以直接打 Agent 名稱（可以好幾個）：${AVAILABLE_AGENTS.join('、')}。`,
+      actions: agentActions(),
     })
+  }
+
+  function agentActions(): StudioAction[] {
+    return [{ id: 'agents-accept', label: `就用建議的：${suggestedAgents.value.join('、')}` }]
   }
 
   // gateStage !== 'active' 時，每則訊息都先經過這裡，依目前所在的關卡分派給對應的分支處理
@@ -821,24 +831,32 @@ export function useSkillStudioConversation() {
 
     if (stage === 'confirmAgents') {
       // 先看有沒有直接講出 Agent 名稱（「就用建議的：A、B」這顆 chip 的文字本身也含名稱），
-      // 再看是不是要先不指派，最後才把「好／可以」這類泛用同意當成接受建議
+      // 再擋掉想略過的回覆（至少要指派一個），最後才把「好／可以」這類泛用同意當成接受建議
       const named = parseAgentNames(t)
-      let agents: string[] | null = null
-      if (named.length) agents = named
-      else if (t === ACTION_AGENTS_SKIP.label || AGENTS_SKIP_HINT.test(t)) agents = []
-      else if (AGENTS_ACCEPT_HINT.test(t)) agents = [...suggestedAgents.value]
+      if (!named.length && AGENTS_SKIP_HINT.test(t)) {
+        push({
+          role: 'agent',
+          content: `新建的技能至少要指派一個 Agent，不然沒有 Agent 能調用它。可以用建議的 ${suggestedAgents.value.join('、')}，或從這些裡面選：${AVAILABLE_AGENTS.join('、')}。`,
+          actions: agentActions(),
+        })
+        return
+      }
+      const agents = named.length ? named : AGENTS_ACCEPT_HINT.test(t) ? [...suggestedAgents.value] : null
       if (!agents) {
         push({
           role: 'agent',
-          content: `我沒有對到 Agent 名稱，可以從這些裡面選（可以好幾個）：${AVAILABLE_AGENTS.join('、')}；或說「先不指派」。`,
-          actions: [
-            { id: 'agents-accept', label: `就用建議的：${suggestedAgents.value.join('、')}` },
-            ACTION_AGENTS_SKIP,
-          ],
+          content: `我沒有對到 Agent 名稱，可以從這些裡面選（可以好幾個）：${AVAILABLE_AGENTS.join('、')}。`,
+          actions: agentActions(),
         })
         return
       }
       draft.value = { ...draft.value, assignedAgents: agents }
+      if (saveAfterAgents.value) {
+        saveAfterAgents.value = false
+        gateStage.value = 'active'
+        if (save()) push({ role: 'agent', content: `已存成個人技能「${draft.value.name}」，可以到「測試」tab 驗證。` })
+        return
+      }
       proceedToFinalConfirm()
       return
     }
@@ -915,6 +933,7 @@ export function useSkillStudioConversation() {
     gatheringRound.value = 0
     awaitingSupplement.value = false
     agentsAsked.value = false
+    saveAfterAgents.value = false
     if (prefill) push({ role: 'agent', content: openingMessage ?? DEFAULT_OPENING_MESSAGE })
   }
 
@@ -988,6 +1007,7 @@ export function useSkillStudioConversation() {
     gatheringRound.value = 0
     awaitingSupplement.value = false
     agentsAsked.value = false
+    saveAfterAgents.value = false
     if (draft.value.method === 'chat') {
       const opening = intent === 'ask'
         ? `你好，我是這裡的助理。剛剛測試「${s.name}」時如果有哪裡想確認或討論，都可以直接問我，需要調整內容的話我們再一起處理。`
@@ -1218,6 +1238,9 @@ export function useSkillStudioConversation() {
       gatheringRawText: gatheringRawText.value,
       gatheringRound: gatheringRound.value,
       awaitingSupplement: awaitingSupplement.value,
+      agentsAsked: agentsAsked.value,
+      saveAfterAgents: saveAfterAgents.value,
+      suggestedAgents: suggestedAgents.value,
     }))
   }
 
@@ -1234,6 +1257,9 @@ export function useSkillStudioConversation() {
     gatheringRawText.value = copy.gatheringRawText ?? ''
     gatheringRound.value = copy.gatheringRound ?? 0
     awaitingSupplement.value = copy.awaitingSupplement ?? false
+    agentsAsked.value = copy.agentsAsked ?? false
+    saveAfterAgents.value = copy.saveAfterAgents ?? false
+    suggestedAgents.value = copy.suggestedAgents ?? []
     // dirty 基準取自「目前已儲存的內容」而非「這份快照本身」：isDirty 才會是
     // 「跟已存的技能（或空白，若還沒存過）不一樣」，而不是「跟上次 hydrate 不一樣」
     const saved = copy.savedSkillId ? store.findSkill(copy.savedSkillId) : undefined
@@ -1249,7 +1275,30 @@ export function useSkillStudioConversation() {
     snapshot.value = serialize(emptyDraft())
   }
 
+  // 新建＋對話方式的技能，存檔前一定要跟使用者確認過可調用 Agent（至少一個）：存檔鍵
+  // 按下去時如果還沒問過、或還沒選任何 Agent，就在對話裡問，回答完才存。回傳 true 代表這次存檔被攔下來改成先問。
+  // 積木方式在基本設定就必填 Agent、後端模式由後端處理、修改既有技能不用重問
+  function confirmAgentsBeforeSave(): boolean {
+    if (mode.value !== 'create' || draft.value.method !== 'chat' || usesBackend()) return false
+    // 已經問了、還沒回答就按存檔：不能用空的 Agent 直接存，提醒先回答，回答完就存
+    if (gateStage.value === 'confirmAgents') {
+      saveAfterAgents.value = true
+      push({
+        role: 'agent',
+        content: '存檔前先告訴我哪些 Agent 可以調用這顆技能（至少一個），回答完我就幫你存檔。',
+        actions: agentActions(),
+      })
+      return true
+    }
+    // 至少要有一個 Agent 才能存；問過而且已經選好就不再攔
+    if (agentsAsked.value && draft.value.assignedAgents.length > 0) return false
+    saveAfterAgents.value = true
+    askAgents()
+    return true
+  }
+
   return {
+    confirmAgentsBeforeSave,
     mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, backendSkillId, savedVersion, loadBackendSkill, saveToBackend, usesBackend, backendSaveAction, testedNote, lastSaveKind, draftTested, adviceMode, adviceModeLocked, showAdviceModeSwitch, setAdviceMode, note, blockedReasons, errorHint, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestTestTab, requestNewSkillDrawer,
     startCreate, chooseMethod, updateBlocks, updateBlockDescription, updateBlockTriggerHint, updateBlockCapabilities, updateBlockAssignedAgents, updateBlockKeywords,
     loadSkill, send, save, updateFiles, notifyTestResult, toSnapshot, hydrate, detachSavedSkill,

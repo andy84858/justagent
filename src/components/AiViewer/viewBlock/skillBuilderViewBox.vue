@@ -229,6 +229,12 @@ watch(
 )
 
 function onSave() {
+  // 新建的對話技能還沒確認過可調用 Agent：先在對話裡問，回答完由 conv 自己存檔。
+  // 對話跟預覽在畫布上是不同分頁，切到對話分頁使用者才看得到這個問題
+  if (conv.confirmAgentsBeforeSave()) {
+    setTab('chat')
+    return
+  }
   const wasCreate = conv.mode.value === 'create'
   const id = conv.save()
   if (!id) return

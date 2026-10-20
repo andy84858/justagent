@@ -326,6 +326,12 @@ describe('SkillStudioWorkspace', () => {
       await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
 
+      // 新建技能要先確認可調用 Agent，確認過才能直接用存檔鍵存
+      await input.setValue('通用助理')
+      await input.trigger('keydown.enter')
+      await vi.advanceTimersByTimeAsync(800)
+      await flushPromises()
+
       expect(wrapper.find('.ssp-title').text()).toBe('查 ERP 庫存')
       await wrapper.find('.studio-save-btn').trigger('click')
       await flushPromises()
@@ -374,7 +380,7 @@ describe('SkillStudioWorkspace', () => {
       await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
 
-      await input.setValue('先不指派')
+      await input.setValue('通用助理')
       await input.trigger('keydown.enter')
       await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
@@ -574,8 +580,15 @@ describe('SkillStudioWorkspace', () => {
       })
       const { wrapper, router } = mountWorkspace({ from: 'conv4' })
       await flushPromises()
-      await wrapper.find('.studio-save-btn').trigger('click')
+      await wrapper.find('.studio-save-btn').trigger('click') // 新建：先在對話裡問可調用 Agent
       await flushPromises()
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      const input = wrapper.find('.SkillStudioChat input.custom-input')
+      await input.setValue('通用助理')
+      await input.trigger('keydown.enter')
+      await vi.advanceTimersByTimeAsync(800)
+      await flushPromises()
+      vi.useRealTimers()
       await wrapper.find('.studio-back-link').trigger('click')
       await flushPromises()
       expect(router.currentRoute.value.name).toBe('AiViewer')

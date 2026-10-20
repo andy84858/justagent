@@ -114,7 +114,8 @@ describe('skillBuilderViewBox', () => {
     }
   })
 
-  it('儲存：建立個人技能、toast、自動切到測試 tab；「在 AI 賦能開啟」儲存前 disabled、儲存後導頁', async () => {
+  it('儲存：新建技能先切到對話分頁確認可調用 Agent，回答後才建立個人技能；「在 AI 賦能開啟」儲存前 disabled、儲存後導頁', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const { wrapper, block, router } = mountBlock({ prefill: { name: '查庫存', instructions: '1. 查' } })
     const skillStore = useSkillStore()
     const before = skillStore.myPersonalSkills.length
@@ -124,8 +125,16 @@ describe('skillBuilderViewBox', () => {
     await wrapper.findAll('.skb-tab-btn')[1].trigger('click')
     await wrapper.find('.ssp-save-btn').trigger('click')
     await flushPromises()
+    expect(skillStore.myPersonalSkills.length).toBe(before) // 還沒存，先問 Agent
+    expect(block.data.data.activeTab).toBe('chat')
+    const input = wrapper.find('.SkillStudioChat input.custom-input')
+    await input.setValue('工程助理')
+    await input.trigger('keydown.enter')
+    await vi.advanceTimersByTimeAsync(800)
+    await flushPromises()
+    vi.useRealTimers()
     expect(skillStore.myPersonalSkills.length).toBe(before + 1)
-    expect(block.data.data.activeTab).toBe('test')
+    expect(skillStore.myPersonalSkills[0].assignedAgents).toEqual(['工程助理'])
     expect(block.data.data.snapshot.savedSkillId).toBe(skillStore.myPersonalSkills[0].id)
 
     const push = vi.spyOn(router, 'push')
