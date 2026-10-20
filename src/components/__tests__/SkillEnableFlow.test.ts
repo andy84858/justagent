@@ -32,7 +32,8 @@ describe('SkillEnableFlow', () => {
 
     const dialog = new DOMWrapper(document.body).find('.enable-gate-dialog')
     expect(dialog.exists()).toBe(true)
-    expect(dialog.text()).toContain('還沒有做過 AI 快速測試')
+    expect(dialog.text()).toContain('還沒測過')
+    expect(dialog.text()).not.toContain('視為通過')
 
     const cancelBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('取消'))!
     await cancelBtn.trigger('click')
@@ -40,7 +41,7 @@ describe('SkillEnableFlow', () => {
     expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
   })
 
-  it('沒過測試閘門：不再提供「去修改技能內容」，「立即測試」是主要按鈕', async () => {
+  it('沒過測試閘門：不再提供「去修改技能內容」與「視為通過」，「立即測試」是主要按鈕', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     const wrapper = mountFlow()
@@ -51,10 +52,10 @@ describe('SkillEnableFlow', () => {
     expect(buttons.some(b => b.text().includes('去修改'))).toBe(false)
     const testBtn = buttons.find(b => b.text().includes('立即測試'))!
     expect(testBtn.classes()).toContain('custom-main-btn')
-    expect(buttons.find(b => b.text().includes('視為通過'))!.classes()).not.toContain('custom-main-btn')
+    expect(buttons.some(b => b.text().includes('視為通過'))).toBe(false)
   })
 
-  it('沒過測試閘門：選「立即測試」在同一個對話框裡就地測試，原本的選擇按鈕消失；全對後「繼續啟用」進 Agent 確認', async () => {
+  it('沒過測試閘門：選「立即測試」在同一個對話框裡就地測試，原本的選擇按鈕消失；交卷後「繼續啟用」進 Agent 確認', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能2b', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
     const wrapper = mountFlow()
@@ -86,18 +87,16 @@ describe('SkillEnableFlow', () => {
     await body.findAll('.enable-agent-dialog button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
     const outcome = await promise
     expect(outcome.type).toBe('confirmed')
-    expect(outcome.wasOverridden).toBe(false)
   })
 
-  it('沒過測試閘門：選「視為通過」會接著顯示 Agent 確認對話框，預填 existingAgents', async () => {
+  it('測過但沒全對：不擋，直接進 Agent 確認步驟，預填 existingAgents', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能3', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    await store.generateAITestScenarios(id)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.expectedTrigger) // 全部不一致
+    expect(store.findSkill(id)!.aiTestPassRate).toBe(0)
     const wrapper = mountFlow()
     ;(wrapper.vm as any).requestEnable(store.findSkill(id), ['客服中心助理'])
-    await wrapper.vm.$nextTick()
-
-    const overrideBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('視為通過'))!
-    await overrideBtn.trigger('click')
     await wrapper.vm.$nextTick()
 
     expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
@@ -137,20 +136,7 @@ describe('SkillEnableFlow', () => {
     expect(confirmBtn.attributes('disabled')).toBeUndefined()
 
     await confirmBtn.trigger('click')
-    expect(await promise).toEqual({ type: 'confirmed', agents: ['通用助理'], wasOverridden: false })
-  })
-
-  it('視為通過後確認送出：wasOverridden 為 true', async () => {
-    const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能5', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    const wrapper = mountFlow()
-    const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), [])
-    await wrapper.vm.$nextTick()
-    await new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('視為通過'))!.trigger('click')
-    await wrapper.vm.$nextTick()
-    await new DOMWrapper(document.body).findAll('.se-agent-chip').find(c => c.text().includes('通用助理'))!.trigger('click')
-    await new DOMWrapper(document.body).findAll('.enable-agent-dialog button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
-    expect(await promise).toEqual({ type: 'confirmed', agents: ['通用助理'], wasOverridden: true })
+    expect(await promise).toEqual({ type: 'confirmed', agents: ['通用助理'] })
   })
 
   it('Agent 確認步驟按「取消」：resolve cancelled', async () => {

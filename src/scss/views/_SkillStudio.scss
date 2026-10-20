@@ -67,6 +67,17 @@
   .custom-btn { gap: 4px; .material-symbols-outlined { font-size: 16px; } }
 }
 
+.studio-saved-hint {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  .material-symbols-outlined { font-size: 15px; color: var(--success); }
+}
+
 .studio-missing-hint {
   flex-basis: 100%;
   display: flex;
@@ -216,6 +227,38 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+  }
+
+  // 判斷模式（Jev＋LLM／純 LLM）：建立對話前可選，開始後鎖住只標示
+  .ssc-advice-mode {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .ssc-advice-btn {
+    padding: 2px 10px;
+    border: 1px solid var(--divider);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+
+    &.is-active {
+      border-color: var(--accent);
+      background: var(--accent-a10);
+      color: var(--accent);
+    }
+  }
+
+  .ssc-advice-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+    .material-symbols-outlined { font-size: 14px; }
   }
 
   .ssc-skill-select {
@@ -412,6 +455,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+  }
+
+  // agent 用的技能代號，只是小字附註，不搶標題
+  .ssp-skill-code {
+    font-size: 12px;
+    color: var(--text-muted, var(--text));
+    opacity: 0.7;
   }
 
   .ssp-title {

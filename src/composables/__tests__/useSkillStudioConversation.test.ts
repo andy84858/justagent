@@ -1285,7 +1285,7 @@ describe('notifyTestResult：AI 快速測試沒有全對時，左側對話主動
   it('全對（100%）、已存檔但這顆技能早就啟用中：不叫使用者去點一個不會出現的「啟用技能」按鈕', () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '早就上線的技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    store.overrideAndEnableSkill(id) // 先讓它變成啟用中
+    store.toggleSkill(id) // 先讓它變成啟用中
     expect(store.findSkill(id)!.isEnabled).toBe(true)
     const c = useSkillStudioConversation()
     c.loadSkill(id)
@@ -1363,12 +1363,16 @@ describe('notifyTestResult：AI 快速測試沒有全對時，左側對話主動
     }
   })
 
-  it('點「不改，直接啟用」：呼叫 store.overrideAndEnableSkill 直接啟用，不改任何草稿內容，轉回 active', async () => {
+  it('點「不改，直接啟用」：已測過（沒全對也行）就啟用，不改任何草稿內容，轉回 active', async () => {
     vi.useFakeTimers()
     try {
       const store = useSkillStore()
       const id = store.createPersonalSkill({ name: '待啟用技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
       expect(store.findSkill(id)!.isEnabled).toBe(false)
+      const gen = store.generateAITestScenarios(id)
+      await vi.advanceTimersByTimeAsync(900)
+      await gen
+      for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.expectedTrigger) // 全部不一致
       const c = useSkillStudioConversation()
       c.loadSkill(id)
       c.notifyTestResult({ total: 8, correct: 6, byTag: {} as any, summary: '' })
@@ -1378,7 +1382,6 @@ describe('notifyTestResult：AI 快速測試沒有全對時，左側對話主動
       await p
       const skill = store.findSkill(id)!
       expect(skill.isEnabled).toBe(true)
-      expect(skill.aiTestOverridden).toBe(true)
       expect(skill.instructions).toBe('x') // 沒有改動草稿內容
       expect(c.gateStage.value).toBe('active')
       expect(c.messages.value.at(-1)!.content).toContain('已啟用')
@@ -1445,6 +1448,28 @@ describe('notifyTestGenerated：題目真的生成完成時，對話建立的技
     const before = c.messages.value.length
     c.notifyTestGenerated()
     expect(c.messages.value.length).toBe(before)
+  })
+})
+
+describe('notifyTestResult：沒測過就不能「直接啟用」', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('還沒做過測試就說「不改，直接啟用」：不啟用，講清楚要先測試', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useSkillStore()
+      const id = store.createPersonalSkill({ name: '沒測過技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+      const c = useSkillStudioConversation()
+      c.loadSkill(id)
+      c.notifyTestResult({ total: 8, correct: 6, byTag: {} as any, summary: '' })
+      const p = c.send('不改，直接啟用')
+      await vi.advanceTimersByTimeAsync(800)
+      await p
+      expect(store.findSkill(id)!.isEnabled).toBe(false)
+      expect(c.messages.value.at(-1)!.content).toContain('還沒測過')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

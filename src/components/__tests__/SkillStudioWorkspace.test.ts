@@ -198,7 +198,7 @@ describe('SkillStudioWorkspace', () => {
       expect(store.findSkill('personal-001')!.assignedAgents).toEqual(['通用助理'])
     })
 
-    it('尚未啟用的技能測到非 100%：按鈕變「儲存並啟用」，點擊先看到「還不能啟用」閘門對話框，選「視為通過」後走 Agent 確認並真的啟用', async () => {
+    it('尚未啟用的技能測到非 100%：按鈕變「儲存並啟用」，測過就不擋，直接走 Agent 確認並真的啟用', async () => {
       const store = useSkillStore()
       const id = store.createPersonalSkill({ name: '待啟用技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
       expect(store.findSkill(id)!.isEnabled).toBe(false)
@@ -219,19 +219,13 @@ describe('SkillStudioWorkspace', () => {
       await saveBtn.trigger('click')
       await flushPromises()
 
-      const gateDialog = new DOMWrapper(document.body).find('.enable-gate-dialog')
-      expect(gateDialog.exists()).toBe(true)
-      const overrideBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('視為通過'))!
-      await overrideBtn.trigger('click')
-      await flushPromises()
-
+      expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
       const agentDialog = new DOMWrapper(document.body).find('.enable-agent-dialog')
       expect(agentDialog.exists()).toBe(true)
       await agentDialog.findAll('.se-agent-chip').find(c => c.text().includes('通用助理'))!.trigger('click')
       await agentDialog.findAll('button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
 
       expect(store.findSkill(id)!.isEnabled).toBe(true)
-      expect(store.findSkill(id)!.aiTestOverridden).toBe(true)
     })
 
     it('取消：不存任何東西，isEnabled 不受影響', async () => {

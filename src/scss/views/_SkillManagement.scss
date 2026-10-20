@@ -361,6 +361,14 @@
     text-align: center;
   }
 
+  .my-skills-error {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--danger);
+  }
+
   .my-skills-empty {
     display: flex;
     align-items: center;

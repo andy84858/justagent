@@ -907,3 +907,12 @@
   opacity: 0;
   .drawer-panel { transform: scale(0.95) translateY(10px); opacity: 0; }
 }
+
+// 後端技能的版本列表（BackendSkillVersions）：讀取版本失敗的提示
+.BackendSkillVersions .bsv-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--danger);
+}

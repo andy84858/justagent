@@ -49,22 +49,23 @@ describe('SkillManagement 啟用前的測試閘門', () => {
     expect(store.findSkill(id)!.isEnabled).toBe(false)
     const dialog = new DOMWrapper(document.body).find('.enable-gate-dialog')
     expect(dialog.exists()).toBe(true)
-    expect(dialog.text()).toContain('還沒有做過 AI 快速測試')
+    expect(dialog.text()).toContain('還沒測過')
+    expect(dialog.text()).not.toContain('視為通過')
   })
 
-  it('決策對話框選「視為通過」，Agent 確認對話框勾選並送出：呼叫 overrideAndEnableSkill 與 setAssignedAgents', async () => {
+  it('測過但有題目不一致：不擋，直接進 Agent 確認，勾選並送出後啟用並指派', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    await store.generateAITestScenarios(id)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.expectedTrigger) // 全部不一致
     const { wrapper } = await mountPage()
     ;(wrapper.vm as any).detailSkillId = id
     await wrapper.vm.$nextTick()
     await new DOMWrapper(document.body).find('.dm-toggle-btn').trigger('click')
-
-    const overrideBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('視為通過'))!
-    await overrideBtn.trigger('click')
     await wrapper.vm.$nextTick()
 
+    expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
     expect(store.findSkill(id)!.isEnabled).toBe(false) // 還沒真的啟用，還在 Agent 確認步驟
     const agentDialog = new DOMWrapper(document.body).find('.enable-agent-dialog')
     expect(agentDialog.exists()).toBe(true)
@@ -73,7 +74,6 @@ describe('SkillManagement 啟用前的測試閘門', () => {
     await agentDialog.findAll('button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
 
     expect(store.findSkill(id)!.isEnabled).toBe(true)
-    expect(store.findSkill(id)!.aiTestOverridden).toBe(true)
     expect(store.findSkill(id)!.assignedAgents).toEqual(['通用助理'])
     expect(new DOMWrapper(document.body).find('.enable-agent-dialog').exists()).toBe(false)
   })
@@ -126,7 +126,7 @@ describe('SkillManagement 啟用前的測試閘門', () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
     const id = store.createPersonalSkill({ name: '要停用的技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    store.overrideAndEnableSkill(id)
+    store.toggleSkill(id)
     const { wrapper } = await mountPage()
     ;(wrapper.vm as any).detailSkillId = id
     await wrapper.vm.$nextTick()

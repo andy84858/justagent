@@ -8,13 +8,10 @@
               <i class="material-symbols-outlined">rule</i>
             </div>
             <h4>還不能啟用「{{ gateSkill.name }}」</h4>
-            <p>{{ describeAiTestGateReason(gateSkill) }}</p>
+            <p>{{ describeAiTestGateReason() }}</p>
             <div class="confirm-actions confirm-actions--column">
               <button class="custom-btn custom-main-btn" @click="startTesting">
                 <i class="material-symbols-outlined">science</i>立即測試
-              </button>
-              <button class="custom-btn" @click="handleOverride">
-                <i class="material-symbols-outlined">check_circle</i>視為通過，直接啟用
               </button>
               <button class="custom-btn" @click="resolveCancelled">
                 取消
@@ -22,7 +19,7 @@
             </div>
           </template>
 
-          <!-- 「立即測試」：就地在同一個對話框裡測，原本的選擇按鈕收起來；全部答對後才能接著選 Agent -->
+          <!-- 「立即測試」：就地在同一個對話框裡測，原本的選擇按鈕收起來；交卷（測過即可，不用全對）後才能接著選 Agent -->
           <template v-else>
             <h4>測試「{{ gateSkill.name }}」</h4>
             <div class="enable-gate-test">
@@ -87,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-// 啟用一顆技能的共用流程：檢查 AI 快速測試閘門（沒過可就地測試）→ 確認可調用此技能的 Agent。
+// 啟用一顆技能的共用流程：檢查這一版測過沒有（不要求全對，沒測過可就地測試）→ 確認可調用此技能的 Agent。
 // 只負責「問使用者、回傳結果」，不負責實際呼叫 store 把技能存檔或切換狀態——
 // 三個呼叫端（SkillManagement/SkillEditor/SkillTestAI）的「啟用」動作形狀不一樣
 // （已存在技能直接切換 vs. 表單送出的一部分），拿到結果後各自決定要做什麼。
@@ -97,7 +94,7 @@ import type { Skill } from '@/stores/skillStore'
 import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
 
 export type EnableFlowOutcome =
-  | { type: 'confirmed'; agents: string[]; wasOverridden: boolean }
+  | { type: 'confirmed'; agents: string[] }
   | { type: 'cancelled' }
 
 const store = useSkillStore()
@@ -107,7 +104,6 @@ const agentSkill = ref<Skill | null>(null)
 const selectedAgents = ref<string[]>([])
 
 let resolver: ((outcome: EnableFlowOutcome) => void) | null = null
-let pendingWasOverridden = false
 let pendingExistingAgents: string[] = []
 
 function toggleAgent(agent: string) {
@@ -135,11 +131,6 @@ function enterAgentStep(skill: Skill) {
   selectedAgents.value = [...pendingExistingAgents]
 }
 
-function handleOverride() {
-  pendingWasOverridden = true
-  enterAgentStep(gateSkill.value!)
-}
-
 function resolveCancelled() {
   gateSkill.value = null
   isTesting.value = false
@@ -151,7 +142,7 @@ function resolveCancelled() {
 function resolveConfirmed() {
   if (selectedAgents.value.length === 0) return
   agentSkill.value = null
-  resolver?.({ type: 'confirmed', agents: [...selectedAgents.value], wasOverridden: pendingWasOverridden })
+  resolver?.({ type: 'confirmed', agents: [...selectedAgents.value] })
   resolver = null
 }
 
@@ -159,7 +150,6 @@ function requestEnable(skill: Skill, existingAgents: string[]): Promise<EnableFl
   // 若前一次呼叫的 promise 還沒 resolve（理論上不該發生，但呼叫端萬一重複呼叫，
   // 不能讓前一個 promise 永遠 pending 下去），先幫它 resolve 成 cancelled 再繼續
   resolver?.({ type: 'cancelled' })
-  pendingWasOverridden = false
   isTesting.value = false
   pendingExistingAgents = existingAgents
   return new Promise(resolve => {

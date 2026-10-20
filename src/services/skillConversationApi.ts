@@ -1,0 +1,167 @@
+import { isAxiosError } from 'axios'
+import { httpService } from '@/services/http'
+
+// 技能對話後端（skill_creator_poc_5）的呼叫。只管收發與把錯誤換成白話，
+// 草稿與階段的狀態都在後端，前端不自己算。
+
+export type AdviceMode = 'jev' | 'llm'
+
+// 後端草稿的形狀（DraftContent）：內文欄位叫 content，前端草稿叫 instructions
+export interface BackendDraft {
+  name: string          // 技能代號，給 agent 用，小寫英文與連字號
+  display_name: string  // 給使用者看的名稱
+  description: string
+  content: string
+}
+
+// 便利貼：agent 目前記下的主題與步驟，儲存前的暫存，只用來顯示
+export interface BackendNote {
+  topic: string
+  steps: string[]
+}
+
+export interface ConversationTurn {
+  reply: string
+  draft: BackendDraft | null
+  note: BackendNote
+  stage: string
+  blocked: string[]
+}
+
+export interface OpenedConversation extends ConversationTurn {
+  conversation_id: string
+  mode: 'create' | 'modify'
+  advice_mode: AdviceMode
+}
+
+// agent 一輪要呼叫模型，會比 http.ts 預設的 10 秒久
+const AGENT_TIMEOUT_MS = 120_000
+
+// 後端錯誤回 { detail: 白話原因 }；連不上、逾時則沒有 response
+export function describeConversationError(error: unknown): string {
+  if (isAxiosError(error)) {
+    const detail = error.response?.data?.detail
+    if (typeof detail === 'string' && detail) return detail
+    if (error.response) return `後端回了錯誤（${error.response.status}），請稍後再試。`
+    return '連不上技能後端，請確認後端有啟動，再試一次。'
+  }
+  return '發生未預期的錯誤，請稍後再試。'
+}
+
+export async function openConversation(
+  adviceMode: AdviceMode = 'jev',
+): Promise<OpenedConversation> {
+  const res = await httpService.post<OpenedConversation>(
+    '/conversations',
+    { mode: 'create', advice_mode: adviceMode },
+    { timeout: AGENT_TIMEOUT_MS },
+  )
+  return res.data
+}
+
+export async function sendConversationMessage(
+  conversationId: string,
+  text: string,
+): Promise<ConversationTurn> {
+  const res = await httpService.post<ConversationTurn>(
+    `/conversations/${conversationId}/messages`,
+    { text },
+    { timeout: AGENT_TIMEOUT_MS },
+  )
+  return res.data
+}
+
+// 後端存的一個技能版本（SkillVersion）。同一技能的所有版本共用 skill_id
+export interface BackendSkillVersion {
+  skill_id: string
+  version: number
+  name: string          // 技能代號
+  display_name: string  // 給使用者看的名稱
+  description: string
+  content: string
+  tested: boolean       // 這一版是否測過
+  created_at: string
+}
+
+// 修改既有技能：從指定來源版本開對話，存回去會是新版本、來源版本不動
+export async function openModifyConversation(
+  skillId: string,
+  version: number,
+  adviceMode: AdviceMode = 'jev',
+): Promise<OpenedConversation> {
+  const res = await httpService.post<OpenedConversation>(
+    '/conversations',
+    { mode: 'modify', skill_id: skillId, version, advice_mode: adviceMode },
+    { timeout: AGENT_TIMEOUT_MS },
+  )
+  return res.data
+}
+
+// 按「儲存為個人技能」：後端把目前草稿寫成一個新版本
+export async function saveConversation(conversationId: string): Promise<BackendSkillVersion> {
+  const res = await httpService.post<BackendSkillVersion>(`/conversations/${conversationId}/save`)
+  return res.data
+}
+
+// 每個技能一筆，是它的最新版
+export async function listBackendSkills(): Promise<BackendSkillVersion[]> {
+  const res = await httpService.get<BackendSkillVersion[]>('/skills')
+  return res.data
+}
+
+// 某技能的所有版本，由舊到新
+export async function listBackendSkillVersions(skillId: string): Promise<BackendSkillVersion[]> {
+  const res = await httpService.get<BackendSkillVersion[]>(`/skills/${skillId}/versions`)
+  return res.data
+}
+
+export type TestAnswer = '該用' | '不該用'
+
+export interface TestQuestion {
+  id: string
+  text: string
+}
+
+// 出題：只有題號與題目文字，沒有標準答案與出題理由
+export interface StartedTest {
+  questions: TestQuestion[]
+  options: TestAnswer[]
+}
+
+export interface TestResultItem {
+  id: string
+  text: string
+  user_answer: TestAnswer
+  consistent: boolean   // 使用者的答案跟後端比對是否一致
+  failed: boolean       // 這題後端答題失敗（不算一致也不算不一致）
+}
+
+export interface SubmittedTest {
+  results: TestResultItem[]
+  tested: boolean
+}
+
+// 按「測試」：後端讀目前草稿重新出一批題，每次都是新的一批
+export async function startConversationTest(conversationId: string): Promise<StartedTest> {
+  const res = await httpService.post<StartedTest>(`/conversations/${conversationId}/test`, undefined, { timeout: AGENT_TIMEOUT_MS })
+  return res.data
+}
+
+// 交卷：每題都要有答案；後端逐題比對，交過卷這份草稿就算測過，不看對錯
+export async function submitConversationTest(
+  conversationId: string,
+  answers: Record<string, TestAnswer>,
+): Promise<SubmittedTest> {
+  const res = await httpService.post<SubmittedTest>(
+    `/conversations/${conversationId}/test/submit`,
+    { answers },
+    { timeout: AGENT_TIMEOUT_MS },
+  )
+  return res.data
+}
+
+// 啟用技能：後端只檢查最新一版有沒有測過（不要求全對）。沒測過回 409 加白話原因
+export async function activateBackendSkill(skillId: string): Promise<{ skill_id: string; version: number; activated: boolean }> {
+  const res = await httpService.post<{ skill_id: string; version: number; activated: boolean }>(`/skills/${skillId}/activate`)
+  return res.data
+}

@@ -3,6 +3,22 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+
+  // 後端測試畫面（SkillTestBackend）的錯誤與提示文字
+  .tb-error {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--danger);
+  }
+
+  .tb-hint {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
 }
 
 // ── ① Idle ──

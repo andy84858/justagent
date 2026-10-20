@@ -21,7 +21,11 @@
         :is-running="conv.isRunning.value"
         :suggestion-chips="conv.suggestionChips.value"
         :personal-skills="[]"
+        :show-advice-mode="conv.showAdviceModeSwitch.value"
+        :advice-mode="conv.adviceMode.value"
+        :advice-mode-locked="conv.adviceModeLocked.value"
         @send="conv.send"
+        @change-advice-mode="conv.setAdviceMode"
       />
       <div v-else class="studio-composer-col">
         <div class="studio-composer-head">
@@ -79,6 +83,19 @@
           <i class="material-symbols-outlined">save</i>
           {{ saveButtonLabel }}
         </button>
+        <p v-if="backendSave && conv.savedVersion.value" class="studio-saved-hint">
+          <i class="material-symbols-outlined">check_circle</i>
+          {{ conv.lastSaveKind.value === 'marked' ? '已記下' : '已存成' }}第 {{ conv.savedVersion.value.version }} 版，{{ conv.savedVersion.value.tested ? '這一版測過' : '這一版還沒測過' }}
+        </p>
+        <p v-if="backendSave && conv.testedNote.value" class="studio-saved-hint">
+          <i class="material-symbols-outlined">check_circle</i>這份草稿已測過。{{ conv.testedNote.value }}
+        </p>
+        <p v-if="backendSave && conv.backendSaveAction.value.hint" class="studio-missing-hint">
+          <i class="material-symbols-outlined">info</i>{{ conv.backendSaveAction.value.hint }}
+        </p>
+        <p v-if="backendSave && conv.errorHint.value" class="studio-missing-hint">
+          <i class="material-symbols-outlined">error</i>{{ conv.errorHint.value }}
+        </p>
         <p v-if="conv.missingFieldsHint.value" class="studio-missing-hint">
           <i class="material-symbols-outlined">info</i>{{ conv.missingFieldsHint.value }}
         </p>
@@ -96,6 +113,7 @@
         hide-footer
         :hide-generation-narration="conv.draft.value.method === 'chat'"
         :draft="conv.draft.value"
+        :note="conv.note.value"
         :mode="conv.mode.value"
         :saved-skill-id="conv.savedSkillId.value"
         :test-skill-id="conv.testSkillId.value"
@@ -103,6 +121,9 @@
         :can-save="conv.canSave.value"
         :name-conflict="nameConflict"
         :request-save-draft="conv.save"
+        :backend-test="backendSave"
+        :conversation-id="conv.conversationId.value"
+        :tested-note="conv.testedNote.value"
         @save="onSave"
         @discard="onDiscard"
       />
@@ -147,7 +168,11 @@ const blockStep = ref<'basics' | 'compose'>('basics')
 const handoffOrigin = ref<SkillHandoffOrigin | null>(null)
 const enableFlowRef = ref<InstanceType<typeof SkillEnableFlow> | null>(null)
 
+// 後端模式的對話：儲存、版本都以後端為準，不碰 skillStore 的假資料
+const backendSave = computed(() => conv.usesBackend())
+
 const nameConflict = computed(() => {
+  if (backendSave.value) return false
   const n = conv.draft.value.name.trim()
   return !!n && store.myPersonalSkills.some(s => s.id !== conv.savedSkillId.value && s.name === n)
 })
@@ -155,10 +180,11 @@ const nameConflict = computed(() => {
 // 有沒有一份屬於目前這份草稿（不管存不存過檔）的測試紀錄——不限 100%，
 // 也不管技能原本是不是已經啟用中，只要測過就算
 const hasTestRecord = computed(() =>
-  store.aiTestScenariosSkillId === conv.testSkillId.value && !!store.aiTestReport
+  !backendSave.value && store.aiTestScenariosSkillId === conv.testSkillId.value && !!store.aiTestReport
 )
 
 const saveButtonLabel = computed(() => {
+  if (backendSave.value) return conv.backendSaveAction.value.label
   if (hasTestRecord.value) return '儲存並啟用'
   return conv.mode.value === 'create' ? '儲存為個人技能' : '儲存修改'
 })
@@ -167,7 +193,10 @@ const saveButtonLabel = computed(() => {
 // isDirty——使用者可能只是重新測了一次、內容其實沒改，但仍然想走一次啟用確認
 // 流程（例如重新確認 Agent 指派）。沒有測試紀錄的一般存檔維持原本 saveEnabled
 // 的規則（要有改動才能按）
-const saveClickEnabled = computed(() => hasTestRecord.value ? conv.canSave.value : conv.saveEnabled.value)
+const saveClickEnabled = computed(() => {
+  if (backendSave.value) return conv.backendSaveAction.value.enabled
+  return hasTestRecord.value ? conv.canSave.value : conv.saveEnabled.value
+})
 
 // AI 快速測試完成（store.aiTestReport 從 null 變成一份報告，一輪測驗只會發生一次
 // 這樣的轉換——見 _computeAITestReport 在所有題目答完前都是 no-op）：交給 conv 判斷
@@ -217,6 +246,15 @@ watch(() => conv.requestNewSkillDrawer.value, requested => {
 function applyQuery(query: LocationQuery) {
   activeTab.value = query.tab === 'test' ? 'test' : 'preview'
   const skillId = typeof query.skillId === 'string' ? query.skillId : ''
+  // ?backendSkillId=&version= 是從後端技能清單進修改：用那一版開後端對話
+  const backendSkillId = typeof query.backendSkillId === 'string' ? query.backendSkillId : ''
+  const backendVersion = Number(query.version)
+  if (backendSkillId && Number.isInteger(backendVersion) && backendVersion >= 1) {
+    conv.loadBackendSkill(backendSkillId, backendVersion).then(ok => {
+      if (!ok) popDialog.toast(conv.errorHint.value || '載入技能失敗')
+    })
+    return
+  }
   if (skillId) {
     const skill = store.findSkill(skillId)
     if (!skill) {
@@ -263,7 +301,25 @@ function guardDirty(proceed: () => void) {
   popDialog.confirm('有未儲存的變更，確定要放棄嗎？', '放棄變更', '留下', proceed)
 }
 
+async function onBackendSave() {
+  const wasCreate = !conv.backendSkillId.value
+  const saved = await conv.saveToBackend()
+  if (!saved) {
+    popDialog.toast(conv.errorHint.value || '儲存失敗，請稍後再試')
+    return
+  }
+  if (conv.lastSaveKind.value === 'marked') {
+    popDialog.toast(`已記下第 ${saved.version} 版測過，沒有新增版本`)
+    return
+  }
+  popDialog.toast(wasCreate ? `已儲存為個人技能（第 ${saved.version} 版）` : `已存成新版本（第 ${saved.version} 版），舊版本沒有動`)
+}
+
 function onSave() {
+  if (backendSave.value) {
+    onBackendSave()
+    return
+  }
   const wasCreate = conv.mode.value === 'create'
   const id = conv.save()
   if (!id) return
@@ -287,8 +343,7 @@ async function handleSaveAndEnable() {
   // cancelled 留在原地：這裡本來就是編輯畫面本身，單純關掉對話框就好
   if (outcome.type !== 'confirmed') return
   store.setAssignedAgents(skill.id, outcome.agents)
-  if (outcome.wasOverridden) store.overrideAndEnableSkill(skill.id)
-  else if (!skill.isEnabled) store.toggleSkill(skill.id)
+  if (!skill.isEnabled) store.toggleSkill(skill.id)
 }
 
 function handleSaveClick() {

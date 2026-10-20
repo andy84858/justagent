@@ -206,8 +206,7 @@ async function handleEnableClick() {
   const outcome = await enableFlowRef.value!.requestEnable(skill, skill.assignedAgents ?? [])
   if (outcome.type === 'cancelled') return
   store.setAssignedAgents(skill.id, outcome.agents)
-  if (outcome.wasOverridden) store.overrideAndEnableSkill(skill.id)
-  else store.toggleSkill(skill.id)
+  store.toggleSkill(skill.id)
 }
 
 // 還沒存檔、但已經有一份測試紀錄（不限 100%——沒全對的話存檔後會先看到
@@ -227,8 +226,7 @@ async function handleSaveAndEnable() {
   const outcome = await enableFlowRef.value!.requestEnable(skill, skill.assignedAgents ?? [])
   if (outcome.type === 'cancelled') return
   store.setAssignedAgents(skill.id, outcome.agents)
-  if (outcome.wasOverridden) store.overrideAndEnableSkill(skill.id)
-  else store.toggleSkill(skill.id)
+  store.toggleSkill(skill.id)
 }
 
 const TAG_LABELS: Record<AITestTag, string> = {
