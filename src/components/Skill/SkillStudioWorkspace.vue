@@ -53,11 +53,17 @@
           :assigned-agents="conv.draft.value.assignedAgents"
           :section-ids="conv.draft.value.sectionIds"
           :name-conflict="nameConflict"
+          :exceptions="conv.draft.value.exceptions"
+          :output-format="conv.draft.value.outputFormat"
+          :applicable-scope="conv.draft.value.applicableScope"
           @update:name="v => conv.updateBlocks({ name: v })"
           @update:description="conv.updateBlockDescription"
           @update:keywords="conv.updateBlockKeywords"
           @update:capabilities="conv.updateBlockCapabilities"
           @update:assigned-agents="conv.updateBlockAssignedAgents"
+          @update:exceptions="v => conv.updateBlockOptional({ exceptions: v })"
+          @update:output-format="v => conv.updateBlockOptional({ outputFormat: v })"
+          @update:applicable-scope="v => conv.updateBlockOptional({ applicableScope: v })"
         />
         <SkillBlockComposer
           v-else

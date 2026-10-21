@@ -69,10 +69,11 @@ describe('SkillEnableFlow', () => {
     expect(body.find('.enable-gate-dialog .SkillTestAI').exists()).toBe(true)
     const labels = body.findAll('.enable-gate-dialog .confirm-actions button').map(b => b.text())
     expect(labels.some(t => t.includes('立即測試') || t.includes('視為通過'))).toBe(false)
-    // 還沒交卷：主按鈕是「不測試，直接啟用」（可以按）；交卷後換成「繼續啟用」
+    // 進了測試就不再給「不測試，直接啟用」：主按鈕是「繼續啟用」，交卷前反灰
+    expect(labels.some(t => t.includes('不測試，直接啟用'))).toBe(false)
     const mainBtn = () => body.findAll('.enable-gate-dialog .confirm-actions button').at(-1)!
-    expect(mainBtn().text()).toContain('不測試，直接啟用')
-    expect(mainBtn().attributes('disabled')).toBeUndefined()
+    expect(mainBtn().text()).toContain('繼續啟用')
+    expect(mainBtn().attributes('disabled')).toBeDefined()
     const continueBtn = () => body.findAll('.enable-gate-dialog .confirm-actions button').find(b => b.text().includes('繼續啟用'))!
 
     await store.generateAITestScenarios(id)

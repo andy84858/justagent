@@ -36,7 +36,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
 
   it('技能從沒測過：勾「啟用狀態」並送出，不會直接寫入，改彈出決策對話框', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能', instructions: 'x', description: 'y', assignedAgents: [], capabilities: ['能力A'] })
+    const id = store.createPersonalSkill({ name: '待測技能', instructions: 'x', description: 'y', assignedAgents: [], capabilities: ['能力A'], steps: ['步驟A'] })
     const { wrapper } = await mountEditFor(id)
 
     // 直接把畫面切到最後一步（確認），不用真的一步一步點過去
@@ -55,7 +55,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
 
   it('測過但有題目不一致：不擋，Agent 確認對話框勾選並送出後技能被啟用，接著照原本流程導回技能管理頁', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', description: 'y', assignedAgents: [], capabilities: ['能力A'] })
+    const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', description: 'y', assignedAgents: [], capabilities: ['能力A'], steps: ['步驟A'] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.agentAnswer) // 全部不一致
     const { wrapper, router } = await mountEditFor(id)
@@ -81,7 +81,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
 
   it('決策對話框選「取消」：對話框關閉，不啟用、停留在編輯頁', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能5', instructions: 'x', description: 'y', assignedAgents: [], capabilities: ['能力A'] })
+    const id = store.createPersonalSkill({ name: '待測技能5', instructions: 'x', description: 'y', assignedAgents: [], capabilities: ['能力A'], steps: ['步驟A'] })
     const { wrapper, router } = await mountEditFor(id)
     ;(wrapper.findComponent(SkillEditor).vm as any).currentStep = 2
     await wrapper.vm.$nextTick()
@@ -100,7 +100,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
 
   it('已經全對過的技能：勾「啟用狀態」送出不彈閘門失敗對話框，但仍要過 Agent 確認才真的生效', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', description: 'y', assignedAgents: [], capabilities: ['能力A'] })
+    const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', description: 'y', assignedAgents: [], capabilities: ['能力A'], steps: ['步驟A'] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
       store.answerAITestScenario(id, sc.id, sc.agentAnswer)
@@ -143,6 +143,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
     ;(editor.vm as any).form.name = '全新技能'
     ;(editor.vm as any).form.description = '當使用者需要這個技能時'
     ;(editor.vm as any).form.capabilities = ['能力A']
+    ;(editor.vm as any).form.steps = ['步驟A']
     ;(editor.vm as any).form.assignedAgents = ['通用助理']
     ;(editor.vm as any).currentStep = 2
     await wrapper.vm.$nextTick()

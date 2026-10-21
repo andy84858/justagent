@@ -32,15 +32,29 @@ describe('buildSkillDefinitionMarkdown', () => {
     expect(md).not.toContain('覆蓋能力')
   })
 
-  it('指令／能力／使用情境依序組合，段落間空行分隔', () => {
+  it('依 RD 六段順序組合，段落間空行分隔', () => {
     const md = buildSkillDefinitionMarkdown(makeSkill({
-      instructions: '依序處理訂單查詢',
+      description: '查詢訂單狀態',
+      steps: ['確認訂單編號', '回覆訂單狀態'],
+      exceptions: ['查無訂單時請使用者確認編號'],
+      outputFormat: '一句話回覆',
+      applicableScope: '電商訂單',
       capabilities: ['訂單查詢'],
-      usageScenarios: [{ title: '查詢訂單', description: '使用者詢問訂單狀態時自動回覆' }],
     }))
     expect(md).toBe(
-      '依序處理訂單查詢\n\n## 覆蓋能力\n\n#訂單查詢\n\n## 使用情境\n\n1. **查詢訂單** — 使用者詢問訂單狀態時自動回覆'
+      '## 技能描述\n\n查詢訂單狀態\n\n## 步驟\n\n1. 確認訂單編號\n2. 回覆訂單狀態\n\n' +
+      '## 例外或特殊情況\n\n- 查無訂單時請使用者確認編號\n\n## 固定輸出格式\n\n一句話回覆\n\n' +
+      '## 適用範圍\n\n電商訂單\n\n## 覆蓋能力\n\n#訂單查詢'
     )
+  })
+
+  it('技能指令、使用情境不在 RD 定義裡，不出現在技能定義', () => {
+    const md = buildSkillDefinitionMarkdown(makeSkill({
+      instructions: '依序處理訂單查詢',
+      usageScenarios: [{ title: '查詢訂單', description: '使用者詢問訂單狀態時自動回覆' }],
+    }))
+    expect(md).not.toContain('依序處理訂單查詢')
+    expect(md).not.toContain('使用情境')
   })
 })
 

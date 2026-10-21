@@ -79,11 +79,35 @@ describe('interpretStudioMessage', () => {
     expect(reply.patch?.description).toBe('當使用者問缺貨時')
   })
 
-  it('加步驟：依現有步驟數接續編號', () => {
-    const draft = { ...emptyDraft(), name: 'x', instructions: '1. a\n2. b\n3. c' }
+  it('加步驟：寫進 RD 的步驟欄位、依現有步驟數接續編號，不動技能內文', () => {
+    const draft = { ...emptyDraft(), name: 'x', instructions: '內文', steps: ['a', 'b', 'c'] }
     const reply = interpretStudioMessage('再補一個步驟', draft, 'edit')
-    expect(reply.patch?.instructions).toBe('1. a\n2. b\n3. c\n4. 檢查輸出結果，必要時補充說明')
+    expect(reply.patch?.steps).toEqual(['a', 'b', 'c', '檢查輸出結果，必要時補充說明'])
+    expect(reply.patch?.instructions).toBeUndefined()
     expect(reply.content).toBe('已追加第 4 步。')
+  })
+
+  it('例外／輸出格式／適用範圍：各自寫進 RD 對應欄位', () => {
+    const draft = { ...emptyDraft(), name: 'x', exceptions: ['舊的'] }
+    expect(interpretStudioMessage('例外：查無資料時請使用者確認', draft, 'edit').patch?.exceptions)
+      .toEqual(['舊的', '查無資料時請使用者確認'])
+    expect(interpretStudioMessage('輸出格式改成表格', draft, 'edit').patch?.outputFormat).toBe('表格')
+    expect(interpretStudioMessage('適用範圍是所有倉庫', draft, 'edit').patch?.applicableScope).toBe('所有倉庫')
+  })
+
+  it('第一次擬稿：從描述與追問回答抓出步驟、例外；沒講步驟就放通用步驟', () => {
+    const withAnswers = interpretStudioMessage(
+      '幫我建立查庫存的技能\n如果查不到就請使用者確認料號\n先查倉庫，然後彙總數量',
+      emptyDraft(), 'create',
+    )
+    expect(withAnswers.patch?.steps).toEqual(['查倉庫', '彙總數量'])
+    expect(withAnswers.patch?.exceptions).toEqual(['如果查不到就請使用者確認料號'])
+    // 說明只留沒被抓成步驟／例外的內容，不重複
+    expect(withAnswers.patch?.description).toBe('幫我建立查庫存的技能')
+
+    const bare = interpretStudioMessage('幫我建立查庫存的技能', emptyDraft(), 'create')
+    expect(bare.patch?.steps).toHaveLength(3)
+    expect(bare.patch?.exceptions).toEqual([])
   })
 
   it('加能力：push 一項 capability（hashtag，不支援空白）', () => {
@@ -244,7 +268,7 @@ describe('useSkillStudioConversation', () => {
   it('startCreate(prefill, openingMessage)：草稿預填、isDirty 為 true、canSave 依內容、開場訊息採用指定文字', () => {
     const c = useSkillStudioConversation()
     c.startCreate(
-      { name: '產品銷售報告整理', instructions: '1. 查詢\n2. 套用規範', description: '偵測到整理需求' },
+      { name: '產品銷售報告整理', instructions: '1. 查詢\n2. 套用規範', description: '偵測到整理需求', steps: ['查詢', '套用規範'] },
       '這顆技能來自本對話的「查詢銷售資料」流程。'
     )
     expect(c.mode.value).toBe('create')
@@ -255,6 +279,36 @@ describe('useSkillStudioConversation', () => {
     expect(c.canSave.value).toBe(true)
     expect(c.messages.value).toHaveLength(1)
     expect(c.messages.value[0].content).toBe('這顆技能來自本對話的「查詢銷售資料」流程。')
+  })
+
+  it('步驟必填：預填沒有步驟就不能存，對話方式也會提示「還缺：步驟」', () => {
+    const c = useSkillStudioConversation()
+    c.startCreate({ name: '沒步驟的技能', instructions: '內文', description: '說明' })
+    expect(c.canSave.value).toBe(false)
+    expect(c.missingFieldsHint.value).toBe('還缺：步驟')
+    c.draft.value = { ...c.draft.value, steps: ['第一步'] }
+    expect(c.canSave.value).toBe(true)
+    expect(c.missingFieldsHint.value).toBe('')
+  })
+
+  it('積木方式：選章節同步帶出步驟；例外／輸出格式／適用範圍由 updateBlockOptional 編輯，存檔一起寫進技能', () => {
+    const store = useSkillStore()
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('blocks')
+    c.updateBlocks({ name: '渠道週報', sectionIds: ['promo_kpi'] })
+    expect(c.draft.value.steps).toEqual(['促銷核心 KPI：完成訂單數、GMV、折扣總額、折扣佔比、規則數。'])
+    c.updateBlockOptional({ exceptions: ['無數據時註記'], outputFormat: '附圖表', applicableScope: '行銷部' })
+    c.updateBlockDescription('說明')
+    c.updateBlockCapabilities(['a'])
+    c.updateBlockKeywords(['k'])
+    c.updateBlockAssignedAgents(['通用助理'])
+    const id = c.save()!
+    const saved = store.findSkill(id)!
+    expect(saved.steps).toHaveLength(1)
+    expect(saved.exceptions).toEqual(['無數據時註記'])
+    expect(saved.outputFormat).toBe('附圖表')
+    expect(saved.applicableScope).toBe('行銷部')
   })
 
   it('預填後的第一句走改名規則，不會被「第一句擬草稿」規則覆寫', async () => {
@@ -403,7 +457,8 @@ describe('useSkillStudioConversation', () => {
     expect(d.instructions).toBe('依序產出以下章節：\n1. 促銷核心 KPI：完成訂單數、GMV、折扣總額、折扣佔比、規則數。\n2. 性別分布：會員性別分布資料，圖表自動生成。')
     // hashtag 不支援空白，章節名稱含空白的（「促銷核心 KPI」）轉成能力標籤時去掉
     expect(d.capabilities).toEqual(['促銷核心KPI', '性別分布'])
-    expect(deriveFromSections([])).toEqual({ instructions: '', capabilities: [] })
+    expect(d.steps).toEqual(['促銷核心 KPI：完成訂單數、GMV、折扣總額、折扣佔比、規則數。', '性別分布：會員性別分布資料，圖表自動生成。'])
+    expect(deriveFromSections([])).toEqual({ instructions: '', capabilities: [], steps: [] })
     expect(deriveFromSections(['nope']).instructions).toBe('')
   })
 
@@ -1276,12 +1331,12 @@ describe('修改模式下明確說要建立新技能：先確認，確認後捨�
     vi.useFakeTimers()
     try {
       const { c } = makeEditingConv()
-      const before = c.draft.value.instructions
+      const before = c.draft.value.steps.length
       const p = c.send('再補一個步驟：建立工單')
       await vi.advanceTimersByTimeAsync(800)
       await p
       expect(c.gateStage.value).toBe('active')
-      expect(c.draft.value.instructions).not.toBe(before)
+      expect(c.draft.value.steps).toHaveLength(before + 1)
     } finally {
       vi.useRealTimers()
     }
@@ -1462,7 +1517,7 @@ describe('confirmAgentsBeforeSave：新建的對話技能直接按存檔鍵，�
   it('還沒問過 Agent（例如預填草稿直接按存檔）：攔下來在對話裡問，回答後直接存檔、寫進 Agent', async () => {
     const store = useSkillStore()
     const c = useSkillStudioConversation()
-    c.startCreate({ name: '預填技能', instructions: '1. 做事', description: '需要時' })
+    c.startCreate({ name: '預填技能', instructions: '1. 做事', description: '需要時', steps: ['做事'] })
     c.chooseMethod('chat')
     expect(c.confirmAgentsBeforeSave()).toBe(true)
     expect(c.gateStage.value).toBe('confirmAgents')

@@ -176,7 +176,7 @@ describe('SkillStudioWorkspace', () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
       try {
         const store = useSkillStore()
-        const id = store.createPersonalSkill({ name: '待啟用技能', instructions: 'x', description: 'y', assignedAgents: ['工程助理'] })
+        const id = store.createPersonalSkill({ name: '待啟用技能', instructions: 'x', description: 'y', assignedAgents: ['工程助理'], steps: ['x'] })
         const { wrapper } = mountWorkspace({ skillId: id })
         await flushPromises()
         const gen = store.generateAITestScenarios(id)
@@ -502,7 +502,7 @@ describe('SkillStudioWorkspace', () => {
 
     it('from: conv4 且有交接資料：直接進對話模式、套用預填草稿與開場白，並顯示返回連結', async () => {
       setSkillHandoff({
-        prefill: { name: '產品銷售報告整理', instructions: '1. 查詢資料\n2. 套用規範產出' },
+        prefill: { name: '產品銷售報告整理', instructions: '1. 查詢資料\n2. 套用規範產出', steps: ['查詢資料', '套用規範產出'] },
         openingMessage: '這顆技能來自本對話的「查詢銷售資料」流程，設定我先填好了。',
         origin: { conversationId: 'conv4', reason: '查詢銷售資料＋套用部門報告規範' },
       })
@@ -527,7 +527,7 @@ describe('SkillStudioWorkspace', () => {
 
     it('儲存後再按返回：conv4 對話會補一句「已建立」確認訊息', async () => {
       setSkillHandoff({
-        prefill: { name: '產品銷售報告整理', instructions: '1. 查詢資料' },
+        prefill: { name: '產品銷售報告整理', instructions: '1. 查詢資料', steps: ['查詢資料'] },
         openingMessage: '開場白',
         origin: { conversationId: 'conv4', reason: '查詢銷售資料＋套用部門報告規範' },
       })

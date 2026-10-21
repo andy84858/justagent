@@ -39,15 +39,6 @@
             <i class="material-symbols-outlined">smart_toy</i>
             答題 Agent：<strong>{{ store.aiTestAnsweringAgent }}</strong>
           </span>
-          <span class="ai-progress-text">已標註 {{ answeredCount }} / {{ store.aiTestScenarios.length }}</span>
-          <button
-            v-if="!store.aiTestReport"
-            class="custom-btn custom-main-btn ai-submit-btn"
-            :disabled="!allAnswersSelected"
-            @click="submitAnswers"
-          >
-            送出答案
-          </button>
         </div>
         <button class="custom-btn ai-regenerate-btn" @click="regenerate">
           <i class="material-symbols-outlined">refresh</i>
@@ -55,7 +46,7 @@
         </button>
       </div>
 
-      <div class="ai-scenarios">
+      <div ref="scenariosEl" class="ai-scenarios">
         <div
           v-for="sc in store.aiTestScenarios"
           :key="sc.id"
@@ -177,6 +168,21 @@
           </div>
         </div>
       </div>
+
+      <!-- 送出答案放在題目清單下方、固定在底部：使用者由上往下標註，標完的位置就是送出的位置 -->
+      <div v-if="!store.aiTestReport" class="ai-submit-bar">
+        <span class="ai-progress-text">
+          已標註 {{ answeredCount }} / {{ store.aiTestScenarios.length }}
+          <template v-if="!allAnswersSelected">，全部標註完才能送出</template>
+        </span>
+        <button
+          class="custom-btn custom-main-btn ai-submit-btn"
+          :disabled="!allAnswersSelected"
+          @click="submitAnswers"
+        >
+          送出答案
+        </button>
+      </div>
     </template>
 
     <SkillEnableFlow v-if="!props.embedded" ref="enableFlowRef" />
@@ -184,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import { useSkillStore } from '@/stores/skillStore'
 import type { AITestTag, TriggerEdgeSource } from '@/stores/skillStore'
 import SkillEnableFlow from '@/components/Skill/SkillEnableFlow.vue'
@@ -205,6 +211,7 @@ const props = defineProps<{
 }>()
 const store = useSkillStore()
 const enableFlowRef = ref<InstanceType<typeof SkillEnableFlow> | null>(null)
+const scenariosEl = ref<HTMLElement | null>(null)
 
 onMounted(() => store.ensureAITestStateForSkill(props.skillId))
 watch(() => props.skillId, (id) => store.ensureAITestStateForSkill(id))
@@ -301,9 +308,12 @@ function selectAnswer(scenarioId: string, userAnswer: boolean) {
   draftAnswers.value = { ...draftAnswers.value, [scenarioId]: userAnswer }
 }
 
-function submitAnswers() {
+// 送出後捲到清單最下面，讓使用者直接看到報告
+async function submitAnswers() {
   if (!allAnswersSelected.value) return
   store.submitAITestAnswers(props.skillId, draftAnswers.value)
   draftAnswers.value = {}
+  await nextTick()
+  scenariosEl.value?.scrollTo?.({ top: scenariosEl.value.scrollHeight, behavior: 'smooth' })
 }
 </script>

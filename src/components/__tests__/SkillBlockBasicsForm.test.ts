@@ -16,6 +16,9 @@ function mountForm(over: Partial<Record<string, unknown>> = {}) {
       capabilities: [],
       assignedAgents: [],
       sectionIds: ['promo_kpi'],
+      exceptions: [],
+      outputFormat: '',
+      applicableScope: '',
       ...over,
     },
   })

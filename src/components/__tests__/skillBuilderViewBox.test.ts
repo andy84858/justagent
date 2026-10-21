@@ -70,7 +70,7 @@ describe('skillBuilderViewBox', () => {
 
   it('預填 block：hydrate 後預覽顯示名稱；有 origin 時對話 tab 顯示脈絡條', async () => {
     const { wrapper } = mountBlock({
-      prefill: { name: '產品銷售報告整理', instructions: '1. 查詢\n2. 套用' },
+      prefill: { name: '產品銷售報告整理', instructions: '1. 查詢\n2. 套用', steps: ['查詢', '套用'] },
       openingMessage: '來自對話的開場',
       origin: { conversationId: 'conv4', reason: '查詢銷售資料＋套用部門報告規範' },
     })
@@ -116,7 +116,7 @@ describe('skillBuilderViewBox', () => {
 
   it('儲存：新建技能先切到對話分頁確認可調用 Agent，回答後才建立個人技能；「在 AI 賦能開啟」儲存前 disabled、儲存後導頁', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { wrapper, block, router } = mountBlock({ prefill: { name: '查庫存', instructions: '1. 查' } })
+    const { wrapper, block, router } = mountBlock({ prefill: { name: '查庫存', instructions: '1. 查', steps: ['查'] } })
     const skillStore = useSkillStore()
     const before = skillStore.myPersonalSkills.length
     const openBtn = wrapper.find('.skb-open-studio')
@@ -146,7 +146,7 @@ describe('skillBuilderViewBox', () => {
   it('snapshot 指到的技能已被刪除：顯示提示、退回建立模式', async () => {
     const skillStore = useSkillStore()
     const store = useAiviewerStore()
-    const id = store.addSkillBuilderBlock({ prefill: { name: '查庫存', instructions: '1. 查' } })
+    const id = store.addSkillBuilderBlock({ prefill: { name: '查庫存', instructions: '1. 查', steps: ['查'] } })
     const block = store.aiViewerBlocks.find((b: any) => b.id === id)
     block.data.data.snapshot.mode = 'edit'
     block.data.data.snapshot.savedSkillId = 'personal-gone'
@@ -226,7 +226,7 @@ describe('skillBuilderViewBox', () => {
   })
 
   it('conv4 預填 block（prefill）直接是對話 tab，沒有方式選擇畫面', () => {
-    const { wrapper } = mountBlock({ prefill: { name: 'x', instructions: '1. a' }, openingMessage: '開場' })
+    const { wrapper } = mountBlock({ prefill: { name: 'x', instructions: '1. a', steps: ['a'] }, openingMessage: '開場' })
     expect(wrapper.find('.SkillMethodChooser').exists()).toBe(false)
     expect(wrapper.find('.SkillStudioChat').exists()).toBe(true)
   })

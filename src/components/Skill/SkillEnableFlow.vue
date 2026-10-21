@@ -23,8 +23,8 @@
             </div>
           </template>
 
-          <!-- 「立即測試」：就地在同一個對話框裡測，原本的選擇按鈕收起來。交卷（測過即可，不用全對）後按「繼續啟用」；
-               測到一半不想測了也能按「不測試，直接啟用」直接進選 Agent -->
+          <!-- 「立即測試」：就地在同一個對話框裡測，原本的選擇按鈕收起來。既然選了測試，就不再給
+               「不測試，直接啟用」：交卷（測過即可，不用全對）前「繼續啟用」反灰，不想測了按取消 -->
           <template v-else>
             <h4>測試「{{ gateSkill.name }}」</h4>
             <div class="enable-gate-test">
@@ -35,10 +35,11 @@
                 取消
               </button>
               <button
-                :class="['custom-btn custom-main-btn', { 'enable-skip-test-btn': !gatePassed }]"
+                class="custom-btn custom-main-btn"
+                :disabled="!gatePassed"
                 @click="enterAgentStep(gateSkill)"
               >
-                <i class="material-symbols-outlined">{{ gatePassed ? 'check_circle' : 'bolt' }}</i>{{ gatePassed ? '繼續啟用' : '不測試，直接啟用' }}
+                <i class="material-symbols-outlined">check_circle</i>繼續啟用
               </button>
             </div>
           </template>

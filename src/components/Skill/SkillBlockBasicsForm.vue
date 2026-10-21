@@ -66,6 +66,38 @@
       <SkillCapabilityEditor :model-value="props.capabilities" @update:model-value="emit('update:capabilities', $event)" />
     </div>
 
+    <!-- RD 技能定義的選填三段；步驟由「積木組成」選的章節依序帶出，不在這裡填 -->
+    <div class="sbbf-field">
+      <span class="sbc-label">例外或特殊情況</span>
+      <p class="se-hint">遇到哪些狀況要換一種處理方式，例如某渠道沒有數據時。</p>
+      <SkillListEditor
+        :model-value="props.exceptions"
+        item-label="例外"
+        placeholder="例：某渠道無數據時，從圖表中排除並註記"
+        @update:model-value="emit('update:exceptions', $event)"
+      />
+    </div>
+
+    <label class="sbbf-field">
+      <span class="sbc-label">固定輸出格式</span>
+      <input
+        class="custom-input"
+        :value="props.outputFormat"
+        placeholder="例：三大章節，每章節附圖表"
+        @input="emit('update:outputFormat', ($event.target as HTMLInputElement).value)"
+      />
+    </label>
+
+    <label class="sbbf-field">
+      <span class="sbc-label">適用範圍</span>
+      <input
+        class="custom-input"
+        :value="props.applicableScope"
+        placeholder="例：行銷部每週成效檢視"
+        @input="emit('update:applicableScope', ($event.target as HTMLInputElement).value)"
+      />
+    </label>
+
     <div class="sbbf-field">
       <span class="sbc-label">指派 Agent <span class="se-required">*</span></span>
       <p class="se-hint">選擇哪些 Agent 可以調用這顆技能，至少指派一位。</p>
@@ -85,6 +117,7 @@ import type { SkillCapability } from '@/stores/skillStore'
 import { deriveFromSections, suggestDescriptionVariants } from '@/composables/useSkillStudioConversation'
 import SkillCapabilityEditor from '@/components/Skill/SkillCapabilityEditor.vue'
 import SkillKeywordsEditor from '@/components/Skill/SkillKeywordsEditor.vue'
+import SkillListEditor from '@/components/Skill/SkillListEditor.vue'
 import AgentAssignGrid from '@/components/Skill/AgentAssignGrid.vue'
 import popDialog from '@/services/popDialog'
 
@@ -96,6 +129,9 @@ const props = defineProps<{
   assignedAgents: string[]
   sectionIds: string[]
   nameConflict?: boolean
+  exceptions: string[]
+  outputFormat: string
+  applicableScope: string
 }>()
 
 const emit = defineEmits<{
@@ -104,6 +140,9 @@ const emit = defineEmits<{
   'update:keywords': [value: string[]]
   'update:capabilities': [value: SkillCapability[]]
   'update:assignedAgents': [value: string[]]
+  'update:exceptions': [value: string[]]
+  'update:outputFormat': [value: string]
+  'update:applicableScope': [value: string]
 }>()
 
 const descriptionCandidates = ref<string[]>([])

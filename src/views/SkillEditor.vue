@@ -72,6 +72,49 @@
             </div>
           </div>
 
+          <!-- RD 技能定義的步驟／例外或特殊情況／固定輸出格式／適用範圍：跟技能內文分開填，
+               技能詳情的「技能定義」就是用這幾欄（加上描述、覆蓋能力）組出來的 -->
+          <div class="se-section">
+            <label class="se-label">步驟 <span class="se-required">*</span></label>
+            <p class="se-hint">依序列出這個技能執行時要做的事，至少一步。</p>
+            <SkillListEditor
+              v-model="form.steps"
+              item-label="步驟"
+              placeholder="例：確認使用者提供的產品 ID"
+              ordered
+            />
+          </div>
+
+          <div class="se-section">
+            <label class="se-label">例外或特殊情況</label>
+            <p class="se-hint">遇到哪些狀況要換一種處理方式，例如查無資料、權限不足時。</p>
+            <SkillListEditor
+              v-model="form.exceptions"
+              item-label="例外"
+              placeholder="例：查無此 SKU 時，提示使用者確認產品 ID"
+            />
+          </div>
+
+          <div class="se-section">
+            <label class="se-label">固定輸出格式</label>
+            <p class="se-hint">結果固定用什麼格式回覆，例如表格欄位、段落順序。</p>
+            <input
+              v-model="form.outputFormat"
+              class="custom-input se-input-full"
+              placeholder="例：表格：倉庫／現有庫存／安全存量／狀態"
+            />
+          </div>
+
+          <div class="se-section">
+            <label class="se-label">適用範圍</label>
+            <p class="se-hint">這個技能適用在哪些對象、資料或情境。</p>
+            <input
+              v-model="form.applicableScope"
+              class="custom-input se-input-full"
+              placeholder="例：企業內部 ERP 系統中的所有倉庫"
+            />
+          </div>
+
           <div class="se-section">
             <label class="se-label">覆蓋能力 <span class="se-required">*</span></label>
             <p class="se-hint">拆解這個技能具體涵蓋哪些能力，例如「問題分類」「情緒分析」，方便之後在技能詳情快速掌握技能範圍。</p>
@@ -98,6 +141,34 @@
                 <span class="se-confirm-key">技能內文</span>
                 <span class="se-confirm-val">
                   <span v-if="form.instructions">{{ form.instructions.length }} 字元</span>
+                  <span v-else class="se-empty">（未填寫）</span>
+                </span>
+              </div>
+              <div class="se-confirm-row">
+                <span class="se-confirm-key">步驟</span>
+                <span class="se-confirm-val">
+                  <span v-if="filledSteps.length">{{ filledSteps.length }} 步</span>
+                  <span v-else class="se-empty">（未填寫）</span>
+                </span>
+              </div>
+              <div class="se-confirm-row">
+                <span class="se-confirm-key">例外或特殊情況</span>
+                <span class="se-confirm-val">
+                  <span v-if="filledExceptions.length">{{ filledExceptions.length }} 項</span>
+                  <span v-else class="se-empty">（未填寫）</span>
+                </span>
+              </div>
+              <div class="se-confirm-row">
+                <span class="se-confirm-key">固定輸出格式</span>
+                <span class="se-confirm-val">
+                  <span v-if="form.outputFormat.trim()">{{ form.outputFormat.trim() }}</span>
+                  <span v-else class="se-empty">（未填寫）</span>
+                </span>
+              </div>
+              <div class="se-confirm-row">
+                <span class="se-confirm-key">適用範圍</span>
+                <span class="se-confirm-val">
+                  <span v-if="form.applicableScope.trim()">{{ form.applicableScope.trim() }}</span>
                   <span v-else class="se-empty">（未填寫）</span>
                 </span>
               </div>
@@ -200,6 +271,7 @@ import { ref, reactive, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppBreadcrumb from '@/components/AppBreadcrumb.vue'
 import SkillCapabilityEditor from '@/components/Skill/SkillCapabilityEditor.vue'
+import SkillListEditor from '@/components/Skill/SkillListEditor.vue'
 import AgentAssignGrid from '@/components/Skill/AgentAssignGrid.vue'
 import SkillEnableFlow from '@/components/Skill/SkillEnableFlow.vue'
 import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
@@ -281,7 +353,15 @@ const form = reactive({
   isEnabled: existingSkill?.isEnabled ?? true,
   files: existingSkill?.files ?? existingDraft?.files ?? [] as SkillFile[],
   capabilities: existingSkill?.capabilities ?? [] as SkillCapability[],
+  // 步驟預設給一列空白，讓使用者一進來就看得到輸入框（送出前會濾掉空白列）
+  steps: existingSkill?.steps?.length ? [...existingSkill.steps] : existingDraft?.steps?.length ? [...existingDraft.steps] : [''],
+  exceptions: [...(existingSkill?.exceptions ?? existingDraft?.exceptions ?? [])],
+  outputFormat: existingSkill?.outputFormat ?? existingDraft?.outputFormat ?? '',
+  applicableScope: existingSkill?.applicableScope ?? existingDraft?.applicableScope ?? '',
 })
+
+const filledSteps = computed(() => form.steps.map(s => s.trim()).filter(Boolean))
+const filledExceptions = computed(() => form.exceptions.map(s => s.trim()).filter(Boolean))
 
 const fillWidth = computed(() => `${(currentStep.value / (STEPS.length - 1)) * 100}%`)
 
@@ -293,11 +373,12 @@ const willGoThroughEnableFlow = computed(() =>
   isEditMode && !!existingSkill && form.isEnabled && !existingSkill.isEnabled
 )
 
-// 唯一不受「只卡最終送出」限制的必填（名稱）卡在能不能往下一步走；覆蓋能力／
+// 唯一不受「只卡最終送出」限制的必填（名稱）卡在能不能往下一步走；步驟／覆蓋能力／
 // 指派 Agent 必填只卡在真正送出（建立技能／儲存變更）那一刻，中途步驟之間可以留白
 const missingRequiredFields = computed(() => {
   const missing: string[] = []
   if (!form.name.trim()) missing.push('技能名稱')
+  if (!filledSteps.value.length) missing.push('步驟')
   if (!form.capabilities.length) missing.push('覆蓋能力')
   if (!willGoThroughEnableFlow.value && !form.assignedAgents.length) missing.push('指派 Agent')
   return missing
@@ -325,6 +406,10 @@ function buildPayload() {
     // 過濾掉空字串（理論上不會發生，SkillCapabilityEditor 不會送出空白標籤，
     // 這裡只是防呆)
     capabilities: form.capabilities.map(c => c.trim()).filter(Boolean),
+    steps: filledSteps.value,
+    exceptions: filledExceptions.value,
+    outputFormat: form.outputFormat.trim(),
+    applicableScope: form.applicableScope.trim(),
   }
 }
 

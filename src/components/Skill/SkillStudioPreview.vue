@@ -51,6 +51,38 @@
           <p v-else class="ssp-empty">尚未撰寫技能內文</p>
         </div>
 
+        <!-- RD 技能定義的步驟／例外或特殊情況／固定輸出格式／適用範圍。後端模式不顯示：
+             後端技能的內文本身就是整份 RD 格式，不拆成這幾欄 -->
+        <template v-if="!props.backendTest">
+          <div class="ssp-section">
+            <div class="ssp-section-label">步驟</div>
+            <ol v-if="props.draft.steps.length" class="ssp-text">
+              <li v-for="(step, i) in props.draft.steps" :key="`${i}-${step}`">{{ step }}</li>
+            </ol>
+            <p v-else class="ssp-empty">尚未列出步驟（必填）{{ isChat ? '，跟 Agent 說「步驟：…」就能補上' : '' }}</p>
+          </div>
+
+          <div class="ssp-section">
+            <div class="ssp-section-label">例外或特殊情況</div>
+            <ul v-if="props.draft.exceptions.length" class="ssp-text">
+              <li v-for="(ex, i) in props.draft.exceptions" :key="`${i}-${ex}`">{{ ex }}</li>
+            </ul>
+            <p v-else class="ssp-empty">選填{{ isChat ? '，跟 Agent 說「例外：…」就能補上' : '' }}</p>
+          </div>
+
+          <div class="ssp-section">
+            <div class="ssp-section-label">固定輸出格式</div>
+            <p v-if="props.draft.outputFormat" class="ssp-text">{{ props.draft.outputFormat }}</p>
+            <p v-else class="ssp-empty">選填{{ isChat ? '，跟 Agent 說「輸出格式：…」就能補上' : '' }}</p>
+          </div>
+
+          <div class="ssp-section">
+            <div class="ssp-section-label">適用範圍</div>
+            <p v-if="props.draft.applicableScope" class="ssp-text">{{ props.draft.applicableScope }}</p>
+            <p v-else class="ssp-empty">選填{{ isChat ? '，跟 Agent 說「適用範圍：…」就能補上' : '' }}</p>
+          </div>
+        </template>
+
         <div class="ssp-section">
           <div class="ssp-section-label">覆蓋能力</div>
           <div v-if="props.draft.capabilities.length" class="ssp-caps">
@@ -249,8 +281,16 @@ const saveEnabled = computed(() =>
 
 // 積木方式必填欄位比較多（說明／覆蓋能力／指派 Agent），存不了的時候
 // 直接列出還缺什麼，不要讓使用者自己猜按鈕為什麼反灰
+const isChat = computed(() => props.draft.method === 'chat')
+
 const missingFieldsHint = computed(() => {
-  if (saveEnabled.value || props.draft.method !== 'blocks') return ''
+  if (saveEnabled.value) return ''
+  // 對話方式只有步驟可能單獨漏掉（名稱／內文一擬稿就有），跟 composable 的 missingFieldsHint 同一套規則
+  if (isChat.value) {
+    return props.draft.name.trim() && props.draft.instructions.trim() && !props.draft.steps.length && !props.backendTest
+      ? '還缺：步驟' : ''
+  }
+  if (props.draft.method !== 'blocks') return ''
   const missing: string[] = []
   if (!props.draft.name.trim()) missing.push('技能名稱')
   if (!props.draft.instructions.trim()) missing.push('積木組成（至少選一個章節）')

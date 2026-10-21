@@ -101,7 +101,7 @@ describe('two skillBuilderViewBox instances on one block', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
       const store = useAiviewerStore()
-      const id = store.addSkillBuilderBlock({ prefill: { name: '查庫存', instructions: '1. 查' } })
+      const id = store.addSkillBuilderBlock({ prefill: { name: '查庫存', instructions: '1. 查', steps: ['查'] } })
       const block = store.aiViewerBlocks.find((b: any) => b.id === id)
       const A = mountOn(id, block)
       store.updateSkillBuilderBlock(id, { activeTab: 'preview' })

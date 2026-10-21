@@ -513,6 +513,10 @@
     color: var(--text);
   }
 
+  // 步驟（編號）／例外（圓點）清單：全域 reset 會把清單符號拿掉，這裡明確補回來
+  ol.ssp-text { list-style: decimal; padding-left: 20px; }
+  ul.ssp-text { list-style: disc; padding-left: 20px; }
+
   .ssp-empty {
     margin: 0;
     font-size: 12.5px;

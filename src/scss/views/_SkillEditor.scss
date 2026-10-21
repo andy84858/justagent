@@ -113,6 +113,9 @@
     margin-bottom: 22px;
   }
 
+  // 固定輸出格式／適用範圍：單行輸入但內容可能不短，撐滿跟上面的清單同寬
+  .se-input-full { width: 100%; }
+
   .se-primary-section {
     border: 1.5px solid var(--tag-teal-text);
     border-radius: 14px;

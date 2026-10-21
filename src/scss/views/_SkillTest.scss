@@ -186,6 +186,9 @@
   }
 
   // ── 右側 Panel ──
+  // 沙盒頁右下角有全站的浮動按鈕，剛好壓在 AI 快速測試「送出答案」上，右側留出它的位置
+  .ai-submit-bar { padding-right: 72px; }
+
   .test-panel {
     min-width: 0;
     display: flex;

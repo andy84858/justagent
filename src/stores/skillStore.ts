@@ -36,6 +36,10 @@ export interface SkillVersion {
   description: string
   instructions?: string
   capabilities?: SkillCapability[]
+  steps?: string[]
+  exceptions?: string[]
+  outputFormat?: string
+  applicableScope?: string
   createdAt: string
   createdBy?: string
   updateNote?: string
@@ -119,6 +123,12 @@ export interface Skill {
   forkSourceVersion?: string
   instructions?: string
   capabilities?: SkillCapability[]
+  // RD 技能定義的其餘四段（技能描述＝description、覆蓋能力＝capabilities）。步驟必填
+  // （建立／編輯流程擋存檔），其餘三項選填，沒有的段落技能定義就不顯示
+  steps?: string[]
+  exceptions?: string[]
+  outputFormat?: string
+  applicableScope?: string
   keywords?: string[]          // 只有積木組裝必填；對話方式不會有這個欄位
   functionType?: SkillFunctionType   // 探索頁分類/篩選用，選填不影響既有消費者
   usageScenarios?: UsageScenario[]
@@ -153,6 +163,19 @@ export interface Skill {
   composition?: { sectionIds: string[] }  // 由行銷積木組裝建立的技能；有這欄位就走積木方式
 }
 
+// RD 技能定義另外四段：建立／編輯／版本快照都要整組帶著走，集中成一個型別跟複製函式，
+// 避免哪條路徑漏抄一個欄位
+export type SkillRdFields = Pick<Skill, 'steps' | 'exceptions' | 'outputFormat' | 'applicableScope'>
+
+export function copyRdFields(src: SkillRdFields): SkillRdFields {
+  return {
+    steps: src.steps ? [...src.steps] : [],
+    exceptions: src.exceptions ? [...src.exceptions] : [],
+    outputFormat: src.outputFormat ?? '',
+    applicableScope: src.applicableScope ?? '',
+  }
+}
+
 export interface SkillFile {
   id: string
   fileName: string
@@ -175,6 +198,10 @@ export interface CreateSkillPayload {
   keywords?: string[]
   creationMethod?: 'ai_assisted' | 'manual'
   composition?: { sectionIds: string[] }
+  steps?: string[]
+  exceptions?: string[]
+  outputFormat?: string
+  applicableScope?: string
 }
 
 export interface UpdateSkillPayload {
@@ -186,12 +213,16 @@ export interface UpdateSkillPayload {
   files?: SkillFile[]
   capabilities?: SkillCapability[]
   keywords?: string[]
+  steps?: string[]
+  exceptions?: string[]
+  outputFormat?: string
+  applicableScope?: string
 }
 
 // AI 賦能對話修改用：只允許動這幾個內容欄位，不碰狀態／版本／來源關係。
 // assignedAgents／keywords 只有積木方式的「基本設定」步驟會帶到；對話方式不傳這兩個
 // 欄位（composable 的 save() 傳 undefined），維持原本「指派 Agent 只能透過啟用流程調整」的行為
-export type StudioPatch = Partial<Pick<Skill, 'name' | 'description' | 'instructions' | 'capabilities' | 'assignedAgents' | 'keywords' | 'composition'>>
+export type StudioPatch = Partial<Pick<Skill, 'name' | 'description' | 'instructions' | 'capabilities' | 'assignedAgents' | 'keywords' | 'composition' | 'steps' | 'exceptions' | 'outputFormat' | 'applicableScope'>>
 
 export interface DraftSkill {
   id: string
@@ -204,6 +235,10 @@ export interface DraftSkill {
   updatedAt: string
   assignedAgents?: string[]
   files?: SkillFile[]
+  steps?: string[]
+  exceptions?: string[]
+  outputFormat?: string
+  applicableScope?: string
 }
 
 export interface ChatMessage {
@@ -251,6 +286,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.96,
     avgLatencyMs: 280,
     instructions: '你是一個專業的客服助理，負責處理客戶的訂單查詢、退換貨、付款方式等常見問題。回覆時語氣親切且專業，優先比對知識庫給出準確答案。遇到情緒激動或複雜投訴時，主動轉接人工客服。支援繁體中文、簡體中文、英文回覆。',
+    steps: ['辨識客戶問題類型（訂單、退換貨、付款、其他）', '比對知識庫找出對應答案', '以親切專業的語氣回覆，必要時附上操作步驟', '確認客戶問題是否已解決'],
+    exceptions: ['客戶情緒激動或提出正式投訴時，主動轉接人工客服', '知識庫查無答案時，不自行推測，改為建立客服單'],
+    outputFormat: '先一句話回答重點，再條列補充說明；結尾詢問是否還有其他問題',
+    applicableScope: '電商平台的一般客戶諮詢，支援繁體中文、簡體中文、英文',
     capabilities: [
       '問題分類',
       'FAQ查詢',
@@ -318,6 +357,10 @@ const MOCK_SKILLS: Skill[] = [
         forkSourceVersion: '初始客服版',
         upstreamUpdateStatus: 'update_available' as const,
         instructions: '你是專門處理退貨問題的客服助理。\n\n當客戶提出退貨請求時：\n1. 查詢訂單狀態確認購買日期\n2. 確認是否在 30 天退貨期限內\n3. 依據退貨政策給出具體建議\n4. 如有疑問轉接人工客服',
+        steps: ['查詢訂單狀態，確認購買日期', '確認是否在 30 天退貨期限內', '依退貨政策給出具體處理建議', '需要退貨時提供退貨申請連結'],
+        exceptions: ['超過退貨期限但有正當理由時，提供「主管特批申請」流程', '商品已拆封或屬客製品時，說明不適用退貨並提供替代方案'],
+        outputFormat: '退貨判定結果（可退／不可退）＋理由＋下一步操作',
+        applicableScope: '僅處理退貨相關問題，一般諮詢交給通用客服機器人',
         capabilities: [
           '訂單狀態查詢',
           '退貨資格判斷',
@@ -407,6 +450,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.91,
     avgLatencyMs: 450,
     instructions: '你是文件摘要助理，負責解析使用者上傳的長篇文件，提取重點與關鍵字，並依需求輸出條列式、段落式或 JSON 結構化摘要。優先保留原文的關鍵數據與結論，避免遺漏重要決策資訊。',
+    steps: ['解析上傳的文件內容', '擷取重點段落、關鍵數據與結論', '依使用者指定格式整理摘要', '列出文件關鍵字'],
+    exceptions: ['文件為掃描圖檔且無法辨識文字時，提示使用者改上傳文字版', '文件超過 200 頁時，先依章節分段摘要'],
+    outputFormat: '條列式（預設）、段落式或 JSON 結構化摘要，三擇一',
+    applicableScope: 'PDF、Word、Markdown 格式的長篇文件',
     files: [
       {
         id: 'sf-sys-doc-001-1',
@@ -472,6 +519,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.88,
     avgLatencyMs: 520,
     instructions: '你是會議記錄助理，負責將會議錄音轉換為逐字稿，並自動生成結構化摘要，包含重點決策與 action items。輸出時明確標示每個待辦事項的負責人與預計完成日期。',
+    steps: ['將會議錄音轉為逐字稿', '歸納討論主題與重點決策', '擷取 action items', '為每個 action item 標示負責人與預計完成日期'],
+    exceptions: ['錄音品質不佳無法辨識時，標示不確定的段落', '未明確指派負責人的 action item，標示為「待指派」'],
+    outputFormat: '會議主題／重點決策／Action Items（負責人、到期日）三段式',
+    applicableScope: '一般內部會議與客戶會議',
     capabilities: [
       '語音轉文字',
       '摘要生成',
@@ -531,6 +582,10 @@ const MOCK_SKILLS: Skill[] = [
         forkSourceVersion: '初始版本',
         upstreamUpdateStatus: 'update_available' as const,
         instructions: '你是工程團隊的會議記錄助理，負責將站立會議與架構討論的錄音轉換為摘要，並自動將識別出的 action items 建立為 Jira Issue，同時保留技術決策記錄與相關 PR 連結。',
+        steps: ['將站立會議或架構討論錄音轉為摘要', '擷取技術決策與相關 PR 連結', '識別 action items', '將 action items 建立為 Jira Issue'],
+        exceptions: ['Jira 連線失敗時，改在摘要中列出待建立的 Issue 清單', '討論內容涉及資安或未公開資訊時，不寫入 Jira 描述'],
+        outputFormat: '摘要＋技術決策記錄＋已建立的 Jira Issue 連結',
+        applicableScope: '工程部的站立會議與架構討論',
         capabilities: [
           'Jira整合',
           '工程格式輸出',
@@ -575,6 +630,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.99,
     avgLatencyMs: 120,
     instructions: '你是 ERP 庫存查詢助理。\n根據 SKU 查詢各倉庫即時庫存量。\n\n支援功能：\n- 指定倉庫查詢\n- 多倉庫匯總\n- 低於安全存量自動標示',
+    steps: ['確認使用者提供的產品 ID（SKU）', '查詢指定倉庫或全部倉庫的即時庫存', '多倉庫時彙總總量', '標示低於安全存量的品項'],
+    exceptions: ['查無此 SKU 時，提示使用者確認產品 ID', 'ERP 系統維護中時，回覆最後一次同步的庫存並註明時間'],
+    outputFormat: '表格：倉庫／現有庫存／安全存量／狀態',
+    applicableScope: '企業內部 ERP 系統中的所有倉庫',
     files: [
       {
         id: 'sf-ext-erp-001-1',
@@ -656,6 +715,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.87,
     avgLatencyMs: 410,
     instructions: '你是業務團隊的週報助理。\n\n每週根據提供的銷售數據，自動生成結構化業績週報：\n1. 本週總業績與目標達成率\n2. Top 5 商品銷售排行\n3. 各區域業績比較\n4. 下週改善建議\n\n輸出格式以 Markdown 條列式為主，數字加粗標示。',
+    steps: ['讀取本週銷售數據', '計算本週總業績與目標達成率', '整理 Top 5 商品銷售排行', '比較各區域業績', '提出下週改善建議'],
+    exceptions: ['銷售數據不完整時，標示缺漏的區域或日期', '目標值未設定時，只呈現業績數字不計算達成率'],
+    outputFormat: 'Markdown 條列式，數字加粗標示',
+    applicableScope: '業務部每週例行週報',
     capabilities: [
       '銷售數據分析',
       '商品排行生成',
@@ -709,6 +772,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.91,
     avgLatencyMs: 320,
     instructions: '你是行銷文案助理，根據活動主題、目標受眾與品牌調性生成行銷文案。\n\n輸出包含：\n1. 社群貼文（Facebook / Instagram / LinkedIn 各一）\n2. EDM 主旨行（3 個選項）\n3. CTA 按鈕文案（2 個選項）\n\n語調依品牌調性調整，預設為專業但親切。',
+    steps: ['確認活動主題、目標受眾與品牌調性', '產出各社群平台貼文', '產出 EDM 主旨行選項', '產出 CTA 按鈕文案選項'],
+    exceptions: ['未提供品牌調性時，預設為專業但親切', '活動涉及價格或優惠條件時，提醒使用者確認法務用語'],
+    outputFormat: '社群貼文（Facebook / Instagram / LinkedIn 各一）＋EDM 主旨行 3 選項＋CTA 文案 2 選項',
+    applicableScope: '行銷部的活動宣傳文案',
     capabilities: [
       '多平台文案生成',
       'CTA最佳化',
@@ -1039,6 +1106,10 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     avgLatencyMs: 0,
     assignedAgents: ['會議記錄助理', '業務分析助理'],
     instructions: '你是一個週報助理，協助使用者根據本週資料自動生成結構化週報。',
+    steps: ['收集本週會議記錄與任務清單', '整理本週完成事項', '列出進行中與延遲的任務', '整理下週計畫'],
+    exceptions: ['本週沒有會議記錄時，只依任務清單產出', '任務狀態不明時，標示「待確認」'],
+    outputFormat: '本週完成／進行中／下週計畫 三段條列',
+    applicableScope: '個人每週工作週報',
     capabilities: [
       '資料整合',
       '週報格式輸出',
@@ -1093,6 +1164,10 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     avgLatencyMs: 0,
     assignedAgents: ['客服中心助理'],
     instructions: '你是客服品質評估助理，分析客服對話品質。',
+    steps: ['讀取客服對話紀錄', '評估回答是否正確、完整', '評估語氣與客戶滿意度', '給出評分與改善建議'],
+    exceptions: ['對話過短無法判斷時，標示「樣本不足」', '涉及客訴爭議的對話，標記給主管複核'],
+    outputFormat: '評分（1–5 分）＋扣分原因＋改善建議',
+    applicableScope: '客服團隊的文字對話紀錄',
     capabilities: [
       '多輪對話分析',
       '情緒辨識',
@@ -1128,6 +1203,10 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     avgLatencyMs: 0,
     assignedAgents: ['知識管理助理'],
     instructions: '你是合約審核助理，負責擷取合約中的關鍵條款並評估潛在法律風險。請以條列方式輸出摘要，並標示高風險條款。',
+    steps: ['讀取合約全文', '擷取關鍵條款（金額、期限、違約、保密、管轄）', '評估各條款的潛在法律風險', '產出審核建議'],
+    exceptions: ['合約為非中英文時，提示需人工翻譯後再審', '發現缺少必要條款時，列在風險摘要最前面'],
+    outputFormat: '條列式摘要，高風險條款以【高風險】標示',
+    applicableScope: '一般商業合約與合作協議',
     capabilities: [
       '關鍵條款擷取',
       '風險等級標示',
@@ -1163,6 +1242,10 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     avgLatencyMs: 0,
     assignedAgents: ['會議記錄助理'],
     instructions: '你是會議記錄助理，根據逐字稿整理結構化會議記錄，包含主題、決議、行動項目與負責人。',
+    steps: ['讀取會議逐字稿或音訊', '整理會議主題', '列出決議事項', '列出行動項目與負責人'],
+    exceptions: ['逐字稿缺少發言人資訊時，行動項目負責人標示「待確認」', '會議沒有決議時，該段標示「本次無決議」'],
+    outputFormat: '主題／決議／行動項目（負責人）三段式',
+    applicableScope: '內部會議的會後記錄',
     capabilities: [
       '多發言人識別',
       '行動項目配對',
@@ -1193,6 +1276,10 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     avgLatencyMs: 0,
     assignedAgents: ['客服中心助理', '電商小幫手'],
     instructions: '你是產品 FAQ 助理，根據內部文件與常見問題資料庫回答用戶問題，無法回答時請引導至人工客服。',
+    steps: ['理解使用者提問', '比對產品文件與常見問題資料庫', '依文件內容回答', '附上參考文件連結'],
+    exceptions: ['資料庫查無答案時，引導至人工客服', '提問涉及未公開產品資訊時，不回答並說明原因'],
+    outputFormat: '簡答一句＋詳細說明＋參考連結',
+    applicableScope: '已上架產品的使用與規格問題',
     capabilities: [
       'FAQ比對回覆',
       '無法回答時導流',
@@ -1220,6 +1307,10 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     avgLatencyMs: 0,
     assignedAgents: ['業務分析助理', '倉儲管理助理'],
     instructions: '你是 ERP 報表助理，整合多系統數據生成週期性報表。',
+    steps: ['從 ERP 系統擷取指定期間數據', '整合多系統數據並校對', '計算各項指標', '產出週期性報表'],
+    exceptions: ['數據來源之間不一致時，標示差異並以 ERP 為準', '指定期間無數據時，提示使用者調整期間'],
+    outputFormat: '表格＋重點摘要',
+    applicableScope: '週報、月報等週期性營運報表',
     capabilities: [
       '多系統資料彙整',
       '週期性報表產出',
@@ -1247,6 +1338,10 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     testPassRate: 0,
     avgLatencyMs: 0,
     instructions: '依序產出以下章節：\n1. 會員人物誌：性別 × 年齡層 × 主力購買品類 × RFM 行為分群的四維輪廓。\n2. 活動排行：各促銷活動帶動效果排行，並自動生成圖表。\n3. 渠道別流量與收益貢獻：各渠道流量佔比與收益貢獻對照，圖表自動生成。',
+    steps: ['產出會員人物誌：性別 × 年齡層 × 主力購買品類 × RFM 行為分群', '產出各促銷活動帶動效果排行，並自動生成圖表', '產出各渠道流量佔比與收益貢獻對照，並自動生成圖表'],
+    exceptions: ['某渠道無數據時，該渠道從圖表中排除並註記', '活動期間不足一週時，標示資料可能不具代表性'],
+    outputFormat: '三大章節（會員人物誌／活動排行／渠道貢獻），每章節附圖表',
+    applicableScope: '行銷部每週成效檢視',
     assignedAgents: ['業務分析助理'],
     capabilities: [
       '會員人物誌',
@@ -1278,6 +1373,10 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     // routeIntent 的 findSimilarSkill 是全域 bigram 比對沒有門檻，一有共同的
     // 兩字重疊就可能被誤判成「找到相近技能」，見 useSkillStudioConversation.ts
     instructions: '這是示範用的一顆項目，內容可以隨時調整，主要用來展示啟用前的測試流程。',
+    steps: ['讀取使用者輸入', '依示範流程回覆'],
+    exceptions: ['尚未通過 AI 快速測試時，啟用前會先出現測試閘門'],
+    outputFormat: '一般文字回覆',
+    applicableScope: '僅供展示啟用前的測試流程',
     assignedAgents: ['通用助理'],
     capabilities: [
       '示範能力',
@@ -1456,6 +1555,7 @@ export const useSkillStore = defineStore('skillStore', () => {
       testPassRate: 0,
       avgLatencyMs: 0,
       instructions: draft.instructions,
+      ...copyRdFields(draft),
       assignedAgents: draft.assignedAgents,
       forkSourceId: draft.forkSourceId,
     }
@@ -1581,6 +1681,7 @@ export const useSkillStore = defineStore('skillStore', () => {
       capabilities: data.capabilities ?? [],
       keywords: data.keywords ?? [],
       composition: data.composition ? { sectionIds: [...data.composition.sectionIds] } : undefined,
+      ...copyRdFields(data),
     })
     return id
   }
@@ -1601,6 +1702,10 @@ export const useSkillStore = defineStore('skillStore', () => {
     if (patch.assignedAgents !== undefined) skill.assignedAgents = [...patch.assignedAgents]
     if (patch.keywords !== undefined) skill.keywords = [...patch.keywords]
     if (patch.composition !== undefined) skill.composition = patch.composition ? { sectionIds: [...patch.composition.sectionIds] } : undefined
+    if (patch.steps !== undefined) skill.steps = [...patch.steps]
+    if (patch.exceptions !== undefined) skill.exceptions = [...patch.exceptions]
+    if (patch.outputFormat !== undefined) skill.outputFormat = patch.outputFormat
+    if (patch.applicableScope !== undefined) skill.applicableScope = patch.applicableScope
     if (
       skill.personalStatus === 'draft' &&
       skill.instructions !== findSkill(skill.derivedFrom ?? '')?.instructions
@@ -1627,6 +1732,7 @@ export const useSkillStore = defineStore('skillStore', () => {
       avgLatencyMs: 0,
       files: data.files ?? [],
       capabilities: data.capabilities ?? [],
+      ...copyRdFields(data),
     })
   }
 
@@ -1641,6 +1747,7 @@ export const useSkillStore = defineStore('skillStore', () => {
     skill.files = data.files ?? []
     skill.capabilities = data.capabilities ?? []
     skill.keywords = data.keywords ?? []
+    Object.assign(skill, copyRdFields(data))
     if (skill.personalStatus === 'draft' && skill.instructions !== findSkill(skill.derivedFrom ?? '')?.instructions) {
       skill.personalStatus = 'available'
     }
@@ -1829,6 +1936,7 @@ export const useSkillStore = defineStore('skillStore', () => {
           description: skill.description,
           instructions: skill.instructions,
           capabilities: skill.capabilities,
+          ...copyRdFields(skill),
           createdAt: now,
           createdBy: skill.submittedBy,
           updateNote: note,
@@ -1861,6 +1969,11 @@ export const useSkillStore = defineStore('skillStore', () => {
     target.description = ver.description
     if (ver.instructions !== undefined) target.instructions = ver.instructions
     if (ver.capabilities !== undefined) target.capabilities = ver.capabilities
+    // 舊版本快照沒有 RD 四段（欄位加進來之前建的），沒有就保留技能現有內容，不清空
+    if (ver.steps !== undefined) target.steps = [...ver.steps]
+    if (ver.exceptions !== undefined) target.exceptions = [...ver.exceptions]
+    if (ver.outputFormat !== undefined) target.outputFormat = ver.outputFormat
+    if (ver.applicableScope !== undefined) target.applicableScope = ver.applicableScope
 
     target.auditLog ??= []
     target.auditLog.unshift({
@@ -1909,6 +2022,7 @@ export const useSkillStore = defineStore('skillStore', () => {
       avgLatencyMs: 0,
       instructions: source.instructions,
       capabilities: source.capabilities ? [...source.capabilities] : undefined,
+      ...copyRdFields(source),
       // 來源若是用行銷積木組裝出來的技能，複本要保留 composition——否則複本重開時
       // 會被 draftFromSkill() 誤判成對話建立，只給對話編輯介面，跟來源的建立方式不一致
       composition: source.composition ? { sectionIds: [...source.composition.sectionIds] } : undefined,
@@ -2019,6 +2133,7 @@ export const useSkillStore = defineStore('skillStore', () => {
         instructions: draft.instructions,
         isEnabled: true,
         assignedAgents: draft.assignedAgents ?? [],
+        ...copyRdFields(draft),
       })
     }
     // 'version_update' → patch forkSourceId skill with new SkillVersion + submitSkillForReview

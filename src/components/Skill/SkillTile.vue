@@ -12,10 +12,6 @@
     </div>
     <div class="tile-scope">{{ scopeLabel }}</div>
     <div v-if="tileDesc" class="tile-desc">{{ tileDesc }}</div>
-    <div v-if="skill.assignedAgents?.length" class="tile-agents" :title="`可調用 Agent：${skill.assignedAgents.join('、')}`">
-      <i class="material-symbols-outlined">smart_toy</i>
-      <span class="tile-agents-text">{{ skill.assignedAgents.join('、') }}</span>
-    </div>
 
     <div class="tile-foot">
       <div class="tile-actions" @click.stop>
@@ -61,7 +57,7 @@ const scopeLabel = computed(() => {
   return '系統技能'
 })
 
-// 用第一筆使用情境的標題取代原本的技能描述，讓卡片一眼看出「什麼時候會用到」
-// 而不是技能本身的功能說明；沒有使用情境的技能（例如剛手動建立的）才退回顯示描述
-const tileDesc = computed(() => props.skill.usageScenarios?.[0]?.title || props.skill.description)
+// 卡片只放 RD 技能定義裡有的資訊（技能描述／步驟／例外／固定輸出格式／適用範圍／覆蓋能力）：
+// 這裡顯示「技能描述」（RD 原稱「何時用」）；使用情境、可調用 Agent 不在 RD 定義裡，不再顯示
+const tileDesc = computed(() => props.skill.description)
 </script>

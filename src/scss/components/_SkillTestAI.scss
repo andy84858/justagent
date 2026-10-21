@@ -138,6 +138,18 @@
   white-space: nowrap;
 }
 
+// 題目清單下方的送出列：不跟著清單捲動，標註到哪都看得到進度與「送出答案」
+.ai-submit-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--divider-a50);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
 // ── ② Scenario list ──
 .ai-scenarios {
   flex: 1;

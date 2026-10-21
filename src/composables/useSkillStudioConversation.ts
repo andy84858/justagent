@@ -32,6 +32,11 @@ export interface SkillDraft {
   files: SkillFile[]
   method: StudioMethod | null   // null = 尚未選擇建立方式
   sectionIds: string[]          // 積木方式的已選章節（依序）
+  // RD 技能定義的另外四段：步驟必填（後端模式除外），其餘選填
+  steps: string[]
+  exceptions: string[]
+  outputFormat: string
+  applicableScope: string
 }
 
 export interface StudioAction { id: string; label: string }
@@ -65,7 +70,10 @@ export const DEFAULT_OPENING_MESSAGE = '你好，我是技能建立助理。描�
 const GATE_OPENING_MESSAGE = '你好，我是技能建立助理。跟我說說你想讓 Agent 幫你做什麼，我會先幫你擬一版設定內容。'
 
 export function emptyDraft(): SkillDraft {
-  return { name: '', description: '', instructions: '', capabilities: [], assignedAgents: [], keywords: [], files: [], method: null, sectionIds: [] }
+  return {
+    name: '', description: '', instructions: '', capabilities: [], assignedAgents: [], keywords: [], files: [], method: null, sectionIds: [],
+    steps: [], exceptions: [], outputFormat: '', applicableScope: '',
+  }
 }
 
 // ── 意圖判斷與關卡分流（AI 賦能「用對話建立」路徑，接在既有解析規則之前）──
@@ -193,6 +201,10 @@ export function formatDraftSummary(draft: SkillDraft): string {
     `說明：${draft.description || '（未填寫）'}`,
     `指令：${draft.instructions || '（未撰寫）'}`,
   ]
+  if (draft.steps.length) lines.push(`步驟：${draft.steps.map((st, i) => `${i + 1}. ${st}`).join(' ')}`)
+  if (draft.exceptions.length) lines.push(`例外或特殊情況：${draft.exceptions.join('；')}`)
+  if (draft.outputFormat) lines.push(`固定輸出格式：${draft.outputFormat}`)
+  if (draft.applicableScope) lines.push(`適用範圍：${draft.applicableScope}`)
   if (draft.capabilities.length) {
     lines.push(`覆蓋能力：${draft.capabilities.map(c => `#${c}`).join(' ')}`)
   }
@@ -226,16 +238,23 @@ export function draftFromSkill(s: Skill): SkillDraft {
     files: [...(s.files ?? [])],
     method: s.composition ? 'blocks' : 'chat',
     sectionIds: [...(s.composition?.sectionIds ?? [])],
+    steps: [...(s.steps ?? [])],
+    exceptions: [...(s.exceptions ?? [])],
+    outputFormat: s.outputFormat ?? '',
+    applicableScope: s.applicableScope ?? '',
   }
 }
 
 // 積木 → 草稿：步驟＝章節依序編號，能力＝章節
-export function deriveFromSections(sectionIds: string[]): Pick<SkillDraft, 'instructions' | 'capabilities'> {
+// RD 的「步驟」也是章節依序產出，每個章節一步，跟技能指令同一份來源一起重推導
+export function deriveFromSections(sectionIds: string[]): Pick<SkillDraft, 'instructions' | 'capabilities' | 'steps'> {
   const sections = sectionIds.map(id => SECTION_MAP[id]).filter((s): s is NonNullable<typeof s> => !!s)
-  if (sections.length === 0) return { instructions: '', capabilities: [] }
-  const lines = sections.map((s, i) => `${i + 1}. ${s.name}：${s.description}`)
+  if (sections.length === 0) return { instructions: '', capabilities: [], steps: [] }
+  const steps = sections.map(s => `${s.name}：${s.description}`)
+  const lines = steps.map((st, i) => `${i + 1}. ${st}`)
   return {
     instructions: `依序產出以下章節：\n${lines.join('\n')}`,
+    steps,
     // 章節名稱有些含空白（例如「TA 明細資料」），hashtag 不支援空白，轉成能力標籤時去掉
     capabilities: sections.map(s => s.name.replace(/\s+/g, '')),
   }
@@ -312,8 +331,32 @@ export function extractSkillName(text: string): string {
   return picked.length > NAME_MAX ? picked.slice(0, NAME_MAX) : picked
 }
 
-function countSteps(instructions: string): number {
-  return instructions.split('\n').filter(line => /^\d+\.\s/.test(line.trim())).length
+// 第一次擬稿時從使用者的描述（含追問的回答，一行一則）抓出 RD 的步驟／例外：
+// 有編號的行、或帶「先…再…」這類順序字眼的行拆成步驟；帶例外字眼的行當成例外。
+// 規則式比對，不是真的語意理解，跟這個檔案其他抽取規則同一種風格
+const NUMBERED_LINE = /^\s*\d+\s*[.、)）]\s*/
+
+// rest 是沒被抓成步驟或例外的行（第一句描述一定在這裡），拿來當說明，不跟步驟／例外重複
+export function extractStepsAndExceptions(text: string): { steps: string[]; exceptions: string[]; rest: string[] } {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const steps: string[] = []
+  const exceptions: string[] = []
+  const rest: string[] = []
+  lines.forEach((line, i) => {
+    if (NUMBERED_LINE.test(line)) {
+      steps.push(line.replace(NUMBERED_LINE, '').trim())
+    } else if (i > 0 && EXCEPTION_HINT.test(line)) {
+      exceptions.push(line)
+    } else if (i > 0 && STEPS_HINT.test(line)) {
+      steps.push(...line
+        .split(/[，,；;。]|然後|接著|再來|之後/)
+        .map(part => part.replace(/^(先|再|最後|步驟是?|流程是?)/, '').trim())
+        .filter(Boolean))
+    } else {
+      rest.push(line)
+    }
+  })
+  return { steps, exceptions, rest }
 }
 
 function stripLead(text: string, lead: RegExp): string {
@@ -330,20 +373,26 @@ export function interpretStudioMessage(text: string, draft: SkillDraft, mode: St
     return { content: '好，直接告訴我這個技能要做什麼、什麼情況下該用，例如「說明改成當使用者提到缺貨或補貨時，查詢 ERP 庫存」。' }
   }
   if (t === ACTION_STEP.label) {
-    const n = countSteps(draft.instructions) + 1
     return {
-      patch: { instructions: `${draft.instructions}\n${n}. 檢查輸出結果，必要時補充說明`.trim() },
-      content: `已追加第 ${n} 步。`,
+      patch: { steps: [...draft.steps, '檢查輸出結果，必要時補充說明'] },
+      content: `已追加第 ${draft.steps.length + 1} 步。`,
     }
   }
 
   if (mode === 'create' && !draft.name) {
     const name = extractSkillName(t)
+    const extracted = extractStepsAndExceptions(t)
+    // 使用者沒講步驟就先放一組通用步驟，至少有一步才能存（步驟必填）
+    const steps = extracted.steps.length
+      ? extracted.steps
+      : ['釐清使用者的輸入與需求範圍', `執行「${name}」`, '依指定格式回覆結果']
     return {
       patch: {
         name,
-        description: t,
-        instructions: `1. 釐清使用者的輸入與需求範圍\n2. 執行「${name}」\n3. 依指定格式回覆結果`,
+        description: extracted.rest.join('\n') || t,
+        instructions: steps.map((st, i) => `${i + 1}. ${st}`).join('\n'),
+        steps,
+        exceptions: extracted.exceptions,
         // hashtag 不支援空白，技能名稱若含空白（例如使用者打「查 ERP 庫存」）轉成標籤時去掉
         capabilities: [name.replace(/\s+/g, ''), '結果格式化輸出'],
       },
@@ -364,10 +413,26 @@ export function interpretStudioMessage(text: string, draft: SkillDraft, mode: St
     return { patch: { description: desc }, content: `說明已更新為：${desc}` }
   }
 
+  // RD 的例外／輸出格式／適用範圍：要在「步驟」之前判斷，「例外情況的處理步驟」這種
+  // 同時提到兩者的句子以例外為準
+  if (/例外|特殊情況|萬一/.test(t)) {
+    const body = stripLead(t, /^.*?(例外(或特殊情況|情況)?|特殊情況|萬一)(是|：|:|，)?/) || t
+    return { patch: { exceptions: [...draft.exceptions, body] }, content: '已新增一項例外或特殊情況。' }
+  }
+
+  if (/輸出格式/.test(t)) {
+    const body = stripLead(t, /^.*?輸出格式(是|改成|改為|為|：|:|，)?/) || t
+    return { patch: { outputFormat: body }, content: `固定輸出格式已更新為：${body}` }
+  }
+
+  if (/適用範圍|適用(於|在)/.test(t)) {
+    const body = stripLead(t, /^.*?(適用範圍|適用)(是|改成|改為|為|於|在|：|:|，)?/) || t
+    return { patch: { applicableScope: body }, content: `適用範圍已更新為：${body}` }
+  }
+
   if (/步驟|加一步|補一步|補充步驟/.test(t)) {
-    const n = countSteps(draft.instructions) + 1
     const body = stripLead(t, /^.*?(步驟|加一步|補一步|補充步驟)(：|:|，)?/) || t
-    return { patch: { instructions: `${draft.instructions}\n${n}. ${body}`.trim() }, content: `已追加第 ${n} 步。` }
+    return { patch: { steps: [...draft.steps, body] }, content: `已追加第 ${draft.steps.length + 1} 步。` }
   }
 
   if (/能力|還能/.test(t)) {
@@ -388,6 +453,16 @@ export function interpretStudioMessage(text: string, draft: SkillDraft, mode: St
 
 // method 不算「內容」，故不列入 dirty 比對：它只是建立方式的選擇，只有 startCreate()（整份
 // 草稿重置）才會再變，選了方式本身不該讓草稿變成「有未儲存變更」
+// 存檔時帶給 store 的 RD 四段：空白的步驟／例外濾掉，文字欄位去頭尾空白
+function rdFieldsOf(d: SkillDraft) {
+  return {
+    steps: d.steps.map(st => st.trim()).filter(Boolean),
+    exceptions: d.exceptions.map(ex => ex.trim()).filter(Boolean),
+    outputFormat: d.outputFormat.trim(),
+    applicableScope: d.applicableScope.trim(),
+  }
+}
+
 function serialize(d: SkillDraft): string {
   return JSON.stringify({ ...d, method: undefined, files: d.files.map(f => f.id) })
 }
@@ -486,8 +561,11 @@ export function useSkillStudioConversation() {
   const isDirty = computed(() => serialize(draft.value) !== snapshot.value)
   // 積木方式多幾項必填：說明／覆蓋能力／指派 Agent 都要user自己填過才能存——
   // 這幾項不再隨選章節自動覆蓋（見 updateBlockDescription 等函式），必須手動確認過一次
+  // 步驟必填（RD 技能定義）；後端模式例外——後端技能的內文本身就是 RD 給的整份 skill.md，
+  // 不拆成前端的步驟欄位
   const canSave = computed(() => {
     if (!draft.value.name.trim() || !draft.value.instructions.trim()) return false
+    if (!usesBackend() && !draft.value.steps.length) return false
     if (draft.value.method === 'blocks') {
       return !!draft.value.description.trim()
         && draft.value.capabilities.length > 0
@@ -502,7 +580,13 @@ export function useSkillStudioConversation() {
   // 積木方式必填欄位比較多（說明／覆蓋能力／指派 Agent），存不了的時候
   // 直接列出還缺什麼，不要讓使用者自己猜按鈕為什麼反灰
   const missingFieldsHint = computed(() => {
-    if (saveEnabled.value || draft.value.method !== 'blocks') return ''
+    if (saveEnabled.value) return ''
+    // 對話方式只有步驟可能單獨漏掉（名稱／指令一擬稿就有），漏了要講，不然按鈕反灰沒人知道為什麼
+    if (draft.value.method === 'chat') {
+      return draft.value.name.trim() && draft.value.instructions.trim() && !draft.value.steps.length && !usesBackend()
+        ? '還缺：步驟' : ''
+    }
+    if (draft.value.method !== 'blocks') return ''
     const missing: string[] = []
     if (!draft.value.name.trim()) missing.push('技能名稱')
     if (!draft.value.instructions.trim()) missing.push('積木組成（至少選一個章節）')
@@ -858,6 +942,8 @@ export function useSkillStudioConversation() {
       capabilities: [...(prefill?.capabilities ?? base.capabilities)],
       files: [...(prefill?.files ?? base.files)],
       sectionIds: [...(prefill?.sectionIds ?? base.sectionIds)],
+      steps: [...(prefill?.steps ?? base.steps)],
+      exceptions: [...(prefill?.exceptions ?? base.exceptions)],
       method: prefill ? 'chat' : null,
     }
     snapshot.value = serialize(emptyDraft())
@@ -897,7 +983,9 @@ export function useSkillStudioConversation() {
     if (patch.name !== undefined) next.name = patch.name
     if (patch.sectionIds !== undefined) {
       next.sectionIds = [...patch.sectionIds]
-      next.instructions = deriveFromSections(next.sectionIds).instructions
+      const derived = deriveFromSections(next.sectionIds)
+      next.instructions = derived.instructions
+      next.steps = derived.steps
     }
     draft.value = next
   }
@@ -920,6 +1008,11 @@ export function useSkillStudioConversation() {
   function updateBlockKeywords(value: string[]): void {
     if (draft.value.method !== 'blocks') return
     draft.value = { ...draft.value, keywords: [...value] }
+  }
+  // RD 技能定義的選填三段（例外／固定輸出格式／適用範圍）：積木「基本設定」直接編輯
+  function updateBlockOptional(patch: Partial<Pick<SkillDraft, 'exceptions' | 'outputFormat' | 'applicableScope'>>): void {
+    if (draft.value.method !== 'blocks') return
+    draft.value = { ...draft.value, ...patch, ...(patch.exceptions ? { exceptions: [...patch.exceptions] } : {}) }
   }
 
   // intent 'edit'：從技能卡片點進來，已經知道要調整內容。
@@ -1104,6 +1197,7 @@ export function useSkillStudioConversation() {
         files: [...d.files],
         composition: d.method === 'blocks' ? { sectionIds: [...d.sectionIds] } : undefined,
         creationMethod: d.method === 'blocks' ? 'manual' : 'ai_assisted',
+        ...rdFieldsOf(d),
       })
       mode.value = 'edit'
       // 存檔前如果已經用草稿佔位 id 測過，把測試結果轉記到這個剛拿到的真正 id 上，
@@ -1119,6 +1213,7 @@ export function useSkillStudioConversation() {
         assignedAgents: d.method === 'blocks' ? [...d.assignedAgents] : undefined,
         keywords: d.method === 'blocks' ? [...d.keywords] : undefined,
         composition: d.method === 'blocks' ? { sectionIds: [...d.sectionIds] } : undefined,
+        ...rdFieldsOf(d),
       })
       store.updateSkillFiles(savedSkillId.value, d.files)
     }
@@ -1151,7 +1246,8 @@ export function useSkillStudioConversation() {
     const copy: StudioSnapshot = JSON.parse(JSON.stringify(snap))
     mode.value = copy.mode
     savedSkillId.value = copy.savedSkillId
-    draft.value = copy.draft
+    // 舊快照的草稿沒有 RD 四段（步驟／例外／輸出格式／適用範圍），先鋪一層空草稿補齊欄位
+    draft.value = { ...emptyDraft(), ...copy.draft }
     messages.value = copy.messages
     // 舊快照（早於這兩個欄位存在時寫入）沒有這兩個值，退回原本的預設：gateStage 當作
     // 已經分流完畢、pendingSimilarSkillId 當作沒有待處理的相近技能
@@ -1203,7 +1299,7 @@ export function useSkillStudioConversation() {
   return {
     confirmAgentsBeforeSave,
     mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, backendSkillId, savedVersion, loadBackendSkill, saveToBackend, usesBackend, backendSaveAction, testedNote, lastSaveKind, draftTested, adviceMode, adviceModeLocked, showAdviceModeSwitch, setAdviceMode, note, blockedReasons, errorHint, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestNewSkillDrawer,
-    startCreate, chooseMethod, updateBlocks, updateBlockDescription, updateBlockCapabilities, updateBlockAssignedAgents, updateBlockKeywords,
+    startCreate, chooseMethod, updateBlocks, updateBlockDescription, updateBlockCapabilities, updateBlockAssignedAgents, updateBlockKeywords, updateBlockOptional,
     loadSkill, send, save, updateFiles, toSnapshot, hydrate, detachSavedSkill,
   }
 }

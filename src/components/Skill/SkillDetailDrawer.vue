@@ -463,10 +463,13 @@ const statusText = computed(() => {
 })
 
 // 技能定義直接 render 成 markdown，跟 skill.md 內容共用同一份組法
-// （buildSkillDefinitionMarkdown），沒有的段落就不會出現
+// （buildSkillDefinitionMarkdown），沒有的段落就不會出現。後端技能的 content（對到
+// instructions）本身就是 RD 給的整份 skill.md 內文，原樣顯示，不再用前端欄位重組
 const skillDefinitionHtml = computed(() => {
   if (!props.skill) return ''
-  const source = buildSkillDefinitionMarkdown(props.skill)
+  const source = props.skill.backendVersion
+    ? props.skill.instructions ?? ''
+    : buildSkillDefinitionMarkdown(props.skill)
   return source ? md.render(source) : ''
 })
 

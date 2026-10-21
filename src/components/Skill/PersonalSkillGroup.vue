@@ -13,16 +13,6 @@
       <span v-if="statusLabel" :class="['skill-tag', statusTagClass]">{{ statusLabel }}</span>
     </div>
     <div v-if="tileDesc" class="tile-desc">{{ tileDesc }}</div>
-    <div v-if="skill.assignedAgents?.length" class="tile-agents" :title="`可調用 Agent：${skill.assignedAgents.join('、')}`">
-      <i class="material-symbols-outlined">smart_toy</i>
-      <span class="tile-agents-text">{{ skill.assignedAgents.join('、') }}</span>
-    </div>
-
-    <div class="tile-stats">
-      <span class="sk-stat">
-        <i class="material-symbols-outlined">bolt</i>{{ formatCount(skill.usageCount) }} 次觸發
-      </span>
-    </div>
 
     <div class="tile-foot">
       <div class="tile-meta">
@@ -64,10 +54,6 @@ const statusText = computed(() => {
   return props.skill.aiTestPassRate == null ? '尚未測試' : '停用中'
 })
 
-function formatCount(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
-}
-
 // 用「AI 賦能」建立的技能，圖示換成建立方式本身（跟 SkillMethodChooser 選卡同一組
 // icon：對話 forum／積木 dashboard_customize），一眼看出這顆技能怎麼來的；
 // 真的自建（沒有 forkSourceId／derivedFrom 血緣）換成筆，跟 SkillDetailDrawer「來源關係」
@@ -79,7 +65,7 @@ const skillIconName = computed(() => {
   return 'person'
 })
 
-// 用第一筆使用情境的標題取代原本的技能描述，讓卡片一眼看出「什麼時候會用到」
-// 而不是技能本身的功能說明；沒有使用情境的技能（例如剛手動建立的）才退回顯示描述
-const tileDesc = computed(() => props.skill.usageScenarios?.[0]?.title || props.skill.description)
+// 卡片只放 RD 技能定義裡有的資訊（技能描述／步驟／例外／固定輸出格式／適用範圍／覆蓋能力）：
+// 這裡顯示「技能描述」（RD 原稱「何時用」）；使用情境、可調用 Agent、觸發次數 不在 RD 定義裡，不再顯示
+const tileDesc = computed(() => props.skill.description)
 </script>

@@ -8,6 +8,7 @@
           <div class="banner-title">技能測試沙盒</div>
         </div>
         <div class="banner-right">
+          <SkillTestVersionSwitch />
           <span class="banner-hint">
             <i class="material-symbols-outlined">info</i>可在下方模擬 User 與 Agent 的真實對話，觀察技能觸發行為。
           </span>
@@ -135,6 +136,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppBreadcrumb from '@/components/AppBreadcrumb.vue'
+import SkillTestVersionSwitch from '@/components/Skill/SkillTestVersionSwitch.vue'
 import SkillTestChat from '@/components/Skill/SkillTestChat.vue'
 import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
 import SkillVersionPicker from '@/components/Skill/SkillVersionPicker.vue'
