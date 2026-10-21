@@ -47,16 +47,22 @@
                 :class="['sb-bubble', 'sb-bubble--agent', { 'is-selected': selectedId === msg.id }]"
                 @click="selectedId = msg.id"
               >
+                <div
+                  v-if="msg.trace"
+                  :class="['sb-trigger-banner', msg.trace.triggered ? { 'is-draft': msg.trace.triggered.isDraft } : 'is-none']"
+                >
+                  <i class="material-symbols-outlined">{{ msg.trace.triggered ? 'bolt' : 'block' }}</i>
+                  <template v-if="msg.trace.triggered">
+                    <span class="sb-tb-label">觸發技能</span>
+                    <span class="sb-tb-name">{{ msg.trace.triggered.name }}</span>
+                    <span v-if="msg.trace.triggered.versionName" class="sb-tb-version">{{ msg.trace.triggered.versionName }}</span>
+                    <span v-if="msg.trace.triggered.isDraft" class="sb-tb-draft">草稿</span>
+                  </template>
+                  <span v-else class="sb-tb-label">未觸發任何技能</span>
+                </div>
                 <div class="sb-agent-name">{{ msg.trace?.agent }}</div>
                 <div class="sb-bubble-content">{{ msg.content }}</div>
                 <div class="sb-bubble-foot">
-                  <span v-if="msg.trace?.triggered" :class="['sb-skill-pill', { 'is-draft': msg.trace.triggered.isDraft }]">
-                    <i class="material-symbols-outlined">bolt</i>{{ msg.trace.triggered.name }}
-                    <span class="sb-pill-version">{{ msg.trace.triggered.versionName }}</span>
-                  </span>
-                  <span v-else class="sb-skill-pill is-none">
-                    <i class="material-symbols-outlined">block</i>未觸發技能
-                  </span>
                   <span class="sb-trace-link">追蹤 <i class="material-symbols-outlined">chevron_right</i></span>
                 </div>
               </div>
@@ -108,19 +114,19 @@
           <div v-else class="sb-trace-body">
             <div class="sb-trace-question">「{{ selectedQuestion }}」</div>
 
-            <dl class="sb-trace-facts">
-              <dt>接手 Agent</dt>
-              <dd>{{ selectedTrace.agent }}</dd>
-              <dt>觸發技能</dt>
-              <dd>
-                <template v-if="selectedTrace.triggered">
-                  {{ selectedTrace.triggered.name }}
-                  <span class="sb-pill-version">{{ selectedTrace.triggered.versionName }}</span>
-                  <span v-if="selectedTrace.triggered.isDraft" class="sb-draft-tag">草稿</span>
-                </template>
-                <span v-else class="sb-muted">無</span>
-              </dd>
-            </dl>
+            <!-- 觸發結果是這個面板最重要的資訊，做成醒目卡片放最上面 -->
+            <div :class="['sb-trigger-card', selectedTrace.triggered ? { 'is-draft': selectedTrace.triggered.isDraft } : 'is-none']">
+              <div class="sb-tc-label">
+                <i class="material-symbols-outlined">{{ selectedTrace.triggered ? 'bolt' : 'block' }}</i>
+                {{ selectedTrace.triggered ? '觸發技能' : '未觸發任何技能' }}
+              </div>
+              <div v-if="selectedTrace.triggered" class="sb-tc-name">
+                {{ selectedTrace.triggered.name }}
+                <span v-if="selectedTrace.triggered.versionName" class="sb-tc-version">{{ selectedTrace.triggered.versionName }}</span>
+                <span v-if="selectedTrace.triggered.isDraft" class="sb-tb-draft">草稿</span>
+              </div>
+              <div class="sb-tc-agent">由「{{ selectedTrace.agent }}」接手</div>
+            </div>
 
             <div class="sb-trace-section">
               <div class="sb-section-title">判斷原因</div>
@@ -128,18 +134,28 @@
             </div>
 
             <div class="sb-trace-section">
-              <div class="sb-section-title">候選但未觸發</div>
-              <ul v-if="selectedTrace.runnersUp.length" class="sb-candidates">
-                <li v-for="c in selectedTrace.runnersUp" :key="c.skillId">
-                  <div class="sb-cand-top">
-                    <span class="sb-cand-name">{{ c.name }}</span>
-                    <span v-if="c.isDraft" class="sb-draft-tag">草稿</span>
-                    <span class="sb-cand-score">{{ c.score }}</span>
-                  </div>
-                  <div class="sb-cand-bar"><span :style="{ width: barWidth(c.score) }" /></div>
-                  <div class="sb-cand-agent">{{ c.agent }}</div>
-                </li>
-              </ul>
+              <div class="sb-section-title sb-section-title--split">
+                候選但未觸發<span>相似度</span>
+              </div>
+              <template v-if="selectedTrace.runnersUp.length">
+                <p class="sb-score-hint">相似度＝這句話與技能名稱、描述、覆蓋能力重疊的詞數；長條以本輪觸發技能的分數為滿格。</p>
+                <ul class="sb-candidates">
+                  <li v-for="c in selectedTrace.runnersUp" :key="c.skillId">
+                    <div class="sb-cand-top">
+                      <span class="sb-cand-name">{{ c.name }}</span>
+                      <span v-if="c.isDraft" class="sb-draft-tag">草稿</span>
+                      <span class="sb-cand-score">{{ c.score }}</span>
+                    </div>
+                    <div class="sb-cand-bar"><span :style="{ width: barWidth(c.score) }" /></div>
+                    <div class="sb-cand-meta">
+                      <span class="sb-cand-agent">{{ c.agent }}</span>
+                      <span class="sb-terms">
+                        對到<span v-for="t in c.matchedTerms" :key="t" class="sb-term">{{ t }}</span>
+                      </span>
+                    </div>
+                  </li>
+                </ul>
+              </template>
               <p v-else class="sb-muted">沒有其他相關技能</p>
             </div>
 

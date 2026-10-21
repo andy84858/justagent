@@ -43,6 +43,17 @@
       </div>
     </div>
 
+    <!-- ── 技能定義：RD 六段（技能描述／步驟／例外或特殊情況／固定輸出格式／適用範圍／
+         覆蓋能力），審核要看的主體內容，預設展開；跟詳情抽屜、skill.md 同一份組法 ── -->
+    <div v-if="definitionHtml" class="src-section">
+      <div class="src-section-label" @click="showDefinition = !showDefinition">
+        <i class="material-symbols-outlined">description</i>
+        技能定義
+        <i :class="['material-symbols-outlined', 'src-chevron', { 'is-open': showDefinition }]">expand_more</i>
+      </div>
+      <div v-show="showDefinition" class="markdown-body src-definition" v-html="definitionHtml"></div>
+    </div>
+
     <!-- ── 技能指令 ────────────────────────────── -->
     <div v-if="skill.instructions" class="src-section">
       <div class="src-section-label" @click="showInstructions = !showInstructions">
@@ -135,6 +146,8 @@ import { ref, computed } from 'vue'
 import type { Skill } from '@/stores/skillStore'
 import { useSkillStore } from '@/stores/skillStore'
 import SkillMarkdownModal from '@/components/Skill/SkillMarkdownModal.vue'
+import MarkdownIt from 'markdown-it'
+import { buildSkillDefinitionMarkdown } from '@/utils/skillMarkdown'
 
 const props = defineProps<{ skill: Skill }>()
 const emit = defineEmits<{
@@ -145,6 +158,7 @@ const emit = defineEmits<{
 
 const store = useSkillStore()
 const showInstructions = ref(false)
+const showDefinition = ref(true)
 const showMarkdown = ref(false)
 const showRejectDialog = ref(false)
 const rejectFeedback = ref('')
@@ -160,6 +174,12 @@ function confirmApprove() {
   emit('approve', props.skill)
   showApproveDialog.value = false
 }
+
+const md = new MarkdownIt({ html: false, breaks: true, linkify: false })
+const definitionHtml = computed(() => {
+  const source = buildSkillDefinitionMarkdown(props.skill)
+  return source ? md.render(source) : ''
+})
 
 const submitMode = computed(() => props.skill.submitMode ?? 'new_skill')
 const submitModeLabel = computed(() =>

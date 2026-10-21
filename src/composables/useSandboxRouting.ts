@@ -44,6 +44,8 @@ const TRIGGER_MIN_SCORE = 1
 
 // 口語常見、對判斷技能沒有鑑別度的雙字詞，不算進相似度（不然「怎麼」「一下」到處都會中）
 const STOP_BIGRAMS = new Set(['幫我', '一下', '怎麼', '如何', '什麼', '可以', '這個', '這週', '今天', '我們', '你們', '一個'])
+// 含這些虛字的雙字詞（例如「週的」「好了」）也不算，同樣沒有鑑別度
+const FILLER_CHARS = /[的了嗎呢吧啊喔和與及或]/
 const FALLBACK_AGENT = '通用助理'
 
 const DEFAULT_PROMPTS = [
@@ -67,7 +69,7 @@ function matchedBigrams(message: string, text: string): string[] {
   const hits: string[] = []
   for (let i = 0; i < message.length - 1; i++) {
     const g = message.slice(i, i + 2)
-    if (grams.has(g) && /^[\p{L}\p{N}]{2}$/u.test(g) && !STOP_BIGRAMS.has(g) && !hits.includes(g)) hits.push(g)
+    if (grams.has(g) && /^[\p{L}\p{N}]{2}$/u.test(g) && !STOP_BIGRAMS.has(g) && !FILLER_CHARS.test(g) && !hits.includes(g)) hits.push(g)
   }
   return hits
 }
@@ -100,12 +102,18 @@ export function useSandboxRouting() {
     return result
   })
 
+  // 個人技能沒有版本概念，版本名稱一律留空（畫面上就不會顯示版號）
+  const personalIds = computed(() => new Set(store.myPersonalSkills.map(s => s.id)))
+  function versionLabel(s: Skill): string {
+    return personalIds.value.has(s.id) ? '' : store.getDefaultVersionName(s.id) ?? s.version
+  }
+
   const liveEntries = computed<PoolEntry[]>(() =>
     allSkills.value
       .filter(s => s.isEnabled)
       .map(s => ({
         skill: s,
-        versionName: store.getDefaultVersionName(s.id) ?? s.version,
+        versionName: versionLabel(s),
         text: skillText(s),
         isDraft: false,
       }))
@@ -113,18 +121,17 @@ export function useSandboxRouting() {
 
   const draftEntries = computed<PoolEntry[]>(() => {
     const entries: PoolEntry[] = []
-    const personalIds = new Set(store.myPersonalSkills.map(s => s.id))
     for (const s of allSkills.value) {
       const v = latestDraftVersion(s)
       if (v) {
         const merged = { ...s, name: v.name, description: v.description, capabilities: v.capabilities ?? s.capabilities }
-        entries.push({ skill: merged, versionName: v.versionName, text: skillText(merged), isDraft: true })
-      } else if (!s.isEnabled && personalIds.has(s.id)) {
-        entries.push({ skill: s, versionName: store.getDefaultVersionName(s.id) ?? s.version, text: skillText(s), isDraft: true })
+        entries.push({ skill: merged, versionName: personalIds.value.has(s.id) ? '' : v.versionName, text: skillText(merged), isDraft: true })
+      } else if (!s.isEnabled && personalIds.value.has(s.id)) {
+        entries.push({ skill: s, versionName: '', text: skillText(s), isDraft: true })
       }
     }
     for (const d of store.myDrafts) {
-      entries.push({ skill: { ...d }, versionName: '草稿', text: skillText(d), isDraft: true })
+      entries.push({ skill: { ...d }, versionName: '', text: skillText(d), isDraft: true })
     }
     return entries
   })

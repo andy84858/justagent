@@ -51,6 +51,34 @@
                 </div>
 
                 <div class="svc-field">
+                  <div class="svc-field-label">步驟</div>
+                  <ol v-if="v1.steps?.length" class="svc-list">
+                    <li v-for="(step, i) in v1.steps" :key="i" :class="listClass(step, 'steps', 'old')">{{ step }}</li>
+                  </ol>
+                  <span v-else class="svc-empty">（無）</span>
+                </div>
+
+                <div class="svc-field">
+                  <div class="svc-field-label">例外或特殊情況</div>
+                  <ul v-if="v1.exceptions?.length" class="svc-list">
+                    <li v-for="(ex, i) in v1.exceptions" :key="i" :class="listClass(ex, 'exceptions', 'old')">{{ ex }}</li>
+                  </ul>
+                  <span v-else class="svc-empty">（無）</span>
+                </div>
+
+                <div class="svc-field">
+                  <div class="svc-field-label">固定輸出格式</div>
+                  <div v-if="v1.outputFormat" :class="['svc-field-val', fieldClass(v1.outputFormat ?? '', v2.outputFormat ?? '', 'old')]">{{ v1.outputFormat }}</div>
+                  <span v-else class="svc-empty">（無）</span>
+                </div>
+
+                <div class="svc-field">
+                  <div class="svc-field-label">適用範圍</div>
+                  <div v-if="v1.applicableScope" :class="['svc-field-val', fieldClass(v1.applicableScope ?? '', v2.applicableScope ?? '', 'old')]">{{ v1.applicableScope }}</div>
+                  <span v-else class="svc-empty">（無）</span>
+                </div>
+
+                <div class="svc-field">
                   <div class="svc-field-label">覆蓋能力</div>
                   <div class="svc-caps">
                     <span
@@ -96,6 +124,34 @@
                 <div class="svc-field">
                   <div class="svc-field-label">說明</div>
                   <div :class="['svc-field-val', fieldClass(v1.description, v2.description, 'new')]">{{ v2.description }}</div>
+                </div>
+
+                <div class="svc-field">
+                  <div class="svc-field-label">步驟</div>
+                  <ol v-if="v2.steps?.length" class="svc-list">
+                    <li v-for="(step, i) in v2.steps" :key="i" :class="listClass(step, 'steps', 'new')">{{ step }}</li>
+                  </ol>
+                  <span v-else class="svc-empty">（無）</span>
+                </div>
+
+                <div class="svc-field">
+                  <div class="svc-field-label">例外或特殊情況</div>
+                  <ul v-if="v2.exceptions?.length" class="svc-list">
+                    <li v-for="(ex, i) in v2.exceptions" :key="i" :class="listClass(ex, 'exceptions', 'new')">{{ ex }}</li>
+                  </ul>
+                  <span v-else class="svc-empty">（無）</span>
+                </div>
+
+                <div class="svc-field">
+                  <div class="svc-field-label">固定輸出格式</div>
+                  <div v-if="v2.outputFormat" :class="['svc-field-val', fieldClass(v1.outputFormat ?? '', v2.outputFormat ?? '', 'new')]">{{ v2.outputFormat }}</div>
+                  <span v-else class="svc-empty">（無）</span>
+                </div>
+
+                <div class="svc-field">
+                  <div class="svc-field-label">適用範圍</div>
+                  <div v-if="v2.applicableScope" :class="['svc-field-val', fieldClass(v1.applicableScope ?? '', v2.applicableScope ?? '', 'new')]">{{ v2.applicableScope }}</div>
+                  <span v-else class="svc-empty">（無）</span>
                 </div>
 
                 <div class="svc-field">
@@ -186,6 +242,13 @@ function capClass(name: string, side: 'old' | 'new'): string {
   const { oldSet, newSet } = capNames.value
   if (side === 'old') return newSet.has(name) ? '' : 'cap--removed'
   return oldSet.has(name) ? '' : 'cap--added'
+}
+
+// RD 的步驟／例外：逐項比對，另一個版本沒有這一項就標成新增／刪除（跟覆蓋能力同一種比法）
+function listClass(item: string, key: 'steps' | 'exceptions', side: 'old' | 'new'): string {
+  const other = side === 'old' ? v2.value?.[key] : v1.value?.[key]
+  if (other?.includes(item)) return ''
+  return side === 'old' ? 'svc-item--removed' : 'svc-item--added'
 }
 
 const instructionsDiff = computed(() => {

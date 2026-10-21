@@ -158,6 +158,33 @@
     .src-section--ai & { cursor: default; color: $color_main_1; > .material-symbols-outlined { color: $color_main_1; } }
   }
 
+  // 技能定義 markdown：跟 _SkillDetailDrawer.scss 的 .markdown-body 覆寫同一套做法
+  // （背景透明、字色字級跟卡片一致，段落標題縮小），審核卡片跟詳情抽屜看起來一樣
+  // 不另外設捲動上限：外層 .rq-detail 已經是固定高度的捲動區，再包一層會變成捲中捲
+  .src-definition {
+    padding: 0 16px 12px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    line-height: 1.75;
+    font-family: inherit;
+
+    h2 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 14px 0 6px;
+      padding-bottom: 0;
+      border-bottom: none;
+
+      &:first-child { margin-top: 0; }
+    }
+
+    p, ul, ol { margin: 0 0 8px; }
+    ul, ol { padding-left: 20px; }
+    li { margin-bottom: 4px; }
+  }
+
   .src-instructions {
     padding: 0 16px 12px;
     font-size: 12.5px;

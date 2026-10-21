@@ -249,8 +249,8 @@
                 {{ showMoreSkillInfo ? '收合技能資訊' : '顯示更多技能資訊' }}
               </button>
 
-              <!-- 技能定義：技能指令／覆蓋能力／實際使用情境本來就是同一份
-                   skill.md 依序組出來的內容（見 buildSkillDefinitionMarkdown），
+              <!-- 技能定義：RD 六段（技能描述／步驟／例外或特殊情況／固定輸出格式／
+                   適用範圍／覆蓋能力）依序組出來的內容（見 buildSkillDefinitionMarkdown），
                    直接 render 成 markdown——沒有的段落（例如沒有覆蓋能力）
                    就不會出現，不會有空區塊卡在那邊 -->
               <div v-if="!condensed || showMoreSkillInfo" class="drawer-section">
@@ -473,23 +473,17 @@ const skillDefinitionHtml = computed(() => {
   return source ? md.render(source) : ''
 })
 
-// has_library（已核准並發布至 Library）不特別顯示標籤，退回「可使用」——
-// 這只是後台狀態，畫面上不用標出來，personalStatus 本身跟送審層級鎖定
-// 邏輯不受影響
+// 只分「審核中」跟「可使用」：草稿不另外貼標籤（草稿就是「尚未測試／停用中」，
+// 狀態文字已經表達了，跟我的技能卡片一致）；has_library（已核准並發布至 Library）
+// 也退回「可使用」——都是後台狀態，personalStatus 本身跟送審層級鎖定邏輯不受影響
 const personalStatusLabel = computed(() => {
-  const s = props.skill
-  if (!s) return null
-  if (s.personalStatus === 'draft') return '草稿'
-  if (s.personalStatus === 'reviewing') return '審核中'
-  return '可使用'
+  if (!props.skill) return null
+  return props.skill.personalStatus === 'reviewing' ? '審核中' : '可使用'
 })
 
-const personalStatusClass = computed(() => {
-  const s = props.skill?.personalStatus
-  if (s === 'draft') return 'tag--draft'
-  if (s === 'reviewing') return 'tag--reviewing'
-  return 'tag--available'
-})
+const personalStatusClass = computed(() =>
+  props.skill?.personalStatus === 'reviewing' ? 'tag--reviewing' : 'tag--available'
+)
 
 // 狀態標籤本身已經移到標頭，這裡只要判斷「除了狀態以外還有沒有別的
 // 送審脈絡可以顯示」，沒有的話（多數「可使用」的個人技能）整塊都不顯示

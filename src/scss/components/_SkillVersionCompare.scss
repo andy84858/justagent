@@ -165,6 +165,21 @@
     color: var(--text-faint);
   }
 
+  // RD 步驟（編號）／例外（圓點）：逐項標新增／刪除，配色跟 .svc-field-val 的差異標示一致
+  .svc-list {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+
+    li { padding: 1px 4px; border-radius: 4px; }
+    .svc-item--added   { background: rgba(var(--diff-added-rgb), 0.1); color: var(--primary-hover); }
+    .svc-item--removed { background: rgba(var(--diff-removed-rgb), 0.06); color: var(--danger); text-decoration: line-through; }
+  }
+  ol.svc-list { list-style: decimal; }
+  ul.svc-list { list-style: disc; }
+
   .svc-field--instructions { flex: 1; }
 
   .svc-instructions-box {

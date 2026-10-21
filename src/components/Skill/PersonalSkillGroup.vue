@@ -10,7 +10,7 @@
 
     <div class="tile-name">
       {{ skill.name }}
-      <span v-if="statusLabel" :class="['skill-tag', statusTagClass]">{{ statusLabel }}</span>
+      <span v-if="statusLabel" class="skill-tag tag--reviewing">{{ statusLabel }}</span>
     </div>
     <div v-if="tileDesc" class="tile-desc">{{ tileDesc }}</div>
 
@@ -32,19 +32,10 @@ const emit = defineEmits<{
   manage: [skill: Skill]
 }>()
 
-// has_library（已核准並發布至 Library）不顯示標籤——這只是後台狀態，
-// 畫面上不用特別標出來，personalStatus 本身跟送審層級鎖定邏輯不受影響
-const statusLabel = computed(() => {
-  if (props.skill.personalStatus === 'draft') return '草稿'
-  if (props.skill.personalStatus === 'reviewing') return '審核中'
-  return null
-})
-
-const statusTagClass = computed(() => {
-  if (props.skill.personalStatus === 'draft') return 'tag--draft'
-  if (props.skill.personalStatus === 'reviewing') return 'tag--reviewing'
-  return ''
-})
+// 卡片只標「審核中」：草稿不另外貼標籤——草稿就是「尚未測試／停用中」，底下的狀態文字
+// 已經表達了；has_library（已核准並發布至 Library）是後台狀態，也不用標出來。
+// personalStatus 本身跟送審層級鎖定邏輯不受影響
+const statusLabel = computed(() => props.skill.personalStatus === 'reviewing' ? '審核中' : null)
 
 // 後端技能卡片只顯示有沒有測過（「我的技能」不顯示版本號）；其餘維持原本的啟用／測試狀態文字
 const statusText = computed(() => {

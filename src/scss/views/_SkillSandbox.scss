@@ -149,23 +149,24 @@
     margin-bottom: 4px;
   }
 
-  .sb-skill-pill {
-    @extend %badge-shape;
-    display: inline-flex;
+  // 回覆頂部的「觸發技能」橫條：沙盒最重要的資訊，用實色底讓人一眼看到
+  // 主色＝觸發已啟用技能、橘＝觸發草稿、灰＝沒觸發
+  .sb-bubble--agent { overflow: hidden; }
+
+  .sb-trigger-banner {
+    display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 3px 10px;
-    background: var(--tag-teal-bg);
-    color: var(--tag-teal-text);
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: -10px -14px 10px;
+    padding: 8px 14px;
+    background: var(--primary);
+    color: var(--primary-fg);
+    font-size: 13px;
 
-    .material-symbols-outlined { font-size: 14px; }
+    .material-symbols-outlined { font-size: 18px; }
 
-    &.is-draft {
-      background: var(--tag-amber-bg);
-      color: var(--tag-amber-text);
-    }
+    &.is-draft { background: var(--warning); }
 
     &.is-none {
       background: var(--tag-slate-bg);
@@ -173,11 +174,72 @@
     }
   }
 
-  .sb-pill-version {
-    font-size: 11px;
-    font-weight: 500;
-    opacity: 0.75;
+  .sb-tb-label { font-weight: 500; opacity: 0.85; }
+  .sb-tb-name { font-size: 14px; font-weight: 700; }
+
+  .sb-tb-version {
+    font-size: 11.5px;
+    opacity: 0.8;
     font-variant-numeric: tabular-nums;
+  }
+
+  .sb-tb-draft {
+    @extend %badge-shape;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 1px 7px;
+    background: var(--primary-fg);
+    color: var(--tag-amber-text);
+  }
+
+  // 版型 2 追蹤面板最上方的觸發結果卡片
+  .sb-trigger-card {
+    padding: 14px 16px;
+    border-radius: $radius;
+    background: var(--primary);
+    color: var(--primary-fg);
+
+    &.is-draft { background: var(--warning); }
+
+    &.is-none {
+      background: var(--tag-slate-bg);
+      color: var(--tag-slate-text);
+    }
+  }
+
+  .sb-tc-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.9;
+
+    .material-symbols-outlined { font-size: 16px; }
+  }
+
+  .sb-tc-name {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .sb-tc-version {
+    font-size: 12px;
+    font-weight: 500;
+    opacity: 0.8;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sb-tc-agent {
+    margin-top: 6px;
+    font-size: 12.5px;
+    opacity: 0.9;
   }
 
   .sb-draft-tag {
@@ -284,12 +346,44 @@
     }
   }
 
+  // 相似度說明與「對到的詞」：讓使用者看懂分數從哪來、為什麼會誤觸發
+  .sb-score-hint {
+    margin: 0 0 10px;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--text-faint);
+  }
+
+  .sb-terms {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+
+  .sb-term {
+    padding: 0 6px;
+    border-radius: $radius-sm;
+    background: var(--accent-soft);
+    color: var(--hint-text);
+    font-weight: 600;
+  }
+
   .sb-section-title {
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.3px;
     color: var(--text-faint);
     margin-bottom: 8px;
+  }
+
+  .sb-section-title--split {
+    display: flex;
+    justify-content: space-between;
+
+    span { font-weight: 500; }
   }
 
   // ════════ 版型 A：對話＋右側觸發追蹤 ════════
@@ -414,24 +508,6 @@
     line-height: 1.5;
   }
 
-  .sb-trace-facts {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 8px 14px;
-    margin: 0;
-    font-size: 13px;
-
-    dt { color: var(--text-faint); }
-    dd {
-      margin: 0;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-  }
-
   .sb-candidates {
     list-style: none;
     margin: 0;
@@ -458,8 +534,16 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .sb-cand-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 8px;
+    margin-top: 4px;
+  }
+
   .sb-cand-agent {
-    margin-top: 3px;
     font-size: 11.5px;
     color: var(--text-faint);
   }
@@ -683,11 +767,37 @@
     }
   }
 
+  .sb-score-row--head {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-faint);
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--divider);
+
+    span:nth-child(3) { grid-column: 3 / 5; }
+  }
+
   .sb-score-name {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .sb-score-name-line {
     display: inline-flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 4px;
-    min-width: 0;
+  }
+
+  .sb-winner-tag {
+    @extend %badge-shape;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    background: var(--primary);
+    color: var(--primary-fg);
   }
 
   .sb-score-agent { font-size: 11.5px; color: var(--text-faint); }

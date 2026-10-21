@@ -54,65 +54,22 @@
           </div>
         </template>
 
-        <!-- Step 1：技能內文 -->
+        <!-- Step 1：技能內文——一個輸入框，RD 的步驟／例外或特殊情況／固定輸出格式／
+             適用範圍用 placeholder 示範格式；存檔時依標題拆成四項（見 parseSkillContentMarkdown） -->
         <template v-else-if="currentStep === 1">
           <div class="se-primary-section">
-            <label class="se-label">技能內文</label>
+            <label class="se-label">技能內文 <span class="se-required">*</span></label>
             <p class="se-hint">
-              定義此技能的角色、行為規則與限制。Agent 執行此技能時依照這份內文運作。
-              可使用 Markdown，支援條列式規則與範例。
+              Agent 執行此技能時依照這份內文運作。請依範例的標題填寫步驟（必填）、例外或特殊情況、固定輸出格式、適用範圍。
             </p>
             <div class="se-editor-wrap">
               <textarea
-                v-model="form.instructions"
+                v-model="form.content"
                 class="custom-input se-textarea-lg se-mono"
-                :placeholder="instructionsPlaceholder"
+                :placeholder="contentPlaceholder"
               />
-              <div class="se-char-count">{{ form.instructions.length }} 字元</div>
+              <div class="se-char-count">{{ form.content.length }} 字元</div>
             </div>
-          </div>
-
-          <!-- RD 技能定義的步驟／例外或特殊情況／固定輸出格式／適用範圍：跟技能內文分開填，
-               技能詳情的「技能定義」就是用這幾欄（加上描述、覆蓋能力）組出來的 -->
-          <div class="se-section">
-            <label class="se-label">步驟 <span class="se-required">*</span></label>
-            <p class="se-hint">依序列出這個技能執行時要做的事，至少一步。</p>
-            <SkillListEditor
-              v-model="form.steps"
-              item-label="步驟"
-              placeholder="例：確認使用者提供的產品 ID"
-              ordered
-            />
-          </div>
-
-          <div class="se-section">
-            <label class="se-label">例外或特殊情況</label>
-            <p class="se-hint">遇到哪些狀況要換一種處理方式，例如查無資料、權限不足時。</p>
-            <SkillListEditor
-              v-model="form.exceptions"
-              item-label="例外"
-              placeholder="例：查無此 SKU 時，提示使用者確認產品 ID"
-            />
-          </div>
-
-          <div class="se-section">
-            <label class="se-label">固定輸出格式</label>
-            <p class="se-hint">結果固定用什麼格式回覆，例如表格欄位、段落順序。</p>
-            <input
-              v-model="form.outputFormat"
-              class="custom-input se-input-full"
-              placeholder="例：表格：倉庫／現有庫存／安全存量／狀態"
-            />
-          </div>
-
-          <div class="se-section">
-            <label class="se-label">適用範圍</label>
-            <p class="se-hint">這個技能適用在哪些對象、資料或情境。</p>
-            <input
-              v-model="form.applicableScope"
-              class="custom-input se-input-full"
-              placeholder="例：企業內部 ERP 系統中的所有倉庫"
-            />
           </div>
 
           <div class="se-section">
@@ -137,38 +94,42 @@
               <div class="se-confirm-group-hd">
                 <i class="material-symbols-outlined lively-icon">description</i>內容摘要
               </div>
+              <!-- 技能描述不給使用者填，建立與編輯都顯示；由 AI 生成的掛「AI 建立」tag -->
               <div class="se-confirm-row">
-                <span class="se-confirm-key">技能內文</span>
+                <span class="se-confirm-key">技能描述</span>
                 <span class="se-confirm-val">
-                  <span v-if="form.instructions">{{ form.instructions.length }} 字元</span>
-                  <span v-else class="se-empty">（未填寫）</span>
+                  <span v-if="finalDescription">{{ finalDescription }}</span>
+                  <span v-else class="se-empty">（填寫步驟後由 Agent 生成）</span>
+                  <span v-if="descriptionIsGenerated && finalDescription" class="se-generated-tag">
+                    <i class="material-symbols-outlined">auto_awesome</i>AI 建立
+                  </span>
                 </span>
               </div>
               <div class="se-confirm-row">
                 <span class="se-confirm-key">步驟</span>
                 <span class="se-confirm-val">
-                  <span v-if="filledSteps.length">{{ filledSteps.length }} 步</span>
+                  <span v-if="parsedContent.steps.length">{{ parsedContent.steps.length }} 步</span>
                   <span v-else class="se-empty">（未填寫）</span>
                 </span>
               </div>
               <div class="se-confirm-row">
                 <span class="se-confirm-key">例外或特殊情況</span>
                 <span class="se-confirm-val">
-                  <span v-if="filledExceptions.length">{{ filledExceptions.length }} 項</span>
+                  <span v-if="parsedContent.exceptions.length">{{ parsedContent.exceptions.length }} 項</span>
                   <span v-else class="se-empty">（未填寫）</span>
                 </span>
               </div>
               <div class="se-confirm-row">
                 <span class="se-confirm-key">固定輸出格式</span>
                 <span class="se-confirm-val">
-                  <span v-if="form.outputFormat.trim()">{{ form.outputFormat.trim() }}</span>
+                  <span v-if="parsedContent.outputFormat">{{ parsedContent.outputFormat }}</span>
                   <span v-else class="se-empty">（未填寫）</span>
                 </span>
               </div>
               <div class="se-confirm-row">
                 <span class="se-confirm-key">適用範圍</span>
                 <span class="se-confirm-val">
-                  <span v-if="form.applicableScope.trim()">{{ form.applicableScope.trim() }}</span>
+                  <span v-if="parsedContent.applicableScope">{{ parsedContent.applicableScope }}</span>
                   <span v-else class="se-empty">（未填寫）</span>
                 </span>
               </div>
@@ -271,12 +232,13 @@ import { ref, reactive, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppBreadcrumb from '@/components/AppBreadcrumb.vue'
 import SkillCapabilityEditor from '@/components/Skill/SkillCapabilityEditor.vue'
-import SkillListEditor from '@/components/Skill/SkillListEditor.vue'
 import AgentAssignGrid from '@/components/Skill/AgentAssignGrid.vue'
 import SkillEnableFlow from '@/components/Skill/SkillEnableFlow.vue'
 import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
 import { useSkillStore } from '@/stores/skillStore'
-import type { DraftSkill, SkillFile, SkillCapability } from '@/stores/skillStore'
+import { generateSkillDescription } from '@/utils/skillDescription'
+import { buildSkillContentMarkdown, parseSkillContentMarkdown } from '@/utils/skillMarkdown'
+import type { DraftSkill, SkillFile, SkillCapability, SkillRdFields } from '@/stores/skillStore'
 
 const router = useRouter()
 const route = useRoute()
@@ -342,8 +304,7 @@ const conflictSourceName = computed(() => {
 
 const form = reactive({
   name: existingSkill?.name ?? existingDraft?.name ?? '',
-  instructions: existingSkill?.instructions ?? existingDraft?.instructions ?? '',
-  // 精靈不再提供「說明」欄位；編輯既有技能／草稿時沿用原本的值，不要被清空
+  // 精靈不提供描述欄位（由 Agent 生成，見 finalDescription）；編輯既有技能／草稿時沿用原本的值，不要被清空
   description: existingSkill?.description ?? existingDraft?.description ?? '',
   assignedAgents: existingSkill?.assignedAgents
     ? [...existingSkill.assignedAgents]
@@ -353,15 +314,33 @@ const form = reactive({
   isEnabled: existingSkill?.isEnabled ?? true,
   files: existingSkill?.files ?? existingDraft?.files ?? [] as SkillFile[],
   capabilities: existingSkill?.capabilities ?? [] as SkillCapability[],
-  // 步驟預設給一列空白，讓使用者一進來就看得到輸入框（送出前會濾掉空白列）
-  steps: existingSkill?.steps?.length ? [...existingSkill.steps] : existingDraft?.steps?.length ? [...existingDraft.steps] : [''],
-  exceptions: [...(existingSkill?.exceptions ?? existingDraft?.exceptions ?? [])],
-  outputFormat: existingSkill?.outputFormat ?? existingDraft?.outputFormat ?? '',
-  applicableScope: existingSkill?.applicableScope ?? existingDraft?.applicableScope ?? '',
+  // 技能內文：既有技能有 RD 四項就用四項組回標題格式（拆得回去），沒有才退回原本的
+  // instructions 自由文字；新建是空的，格式看 placeholder
+  content: existingSkill && hasRdFields(existingSkill)
+    ? buildSkillContentMarkdown(existingSkill)
+    : existingDraft && hasRdFields(existingDraft)
+      ? buildSkillContentMarkdown(existingDraft)
+      : existingSkill?.instructions ?? existingDraft?.instructions ?? '',
 })
 
-const filledSteps = computed(() => form.steps.map(s => s.trim()).filter(Boolean))
-const filledExceptions = computed(() => form.exceptions.map(s => s.trim()).filter(Boolean))
+function hasRdFields(src: SkillRdFields): boolean {
+  return !!(src.steps?.length || src.exceptions?.length || src.outputFormat || src.applicableScope)
+}
+
+// 技能內文依標題拆出的 RD 四項：確認頁、Agent 生成描述、存檔都讀這份
+const parsedContent = computed(() => parseSkillContentMarkdown(form.content))
+
+// 技能描述不給使用者填，由 Agent 依名稱／步驟／適用範圍／輸出格式生成：
+// 全新建立一律生成；編輯既有技能／草稿沿用原本的描述，原本是空的才生成
+const descriptionIsGenerated = computed(() => isNewCreate || !form.description.trim())
+const finalDescription = computed(() => descriptionIsGenerated.value
+  ? generateSkillDescription({
+      name: form.name,
+      steps: parsedContent.value.steps,
+      applicableScope: parsedContent.value.applicableScope,
+      outputFormat: parsedContent.value.outputFormat,
+    })
+  : form.description.trim())
 
 const fillWidth = computed(() => `${(currentStep.value / (STEPS.length - 1)) * 100}%`)
 
@@ -378,38 +357,40 @@ const willGoThroughEnableFlow = computed(() =>
 const missingRequiredFields = computed(() => {
   const missing: string[] = []
   if (!form.name.trim()) missing.push('技能名稱')
-  if (!filledSteps.value.length) missing.push('步驟')
+  if (!parsedContent.value.steps.length) missing.push('技能內文的「步驟」')
   if (!form.capabilities.length) missing.push('覆蓋能力')
   if (!willGoThroughEnableFlow.value && !form.assignedAgents.length) missing.push('指派 Agent')
   return missing
 })
 const canSubmit = computed(() => missingRequiredFields.value.length === 0)
 
-const instructionsPlaceholder = `你是一個專門處理 ERP 庫存查詢的助理。
+const contentPlaceholder = `## 步驟
+1. 確認使用者提供的產品 ID
+2. 查詢各倉庫即時庫存
+3. 彙總數量並標示低於安全存量的品項
 
-## 行為規則
-- 收到庫存查詢請求時，先確認產品 ID 格式正確（格式：SKU-XXXXX）
-- 查詢範圍涵蓋所有倉庫，預設返回總庫存量
-- 若庫存低於安全存量（50 件），主動提示補貨建議
+## 例外或特殊情況
+- 查無此 SKU 時，提示使用者確認產品 ID
+- ERP 系統維護中時，回覆最後一次同步的庫存並註明時間
 
-## 輸出格式
-以條列式呈現各倉庫庫存，最後附上總計。`
+## 固定輸出格式
+表格：倉庫／現有庫存／安全存量／狀態
+
+## 適用範圍
+企業內部 ERP 系統中的所有倉庫`
 
 function buildPayload() {
   return {
     name: form.name.trim(),
-    instructions: form.instructions.trim(),
-    description: form.description.trim(),
+    instructions: form.content.trim(),
+    description: finalDescription.value,
     assignedAgents: [...form.assignedAgents],
     isEnabled: form.isEnabled,
     files: [...form.files],
     // 過濾掉空字串（理論上不會發生，SkillCapabilityEditor 不會送出空白標籤，
     // 這裡只是防呆)
     capabilities: form.capabilities.map(c => c.trim()).filter(Boolean),
-    steps: filledSteps.value,
-    exceptions: filledExceptions.value,
-    outputFormat: form.outputFormat.trim(),
-    applicableScope: form.applicableScope.trim(),
+    ...parsedContent.value,
   }
 }
 

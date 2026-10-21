@@ -143,7 +143,7 @@ describe('SkillEditor 編輯模式的啟用測試閘門', () => {
     ;(editor.vm as any).form.name = '全新技能'
     ;(editor.vm as any).form.description = '當使用者需要這個技能時'
     ;(editor.vm as any).form.capabilities = ['能力A']
-    ;(editor.vm as any).form.steps = ['步驟A']
+    ;(editor.vm as any).form.content = '## 步驟\n1. 步驟A'
     ;(editor.vm as any).form.assignedAgents = ['通用助理']
     ;(editor.vm as any).currentStep = 2
     await wrapper.vm.$nextTick()

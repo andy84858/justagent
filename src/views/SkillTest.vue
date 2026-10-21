@@ -32,12 +32,8 @@
                 :class="['sidebar-item', { 'is-active': store.selectedSkillId === skill.id }]"
                 @click="store.setSelectedSkill(skill.id)"
               >
+                <!-- 個人技能沒有版本概念，不顯示版號 -->
                 <span class="si-name">{{ skill.name }}</span>
-                <SkillVersionPicker
-                  :versions="store.getVersionOptions(skill.id)"
-                  :model-value="displayVersionName(skill)"
-                  @update:model-value="v => store.setSelectedSkill(skill.id, v)"
-                />
               </div>
             </template>
 

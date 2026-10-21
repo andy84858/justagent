@@ -43,22 +43,27 @@
               <div v-if="msg.role === 'user'" class="sb-bubble sb-bubble--user">{{ msg.content }}</div>
 
               <div v-else-if="msg.trace" class="sb-turn">
-                <!-- 路由結果放在回覆上方，像一條「交接紀錄」，不用另外開面板 -->
+                <!-- 接手的 Agent 放在回覆上方；觸發的技能用回覆頂部的橫條標示，不用另外開面板 -->
                 <div class="sb-route-line">
                   <span class="sb-route-agent">
                     <i class="material-symbols-outlined">smart_toy</i>{{ msg.trace.agent }}
                   </span>
-                  <i class="material-symbols-outlined sb-route-arrow">arrow_forward</i>
-                  <span v-if="msg.trace.triggered" :class="['sb-skill-pill', { 'is-draft': msg.trace.triggered.isDraft }]">
-                    <i class="material-symbols-outlined">bolt</i>{{ msg.trace.triggered.name }}
-                    <span class="sb-pill-version">{{ msg.trace.triggered.versionName }}</span>
-                  </span>
-                  <span v-else class="sb-skill-pill is-none">
-                    <i class="material-symbols-outlined">block</i>未觸發技能
-                  </span>
                 </div>
 
                 <div class="sb-bubble sb-bubble--agent">
+                  <div
+                    v-if="msg.trace"
+                    :class="['sb-trigger-banner', msg.trace.triggered ? { 'is-draft': msg.trace.triggered.isDraft } : 'is-none']"
+                  >
+                    <i class="material-symbols-outlined">{{ msg.trace.triggered ? 'bolt' : 'block' }}</i>
+                    <template v-if="msg.trace.triggered">
+                      <span class="sb-tb-label">觸發技能</span>
+                      <span class="sb-tb-name">{{ msg.trace.triggered.name }}</span>
+                      <span v-if="msg.trace.triggered.versionName" class="sb-tb-version">{{ msg.trace.triggered.versionName }}</span>
+                      <span v-if="msg.trace.triggered.isDraft" class="sb-tb-draft">草稿</span>
+                    </template>
+                    <span v-else class="sb-tb-label">未觸發任何技能</span>
+                  </div>
                   <div class="sb-bubble-content">{{ msg.content }}</div>
                 </div>
 
@@ -71,14 +76,28 @@
                   <p class="sb-reason">{{ msg.trace.reason }}</p>
 
                   <div class="sb-score-table">
+                    <template v-if="rankedCandidates(msg.trace).length">
+                      <p class="sb-score-hint">相似度＝這句話與技能名稱、描述、覆蓋能力重疊的詞數，分數最高的技能被觸發；長條以最高分為滿格。</p>
+                      <div class="sb-score-row sb-score-row--head">
+                        <span>候選技能</span>
+                        <span>可調用 Agent</span>
+                        <span>相似度</span>
+                      </div>
+                    </template>
                     <div
                       v-for="c in rankedCandidates(msg.trace)"
                       :key="c.skillId"
                       :class="['sb-score-row', { 'is-winner': c.skillId === msg.trace.triggered?.skillId }]"
                     >
                       <span class="sb-score-name">
-                        {{ c.name }}
-                        <span v-if="c.isDraft" class="sb-draft-tag">草稿</span>
+                        <span class="sb-score-name-line">
+                          {{ c.name }}
+                          <span v-if="c.isDraft" class="sb-draft-tag">草稿</span>
+                          <span v-if="c.skillId === msg.trace.triggered?.skillId" class="sb-winner-tag">已觸發</span>
+                        </span>
+                        <span class="sb-terms">
+                          對到<span v-for="t in c.matchedTerms" :key="t" class="sb-term">{{ t }}</span>
+                        </span>
                       </span>
                       <span class="sb-score-agent">{{ c.agent }}</span>
                       <span class="sb-cand-bar"><span :style="{ width: barWidth(c.score, msg.trace) }" /></span>
