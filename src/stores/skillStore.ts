@@ -2267,6 +2267,14 @@ export const useSkillStore = defineStore('skillStore', () => {
     aiTestGenerationNarration.value = []
   }
 
+  // 技能內容改過並存檔：舊的測試紀錄是測舊版本的，不能拿來啟用新版本——
+  // 清掉「測過」記號，畫面上這顆技能的測試報告也一併清掉，要重新出題作答才能啟用
+  function invalidateAITest(skillId: string): void {
+    const skill = findSkill(skillId)
+    if (skill) skill.aiTestPassRate = null
+    if (aiTestScenariosSkillId.value === skillId) resetAITestState()
+  }
+
   // draftContext：還沒存檔的草稿想先測試時，store 裡找不到這顆技能（或還是舊版本），
   // 用呼叫端目前編輯中的 name／description／capabilities 當作組題關鍵字的來源
   // 還沒存檔的草稿先測試過，存檔那一刻才拿到真正的技能 id：測試結果是同一份草稿
@@ -2551,6 +2559,7 @@ export const useSkillStore = defineStore('skillStore', () => {
     generateAITestScenarios,
     ensureAITestStateForSkill,
     resetAITestState,
+    invalidateAITest,
     answerAITestScenario,
     submitAITestAnswers,
     resetConversation,

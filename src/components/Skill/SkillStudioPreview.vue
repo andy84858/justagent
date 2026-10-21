@@ -11,6 +11,8 @@
       <button
         type="button"
         :class="['ssp-tab-btn', { 'is-active': props.activeTab === 'test' }]"
+        :disabled="props.testLocked"
+        :title="props.testLocked ? TEST_LOCKED_HINT : undefined"
         @click="emit('update:activeTab', 'test')"
       >
         <i class="material-symbols-outlined">science</i>測試
@@ -40,7 +42,7 @@
         </div>
 
         <div class="ssp-section">
-          <div class="ssp-section-label">說明</div>
+          <div class="ssp-section-label">技能描述</div>
           <p v-if="props.draft.description" class="ssp-text">{{ props.draft.description }}</p>
           <p v-else class="ssp-empty">跟 Agent 描述這個技能要做什麼</p>
         </div>
@@ -202,6 +204,8 @@ const props = defineProps<{
   // 沒傳就退回 savedSkillId，維持舊行為（例如獨立測試沙盒一定是已存檔的技能）
   testSkillId?: string | null
   isDirty: boolean
+  // 修改既有技能、改了還沒存：「測試」tab 反灰（見 useSkillStudioConversation 的 testLocked）
+  testLocked?: boolean
   canSave: boolean
   activeTab: 'preview' | 'test'
   nameConflict?: boolean
@@ -227,6 +231,8 @@ const emit = defineEmits<{
   'update:files': [files: SkillFile[]]
 }>()
 
+const TEST_LOCKED_HINT = '有未儲存的修改，先儲存再測試'
+
 const router = useRouter()
 const md = new MarkdownIt({ html: false, breaks: true, linkify: false })
 const filesExpanded = ref(false)
@@ -250,7 +256,7 @@ const effectiveTestId = computed(() => props.testSkillId ?? props.savedSkillId)
 // （見 generateDynamicTriggerEdgeScenarios），沒有這個欄位會被誤判成對話建立的技能
 // 測試沒全對時，報告裡「下一步」要告訴使用者去哪裡改：對話方式在對話裡（抽屜左側／畫布的對話分頁），積木方式在基本設定
 const testEditHint = computed(() =>
-  props.draft.method === 'blocks' ? '回到「基本設定」調整說明' : '到對話裡告訴 Agent 哪裡要調整',
+  props.draft.method === 'blocks' ? '回到「基本設定」調整技能描述' : '到對話裡告訴 Agent 哪裡要調整',
 )
 
 const testDraftContext = computed<TriggerEdgeSource>(() => ({
@@ -294,7 +300,7 @@ const missingFieldsHint = computed(() => {
   const missing: string[] = []
   if (!props.draft.name.trim()) missing.push('技能名稱')
   if (!props.draft.instructions.trim()) missing.push('積木組成（至少選一個章節）')
-  if (!props.draft.description.trim()) missing.push('說明')
+  if (!props.draft.description.trim()) missing.push('技能描述')
   if (!props.draft.capabilities.length) missing.push('覆蓋能力')
   if (!props.draft.keywords.length) missing.push('關鍵字')
   if (!props.draft.assignedAgents.length) missing.push('指派 Agent')
@@ -304,6 +310,8 @@ const missingFieldsHint = computed(() => {
 const status = computed<{ label: string; tone: 'amber' | 'slate' }>(() => {
   if (!props.savedSkillId) return { label: '未儲存草稿', tone: 'amber' }
   if (props.isDirty) return { label: '有未儲存變更', tone: 'amber' }
+  // 修改存檔後技能會轉成停用中（見 useSkillStudioConversation 的 save()），要到「測試」重新啟用
+  if (store.findSkill(props.savedSkillId)?.isEnabled === false) return { label: '個人技能 · 停用中', tone: 'amber' }
   return { label: '個人技能 · 可使用', tone: 'slate' }
 })
 </script>

@@ -43,8 +43,9 @@ describe('SkillStudioPreview', () => {
     expect(text).toContain('尚未拆解覆蓋能力項目')
     expect(w.find('.ssp-status-badge').text()).toBe('未儲存草稿')
     expect(text).toContain('尚未指派 Agent')
-    // 說明／技能內文／步驟／例外或特殊情況／固定輸出格式／適用範圍／覆蓋能力／指派 Agent／附加檔案
+    // 技能描述／技能內文／步驟／例外或特殊情況／固定輸出格式／適用範圍／覆蓋能力／指派 Agent／附加檔案
     expect(w.findAll('.ssp-section-label').length).toBe(9)
+    expect(w.findAll('.ssp-section-label')[0].text()).toBe('技能描述')
     expect(text).toContain('尚未列出步驟（必填）')
   })
 
@@ -65,7 +66,7 @@ describe('SkillStudioPreview', () => {
     expect(backend.text()).not.toContain('例外或特殊情況')
   })
 
-  it('有內容時渲染名稱、說明、markdown 指令與能力 chip', () => {
+  it('有內容時渲染名稱、技能描述、markdown 指令與能力 chip', () => {
     const w = mountPreview({
       draft: { ...emptyDraft(), name: '查庫存', description: '提到庫存時', instructions: '1. **釐清**\n2. 查詢', capabilities: ['能力A'] },
     })

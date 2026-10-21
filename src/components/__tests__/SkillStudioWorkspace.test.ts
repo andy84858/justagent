@@ -117,34 +117,61 @@ describe('SkillStudioWorkspace', () => {
     }
   })
 
-  it('儲存／放棄固定在左欄，切到「測試」tab 依然看得到、按得到，不會跟著 tab 消失', async () => {
+  it('修改後還沒存：「測試」tab 反灰；儲存後技能轉成停用中、自動帶到「測試」，啟用按鈕可按', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
+      const store = useSkillStore()
+      store.findSkill('personal-001')!.isEnabled = true
       const { wrapper } = mountWorkspace({ skillId: 'personal-001' })
       await flushPromises()
+      const testTab = () => wrapper.findAll('.ssp-tab-btn')[1]
+      expect(testTab().attributes('disabled')).toBeUndefined()
+
       const input = wrapper.find('.SkillStudioChat input.custom-input')
       await input.setValue('名稱改成「亂改的名字」')
       await input.trigger('keydown.enter')
       await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
 
-      // 切到測試 tab
-      await wrapper.findAll('.ssp-tab-btn')[1].trigger('click')
-      await flushPromises()
-      expect(wrapper.find('.ssp-test-body').exists()).toBe(true)
+      // 改了還沒存：測試 tab 反灰，點了也不會切過去
+      expect(testTab().attributes('disabled')).toBeDefined()
+      expect(wrapper.find('.ssp-test-body').exists()).toBe(false)
 
-      // SkillStudioPreview 本身不再重複渲染儲存／放棄（hideFooter）
-      expect(wrapper.find('.ssp-footer').exists()).toBe(false)
-
-      // 左欄的儲存／放棄仍然看得到、按得到
+      // 左欄的儲存／放棄看得到、按得到
       const saveBtn = wrapper.find('.studio-save-btn')
-      expect(saveBtn.exists()).toBe(true)
       expect(saveBtn.attributes('disabled')).toBeUndefined()
       const discardBtn = wrapper.findAll('.studio-save-footer button').find(b => b.text().includes('放棄修改'))!
       expect(discardBtn.exists()).toBe(true)
 
       await saveBtn.trigger('click')
-      expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改')
+      await flushPromises()
+      expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改，技能目前停用中，到「測試」重新測試後再啟用')
+      expect(store.findSkill('personal-001')!.isEnabled).toBe(false)
+      expect(testTab().attributes('disabled')).toBeUndefined()
+      expect(wrapper.find('.ssp-test-body').exists()).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('停在「測試」tab 時又改了內容：跳回「技能預覽」', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const { wrapper } = mountWorkspace({ skillId: 'personal-001' })
+      await flushPromises()
+      await wrapper.findAll('.ssp-tab-btn')[1].trigger('click')
+      await flushPromises()
+      expect(wrapper.find('.ssp-test-body').exists()).toBe(true)
+
+      // 測試 tab 底下看不到對話框，直接透過 workspace 左欄的對話送出
+      const input = wrapper.find('.SkillStudioChat input.custom-input')
+      await input.setValue('名稱改成「亂改的名字」')
+      await input.trigger('keydown.enter')
+      await vi.advanceTimersByTimeAsync(800)
+      await flushPromises()
+
+      expect(wrapper.find('.ssp-test-body').exists()).toBe(false)
+      expect(wrapper.findAll('.ssp-tab-btn')[0].classes()).toContain('is-active')
     } finally {
       vi.useRealTimers()
     }
@@ -166,7 +193,7 @@ describe('SkillStudioWorkspace', () => {
         expect(saveBtn.text()).toContain('儲存修改')
         expect(saveBtn.attributes('disabled')).toBeUndefined()
         await saveBtn.trigger('click')
-        expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改')
+        expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改，技能目前停用中，到「測試」重新測試後再啟用')
       } finally {
         vi.useRealTimers()
       }
@@ -196,9 +223,13 @@ describe('SkillStudioWorkspace', () => {
         expect(saveBtn.text()).not.toContain('啟用')
         await saveBtn.trigger('click')
         await flushPromises()
-        expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改')
+        expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改，技能目前停用中，到「測試」重新測試後再啟用')
         expect(new DOMWrapper(document.body).find('.enable-agent-dialog').exists()).toBe(false)
         expect(store.findSkill(id)!.isEnabled).toBe(false)
+        // 舊報告是測舊版本的，不能拿來啟用新版本：測過記號、報告都清掉，看不到啟用按鈕
+        expect(store.findSkill(id)!.aiTestPassRate).toBeNull()
+        expect(store.aiTestReport).toBeNull()
+        expect(wrapper.find('.ai-enable-btn').exists()).toBe(false)
       } finally {
         vi.useRealTimers()
       }

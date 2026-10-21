@@ -16,7 +16,7 @@
 
     <div class="sbbf-field">
       <div class="sbbf-label-row">
-        <span class="sbc-label">說明 <span class="se-required">*</span></span>
+        <span class="sbc-label">技能描述 <span class="se-required">*</span></span>
         <button
           type="button"
           class="custom-btn sbbf-ai-btn"
@@ -107,9 +107,9 @@
 </template>
 
 <script setup lang="ts">
-// 積木流程「基本設定」步驟：技能名稱／說明／關鍵字／覆蓋能力／指派 Agent
+// 積木流程「基本設定」步驟：技能名稱／技能描述／關鍵字／覆蓋能力／指派 Agent
 // 都是使用者手動輸入的必填欄位，不再隨「積木組成」步驟選的章節自動覆蓋——
-// 說明按「AI 建議」會生成 3 句不同措辭的候選，使用者挑一句直接套用
+// 技能描述按「AI 建議」會生成 3 句不同措辭的候選，使用者挑一句直接套用
 // （挑選本身就是確認，不用再跳一層「要覆蓋嗎」的對話框）；覆蓋能力的「AI 建議」
 // 維持原本單一建議＋覆蓋確認的流程，不在這次調整範圍內
 import { ref, watch } from 'vue'

@@ -57,7 +57,7 @@ describe('interpretStudioMessage', () => {
     expect(reply.patch).not.toHaveProperty('triggerHint')
     expect(reply.patch?.instructions?.split('\n')).toHaveLength(3)
     expect(reply.patch?.capabilities).toHaveLength(2)
-    expect(reply.actions?.map(a => a.label)).toEqual(['看起來沒問題，儲存', '說明要更精準', '再補一個步驟'])
+    expect(reply.actions?.map(a => a.label)).toEqual(['看起來沒問題，儲存', '技能描述要更精準', '再補一個步驟'])
   })
 
   it('改名：優先取引號內文字', () => {
@@ -67,7 +67,14 @@ describe('interpretStudioMessage', () => {
     expect(reply.content).toContain('庫存速查')
   })
 
-  it('說明：「說明改成…」更新 description', () => {
+  it('技能描述：「技能描述改成…」更新 description，回覆用「技能描述」', () => {
+    const draft = { ...emptyDraft(), name: 'x' }
+    const reply = interpretStudioMessage('技能描述改成當使用者問缺貨時查庫存', draft, 'edit')
+    expect(reply.patch?.description).toBe('當使用者問缺貨時查庫存')
+    expect(reply.content).toBe('技能描述已更新為：當使用者問缺貨時查庫存')
+  })
+
+  it('舊說法：「說明改成…」也更新 description', () => {
     const draft = { ...emptyDraft(), name: 'x' }
     const reply = interpretStudioMessage('說明改成當使用者問缺貨時查庫存', draft, 'edit')
     expect(reply.patch?.description).toBe('當使用者問缺貨時查庫存')
@@ -262,7 +269,7 @@ describe('useSkillStudioConversation', () => {
     c.loadSkill('personal-001')
     const labels = c.suggestionChips.value.map(s => s.label)
     expect(labels).toContain('調整技能內文')
-    expect(labels).toContain('調整說明')
+    expect(labels).toContain('調整技能描述')
   })
 
   it('startCreate(prefill, openingMessage)：草稿預填、isDirty 為 true、canSave 依內容、開場訊息採用指定文字', () => {
@@ -279,6 +286,15 @@ describe('useSkillStudioConversation', () => {
     expect(c.canSave.value).toBe(true)
     expect(c.messages.value).toHaveLength(1)
     expect(c.messages.value[0].content).toBe('這顆技能來自本對話的「查詢銷售資料」流程。')
+  })
+
+  it('積木方式缺技能描述：提示用「技能描述」而不是舊的「說明」', () => {
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('blocks')
+    c.updateBlocks({ name: 'x', sectionIds: ['promo_kpi'] })
+    expect(c.missingFieldsHint.value).toContain('技能描述')
+    expect(c.missingFieldsHint.value).not.toContain('說明')
   })
 
   it('步驟必填：預填沒有步驟就不能存，對話方式也會提示「還缺：步驟」', () => {

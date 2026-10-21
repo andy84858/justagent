@@ -118,6 +118,7 @@
         :saved-skill-id="conv.savedSkillId.value"
         :test-skill-id="conv.testSkillId.value"
         :is-dirty="conv.isDirty.value"
+        :test-locked="conv.testLocked.value"
         :can-save="conv.canSave.value"
         :name-conflict="nameConflict"
         :backend-test="backendSave"
@@ -186,6 +187,11 @@ const saveClickEnabled = computed(() => {
 
 // 測試相關的提示文字（生成中的敘事、生成完成、測試結果）一律留在右側測試 tab 裡
 // （敘事泡泡／toast／測試報告），不推進左側對話河道——河道只留建立／修改技能本身的對話
+
+// 停在「測試」tab 時又改了內容：測試 tab 會反灰，跳回預覽讓使用者看到改了什麼
+watch(() => conv.testLocked.value, locked => {
+  if (locked && activeTab.value === 'test') activeTab.value = 'preview'
+})
 
 // 修改模式下使用者確認要開始建立新技能：conv 已經把草稿悄悄重設回已儲存版本了，
 // 這裡只負責把抽屜導去全新的建立流程——用 router.push 換掉 query，drawer 外殼
@@ -285,7 +291,9 @@ function onSave() {
     popDialog.toast('已儲存為個人技能，可到「測試」tab 驗證')
     activeTab.value = 'test'
   } else {
-    popDialog.toast('已儲存修改')
+    // 修改存檔後技能轉成停用中：直接帶到「測試」，啟用按鈕在那裡
+    popDialog.toast('已儲存修改，技能目前停用中，到「測試」重新測試後再啟用')
+    activeTab.value = 'test'
   }
 }
 

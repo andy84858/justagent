@@ -437,6 +437,8 @@
       color: $color_main_1;
       border-bottom-color: $color_main_1;
     }
+
+    &:disabled { opacity: 0.45; cursor: not-allowed; }
   }
 
   .ssp-body {

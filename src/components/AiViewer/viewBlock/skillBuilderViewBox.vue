@@ -7,6 +7,8 @@
           :key="t.id"
           type="button"
           :class="['skb-tab-btn', { 'is-active': activeTab === t.id }]"
+          :disabled="t.id === 'test' && conv.testLocked.value"
+          :title="t.id === 'test' && conv.testLocked.value ? '有未儲存的修改，先儲存再測試' : undefined"
           @click="setTab(t.id)"
         >
           <i class="material-symbols-outlined">{{ t.icon }}</i>{{ t.label }}
@@ -100,6 +102,7 @@
         :saved-skill-id="conv.savedSkillId.value"
         :test-skill-id="conv.testSkillId.value"
         :is-dirty="conv.isDirty.value"
+        :test-locked="conv.testLocked.value"
         :can-save="conv.canSave.value"
         :name-conflict="nameConflict"
         @save="onSave"
@@ -159,6 +162,11 @@ const tabs = computed<{ id: BlockTab; icon: string; label: string }[]>(() => [
   { id: 'preview', icon: 'preview', label: '預覽' },
   { id: 'test', icon: 'science', label: '測試' },
 ])
+
+// 停在「測試」tab 時又改了內容：測試 tab 會反灰，跳回預覽
+watch(() => conv.testLocked.value, locked => {
+  if (locked && activeTab.value === 'test') setTab('preview')
+})
 
 // 儲存後只提示一次「產一份報告」；再存一次會再出現
 const showRunReport = ref(false)
@@ -247,7 +255,9 @@ function onSave() {
     popDialog.toast('已儲存為個人技能，可到「測試」tab 驗證')
     setTab('test')
   } else {
-    popDialog.toast('已儲存修改')
+    // 修改存檔後技能轉成停用中：直接帶到「測試」，啟用按鈕在那裡
+    popDialog.toast('已儲存修改，技能目前停用中，到「測試」重新測試後再啟用')
+    setTab('test')
   }
 }
 

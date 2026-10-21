@@ -35,6 +35,7 @@
     cursor: pointer;
     .material-symbols-outlined { font-size: 16px; }
     &.is-active { background: var(--primary-a08); color: $color_main_1; }
+    &:disabled { opacity: 0.45; cursor: not-allowed; }
   }
 
   .skb-open-studio-wrap { display: inline-flex; }

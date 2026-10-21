@@ -36,7 +36,7 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     await generate(w)
 
     expect(store.aiTestAnsweringAgent).toBe('客服中心助理')
-    expect(w.find('.ai-answering-agent').text()).toContain('客服中心助理')
+    expect(w.text()).not.toContain('答題 Agent') // 測試 tab 不顯示「答題 Agent」字樣
     const cards = w.findAll('.scenario-card')
     expect(cards.length).toBeGreaterThanOrEqual(6)
     const first = cards[0]

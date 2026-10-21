@@ -30,15 +30,10 @@
       </button>
     </div>
 
-    <!-- ② Scenarios：AI 出題、答題 Agent 作答，使用者標註每一題的正確答案 -->
+    <!-- ② Scenarios：AI 出題、Agent 作答，使用者標註每一題的正確答案（畫面上不顯示「答題 Agent」字樣） -->
     <template v-else>
       <div class="ai-toolbar">
         <div class="ai-toolbar-left">
-          <!-- 嵌在啟用對話框裡就地測試時不顯示「答題 Agent」，對話框只專心處理「測完就啟用」 -->
-          <span v-if="!props.embedded" class="ai-answering-agent">
-            <i class="material-symbols-outlined">smart_toy</i>
-            答題 Agent：<strong>{{ store.aiTestAnsweringAgent }}</strong>
-          </span>
         </div>
         <button class="custom-btn ai-regenerate-btn" @click="regenerate">
           <i class="material-symbols-outlined">refresh</i>

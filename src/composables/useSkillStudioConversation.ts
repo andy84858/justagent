@@ -198,7 +198,7 @@ export function wantsToResume(text: string, paused: PausedDraft): boolean {
 export function formatDraftSummary(draft: SkillDraft): string {
   const lines = [
     `名稱：${draft.name || '（未命名）'}`,
-    `說明：${draft.description || '（未填寫）'}`,
+    `技能描述：${draft.description || '（未填寫）'}`,
     `指令：${draft.instructions || '（未撰寫）'}`,
   ]
   if (draft.steps.length) lines.push(`步驟：${draft.steps.map((st, i) => `${i + 1}. ${st}`).join(' ')}`)
@@ -277,7 +277,7 @@ export function suggestDescriptionVariants(sectionIds: string[]): string[] {
 }
 
 const ACTION_CONFIRM: StudioAction = { id: 'confirm', label: '看起來沒問題，儲存' }
-const ACTION_DESCRIPTION: StudioAction = { id: 'description', label: '說明要更精準' }
+const ACTION_DESCRIPTION: StudioAction = { id: 'description', label: '技能描述要更精準' }
 const ACTION_STEP: StudioAction = { id: 'step', label: '再補一個步驟' }
 
 // 修改模式下，使用者在對話裡明確說要建立「新」技能：要跟「只是在描述這顆技能的
@@ -303,8 +303,8 @@ function editSuggestions(draft: SkillDraft): StudioSuggestion[] {
       ? { icon: 'checklist', label: '調整覆蓋能力', prefill: '我想調整覆蓋能力，' }
       : { icon: 'checklist', label: '新增覆蓋能力', prefill: '幫我新增覆蓋能力，' },
     draft.description
-      ? { icon: 'notes', label: '調整說明', prefill: '說明改成' }
-      : { icon: 'notes', label: '撰寫說明', prefill: '說明是' },
+      ? { icon: 'notes', label: '調整技能描述', prefill: '技能描述改成' }
+      : { icon: 'notes', label: '撰寫技能描述', prefill: '技能描述是' },
   ]
 }
 
@@ -370,7 +370,7 @@ export function interpretStudioMessage(text: string, draft: SkillDraft, mode: St
     return { content: '請按右側「儲存為個人技能」，儲存後就能在「測試」tab 驗證。' }
   }
   if (t === ACTION_DESCRIPTION.label) {
-    return { content: '好，直接告訴我這個技能要做什麼、什麼情況下該用，例如「說明改成當使用者提到缺貨或補貨時，查詢 ERP 庫存」。' }
+    return { content: '好，直接告訴我這個技能要做什麼、什麼情況下該用，例如「技能描述改成當使用者提到缺貨或補貨時，查詢 ERP 庫存」。' }
   }
   if (t === ACTION_STEP.label) {
     return {
@@ -396,7 +396,7 @@ export function interpretStudioMessage(text: string, draft: SkillDraft, mode: St
         // hashtag 不支援空白，技能名稱若含空白（例如使用者打「查 ERP 庫存」）轉成標籤時去掉
         capabilities: [name.replace(/\s+/g, ''), '結果格式化輸出'],
       },
-      content: '我先幫你擬了一版設定，右側可以看到。名稱、說明和步驟都可以再跟我說要怎麼調。',
+      content: '我先幫你擬了一版設定，右側可以看到。名稱、技能描述和步驟都可以再跟我說要怎麼調。',
       actions: [ACTION_CONFIRM, ACTION_DESCRIPTION, ACTION_STEP],
     }
   }
@@ -407,10 +407,11 @@ export function interpretStudioMessage(text: string, draft: SkillDraft, mode: St
     if (name) return { patch: { name }, content: `已把名稱改成「${name}」。` }
   }
 
-  // 觸發條件已併進說明（跟 RD 討論後只保留說明），舊說法「觸發條件改成…」照樣導到說明
-  if (/說明(是|改成|改為|為|：|:)|觸發/.test(t)) {
-    const desc = stripLead(t, /^.*?(說明|觸發(條件)?)(是|改成|改為|為|要|：|:)?/) || t
-    return { patch: { description: desc }, content: `說明已更新為：${desc}` }
+  // 觸發條件已併進技能描述（跟 RD 討論後只保留技能描述），舊說法「觸發條件改成…」照樣導到技能描述
+  // 欄位正式名稱是「技能描述」；舊說法「說明…」「描述…」照樣導到同一個欄位
+  if (/(技能描述|描述|說明)(是|改成|改為|為|：|:)|觸發/.test(t)) {
+    const desc = stripLead(t, /^.*?(技能描述|描述|說明|觸發(條件)?)(是|改成|改為|為|要|：|:)?/) || t
+    return { patch: { description: desc }, content: `技能描述已更新為：${desc}` }
   }
 
   // RD 的例外／輸出格式／適用範圍：要在「步驟」之前判斷，「例外情況的處理步驟」這種
@@ -559,6 +560,11 @@ export function useSkillStudioConversation() {
   const requestNewSkillDrawer = ref(false)
 
   const isDirty = computed(() => serialize(draft.value) !== snapshot.value)
+  // 修改既有技能、改了還沒存：測試鎖住——測的會是改到一半的內容，跟要啟用的版本對不上，
+  // 先存（存了技能會轉成停用中，見 save()）再到測試啟用。後端模式例外：後端是先測草稿再「記下測過」
+  const testLocked = computed(() =>
+    mode.value === 'edit' && !!savedSkillId.value && isDirty.value && !usesBackend(),
+  )
   // 積木方式多幾項必填：說明／覆蓋能力／指派 Agent 都要user自己填過才能存——
   // 這幾項不再隨選章節自動覆蓋（見 updateBlockDescription 等函式），必須手動確認過一次
   // 步驟必填（RD 技能定義）；後端模式例外——後端技能的內文本身就是 RD 給的整份 skill.md，
@@ -590,7 +596,7 @@ export function useSkillStudioConversation() {
     const missing: string[] = []
     if (!draft.value.name.trim()) missing.push('技能名稱')
     if (!draft.value.instructions.trim()) missing.push('積木組成（至少選一個章節）')
-    if (!draft.value.description.trim()) missing.push('說明')
+    if (!draft.value.description.trim()) missing.push('技能描述')
     if (!draft.value.capabilities.length) missing.push('覆蓋能力')
     if (!draft.value.keywords.length) missing.push('關鍵字')
     if (!draft.value.assignedAgents.length) missing.push('指派 Agent')
@@ -1216,6 +1222,10 @@ export function useSkillStudioConversation() {
         ...rdFieldsOf(d),
       })
       store.updateSkillFiles(savedSkillId.value, d.files)
+      // 內容改過就要重新測過才能上線：存檔後一律轉成停用中、舊測試紀錄作廢，
+      // 到「測試」重新作答後再按「啟用技能」
+      if (store.findSkill(savedSkillId.value)?.isEnabled) store.toggleSkill(savedSkillId.value)
+      store.invalidateAITest(savedSkillId.value)
     }
     snapshot.value = serialize(draft.value)
     return savedSkillId.value
@@ -1298,7 +1308,7 @@ export function useSkillStudioConversation() {
 
   return {
     confirmAgentsBeforeSave,
-    mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, backendSkillId, savedVersion, loadBackendSkill, saveToBackend, usesBackend, backendSaveAction, testedNote, lastSaveKind, draftTested, adviceMode, adviceModeLocked, showAdviceModeSwitch, setAdviceMode, note, blockedReasons, errorHint, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestNewSkillDrawer,
+    mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, backendSkillId, savedVersion, loadBackendSkill, saveToBackend, usesBackend, backendSaveAction, testedNote, lastSaveKind, draftTested, adviceMode, adviceModeLocked, showAdviceModeSwitch, setAdviceMode, note, blockedReasons, errorHint, isDirty, testLocked, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestNewSkillDrawer,
     startCreate, chooseMethod, updateBlocks, updateBlockDescription, updateBlockCapabilities, updateBlockAssignedAgents, updateBlockKeywords, updateBlockOptional,
     loadSkill, send, save, updateFiles, toSnapshot, hydrate, detachSavedSkill,
   }
