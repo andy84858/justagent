@@ -12,7 +12,6 @@ function mountForm(over: Partial<Record<string, unknown>> = {}) {
     props: {
       name: '',
       description: '',
-      triggerHint: '',
       keywords: ['預設關鍵字'],
       capabilities: [],
       assignedAgents: [],
@@ -51,13 +50,11 @@ describe('SkillBlockBasicsForm', () => {
     expect(wrapper.findAll('.sbbf-suggestion-chip')).toHaveLength(3)
   })
 
-  it('觸發情境「AI 建議」：生成 3 句候選；點其中一句套用到 triggerHint', async () => {
+  it('觸發情境欄位已併進說明：表單只剩說明一個文字欄位', () => {
     const wrapper = mountForm()
-    await wrapper.findAll('.sbbf-ai-btn')[1].trigger('click') // 觸發情境
-    const chips = wrapper.findAll('.sbbf-suggestion-chip')
-    expect(chips).toHaveLength(3)
-    await chips[0].trigger('click')
-    expect(wrapper.emitted('update:triggerHint')![0]).toEqual([chips[0].text()])
+    expect(wrapper.text()).not.toContain('觸發情境')
+    expect(wrapper.findAll('.sbbf-textarea')).toHaveLength(1)
+    expect(wrapper.findAll('.sbbf-ai-btn')).toHaveLength(2) // 說明／覆蓋能力
   })
 
   it('點候選清單的關閉鍵：清單收起，不套用任何內容', async () => {
@@ -88,7 +85,7 @@ describe('SkillBlockBasicsForm', () => {
 
   it('覆蓋能力「AI 建議」維持原本單一建議行為：欄位是空的直接套用，不開三選一', async () => {
     const wrapper = mountForm()
-    await wrapper.findAll('.sbbf-ai-btn')[2].trigger('click') // 覆蓋能力
+    await wrapper.findAll('.sbbf-ai-btn')[1].trigger('click') // 覆蓋能力
     expect(wrapper.emitted('update:capabilities')).toBeTruthy()
     expect(wrapper.find('.sbbf-suggestions').exists()).toBe(false)
   })
@@ -101,12 +98,9 @@ describe('SkillBlockBasicsForm', () => {
     expect(popDialog.toast).toHaveBeenCalledWith('請先填寫關鍵字，才能產生 AI 建議')
     expect(wrapper.find('.sbbf-suggestions').exists()).toBe(false)
 
-    await aiBtns[1].trigger('click') // 觸發情境
-    expect(wrapper.find('.sbbf-suggestions').exists()).toBe(false)
-
-    await aiBtns[2].trigger('click') // 覆蓋能力
+    await aiBtns[1].trigger('click') // 覆蓋能力
     expect(wrapper.emitted('update:capabilities')).toBeFalsy()
 
-    expect(popDialog.toast).toHaveBeenCalledTimes(3)
+    expect(popDialog.toast).toHaveBeenCalledTimes(2)
   })
 })

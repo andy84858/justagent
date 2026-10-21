@@ -14,44 +14,29 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     vi.clearAllMocks()
   })
 
-  // sys-cs-001 指派給「客服中心助理」「電商小幫手」兩個 Agent，生成前要使用者自己挑一個
-  async function pickAgentAndGenerate(w: ReturnType<typeof mount>, agent = '客服中心助理') {
-    const chip = w.findAll('.ai-agent-option').find(b => b.text().includes(agent))!
-    await chip.trigger('click')
+  // 答題 Agent 不讓使用者選，直接按「生成測試情境」，由 store 自動挑可調用的 Agent
+  async function generate(w: ReturnType<typeof mount>) {
     await w.find('.ai-generate-btn').trigger('click')
     await new Promise(r => setTimeout(r, 950))
     await w.vm.$nextTick()
   }
 
-  it('初始空狀態：列出可調用這顆技能的 Agent 讓使用者選答題 Agent，還沒選之前不能生成', async () => {
+  it('初始空狀態：不列 Agent 讓使用者選，「生成測試情境」可以直接按', () => {
     const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
     expect(w.find('.ai-idle-hint').exists()).toBe(true)
-    expect(w.findAll('.ai-agent-option').map(b => b.text())).toEqual(['smart_toy 客服中心助理', 'smart_toy 電商小幫手'])
+    expect(w.find('.ai-agent-option').exists()).toBe(false)
     const btn = w.find('.ai-generate-btn')
     expect(btn.text()).toContain('生成測試情境')
-    expect(btn.attributes('disabled')).toBeDefined()
-
-    await w.findAll('.ai-agent-option')[1].trigger('click')
-    expect(w.findAll('.ai-agent-option')[1].classes()).toContain('is-selected')
-    expect(w.find('.ai-generate-btn').attributes('disabled')).toBeUndefined()
+    expect(btn.attributes('disabled')).toBeUndefined()
   })
 
-  it('只有一個可調用的 Agent：直接幫忙選好', () => {
-    const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '單一Agent技能', instructions: 'x', triggerHint: 'y', assignedAgents: ['工程助理'] })
-    const w = mount(SkillTestAI, { props: { skillId: id } })
-    expect(w.findAll('.ai-agent-option')).toHaveLength(1)
-    expect(w.find('.ai-agent-option').classes()).toContain('is-selected')
-    expect(w.find('.ai-generate-btn').attributes('disabled')).toBeUndefined()
-  })
-
-  it('點「生成測試情境」：由選的 Agent 作答，每張情境卡只顯示題目與標註正確答案的兩個按鈕（Agent 的判斷送出後才揭曉）', async () => {
+  it('點「生成測試情境」：由可調用的 Agent 作答，每張情境卡只顯示題目與標註正確答案的兩個按鈕（Agent 的判斷送出後才揭曉）', async () => {
     const store = useSkillStore()
     const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
-    await pickAgentAndGenerate(w, '電商小幫手')
+    await generate(w)
 
-    expect(store.aiTestAnsweringAgent).toBe('電商小幫手')
-    expect(w.find('.ai-answering-agent').text()).toContain('電商小幫手')
+    expect(store.aiTestAnsweringAgent).toBe('客服中心助理')
+    expect(w.find('.ai-answering-agent').text()).toContain('客服中心助理')
     const cards = w.findAll('.scenario-card')
     expect(cards.length).toBeGreaterThanOrEqual(6)
     const first = cards[0]
@@ -65,28 +50,14 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
 
   it('題目生成完成後跳 toast 提示（不推進對話河道）；重新生成也一樣', async () => {
     const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
-    await pickAgentAndGenerate(w)
+    await generate(w)
     expect(popDialog.toast).toHaveBeenCalledTimes(1)
     expect(vi.mocked(popDialog.toast).mock.calls[0][0]).toContain('生成完成')
 
     await w.find('.ai-regenerate-btn').trigger('click')
+    await new Promise(r => setTimeout(r, 950))
     await w.vm.$nextTick()
-    await pickAgentAndGenerate(w, '電商小幫手')
     expect(popDialog.toast).toHaveBeenCalledTimes(2)
-  }, 10000)
-
-  it('「重新生成」先回到選 Agent 的畫面，按取消回到原本的題目，不會清掉', async () => {
-    const store = useSkillStore()
-    const w = mount(SkillTestAI, { props: { skillId: 'sys-cs-001' } })
-    await pickAgentAndGenerate(w)
-    const before = store.aiTestScenarios.map(s => s.id)
-
-    await w.find('.ai-regenerate-btn').trigger('click')
-    expect(w.find('.ai-agent-picker').exists()).toBe(true)
-    expect(w.find('.scenario-card').exists()).toBe(false)
-    await w.find('.ai-cancel-pick-btn').trigger('click')
-    expect(w.findAll('.scenario-card')).toHaveLength(before.length)
-    expect(store.aiTestScenarios.map(s => s.id)).toEqual(before)
   }, 10000)
 
   it('選答案：按鈕變選中樣式，但還不計分（不會立刻顯示答對／答錯）', async () => {
@@ -226,9 +197,6 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     expect(w.findAll('.status-badge').length).toBeGreaterThan(0)
 
     await w.find('.ai-regenerate-btn').trigger('click')
-    await w.vm.$nextTick()
-    // 重新生成先回到選答題 Agent 的畫面，上一次選過的 Agent 預設選好
-    await w.find('.ai-generate-btn').trigger('click')
     await new Promise(r => setTimeout(r, 950))
     await w.vm.$nextTick()
 
@@ -236,9 +204,9 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     expect(w.find('.status-badge').exists()).toBe(false)
   }, 10000)
 
-  it('100% 通過時顯示「啟用技能」按鈕；未 100% 或尚未測試時不顯示', async () => {
+  it('不管 Agent 全對或沒全對，交卷後「下一步」都有可以按的「啟用技能」；還沒交卷時沒有', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能', instructions: 'x', description: 'y', assignedAgents: ['工程助理'] })
     const wrapper = mount(SkillTestAI, { props: { skillId: id } })
 
     expect(wrapper.find('.ai-enable-btn').exists()).toBe(false) // 還沒生成測試情境
@@ -246,9 +214,8 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     await store.generateAITestScenarios(id)
     await wrapper.vm.$nextTick()
     const scenarios = [...store.aiTestScenarios]
-    expect(scenarios.length).toBeGreaterThan(1) // 這個測試要故意答錯至少一題，情境數要夠
+    expect(scenarios.length).toBeGreaterThan(1)
 
-    // 除了最後一題以外全部故意答錯，確定 correct !== total（不會意外全對）
     for (let i = 0; i < scenarios.length - 1; i++) {
       store.answerAITestScenario(id, scenarios[i].id, !scenarios[i].agentAnswer)
     }
@@ -258,12 +225,14 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     store.answerAITestScenario(id, scenarios.at(-1)!.id, scenarios.at(-1)!.agentAnswer)
     await wrapper.vm.$nextTick()
     expect(store.aiTestReport!.correct).not.toBe(store.aiTestReport!.total) // 確認這次真的不是 100%
-    expect(wrapper.find('.ai-enable-btn').exists()).toBe(false)
+    const btn = wrapper.find('.report-next .ai-enable-btn')
+    expect(btn.exists()).toBe(true)
+    expect(btn.attributes('disabled')).toBeUndefined()
   })
 
   it('100% 全對：顯示啟用按鈕，點擊走 SkillEnableFlow 並在確認後呼叫 setAssignedAgents + toggleSkill', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
       store.answerAITestScenario(id, sc.id, sc.agentAnswer) // 全部答對
@@ -289,7 +258,7 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
 
   it('confirmed outcome：指派 Agent 並啟用技能', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能3', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能3', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
       store.answerAITestScenario(id, sc.id, sc.agentAnswer)
@@ -315,9 +284,9 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     expect(skill.assignedAgents).toEqual(['通用助理'])
   })
 
-  it('已經啟用的技能：即使報告 100% 全對，也不顯示「啟用技能」按鈕（避免誤按變成停用）', async () => {
+  it('已經啟用的技能：「啟用技能」反灰（避免誤按變成停用），引導文字說不用再啟用', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '已啟用技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '已啟用技能', instructions: 'x', description: 'y', assignedAgents: [] })
     store.toggleSkill(id) // 模擬「已經是上線中的技能」
     expect(store.findSkill(id)!.isEnabled).toBe(true)
 
@@ -330,13 +299,14 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     const wrapper = mount(SkillTestAI, { props: { skillId: id } })
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.find('.ai-enable-btn').exists()).toBe(false)
+    expect(wrapper.find('.ai-enable-btn').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.report-next').text()).toContain('不用再啟用')
   })
 
   it('跨技能的舊報告不會外洩：技能 A 測完 100% 後，掛載技能 B 的元件不應該顯示啟用按鈕', async () => {
     const store = useSkillStore()
-    const idA = store.createPersonalSkill({ name: '技能A', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    const idB = store.createPersonalSkill({ name: '技能B', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const idA = store.createPersonalSkill({ name: '技能A', instructions: 'x', description: 'y', assignedAgents: [] })
+    const idB = store.createPersonalSkill({ name: '技能B', instructions: 'x', description: 'y', assignedAgents: [] })
 
     await store.generateAITestScenarios(idA)
     for (const sc of [...store.aiTestScenarios]) {
@@ -355,143 +325,100 @@ describe('SkillTestAI：AI 出題、答題 Agent 作答、使用者標註正確�
     expect(store.aiTestScenarios).toEqual([])
   })
 
-  // 還沒存檔的草稿先測試：draftTestId 這個佔位 id 在 store 裡找不到對應的技能，
-  // 但已經有一份測試紀錄（不限 100%）時，讓使用者一次「存檔並啟用」，不用先存檔
-  // 再回來找另一個按鈕重新走一次
-  describe('「儲存並啟用」：還沒存檔但已有測試紀錄', () => {
-    it('還沒存檔、有測試紀錄：顯示「儲存並啟用」；已存檔或還沒測試過都不顯示', async () => {
-      const store = useSkillStore()
-      const wrapper = mount(SkillTestAI, { props: { skillId: 'draft-xyz' } })
-      expect(wrapper.find('.ai-save-enable-btn').exists()).toBe(false) // 還沒生成測試情境
+  // 儲存歸儲存、啟用歸啟用：還沒存檔的草稿測完不能直接啟用，要先按「儲存」；
+  // 存檔後 skillId 換成真正的技能 id（migrateAITestState 把這輪結果帶過去），「啟用技能」就能按
+  it('還沒存檔的草稿：「啟用技能」反灰、引導先儲存；存檔後可以按，沒全對也直接走 Agent 確認', async () => {
+    const store = useSkillStore()
+    await store.generateAITestScenarios('draft-xyz', { name: '草稿技能2', description: 'y', capabilities: [] })
+    const scenarios = [...store.aiTestScenarios]
+    for (const sc of scenarios) store.answerAITestScenario('draft-xyz', sc.id, !sc.agentAnswer)
+    expect(store.aiTestReport!.correct).not.toBe(store.aiTestReport!.total)
 
-      await store.generateAITestScenarios('draft-xyz')
-      for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('draft-xyz', sc.id, !sc.agentAnswer) // 故意答錯，確認不限 100% 也會顯示
-      }
-      await wrapper.vm.$nextTick()
-      expect(wrapper.find('.ai-save-enable-btn').exists()).toBe(true)
-      expect(wrapper.find('.ai-enable-btn').exists()).toBe(false) // 不是「啟用技能」，那顆只給已存檔的 100% 用
+    const wrapper = mount(SkillTestAI, { props: { skillId: 'draft-xyz' } })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ai-enable-btn').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.report-next').text()).toContain('先按「儲存」')
+    expect(wrapper.text()).not.toContain('儲存並啟用')
 
-      // 已存檔的技能不會顯示這顆「儲存並啟用」（已存檔有自己的「啟用技能」按鈕邏輯）
-      const id = store.createPersonalSkill({ name: '已存檔技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-      await store.generateAITestScenarios(id)
-      const savedWrapper = mount(SkillTestAI, { props: { skillId: id } })
-      for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario(id, sc.id, !sc.agentAnswer)
-      }
-      await savedWrapper.vm.$nextTick()
-      expect(savedWrapper.find('.ai-save-enable-btn').exists()).toBe(false)
-    })
+    const realId = store.createPersonalSkill({ name: '草稿技能2', instructions: 'x', description: 'y', assignedAgents: ['工程助理'] })
+    store.migrateAITestState('draft-xyz', realId)
+    await wrapper.setProps({ skillId: realId })
+    expect(wrapper.find('.ai-enable-btn').attributes('disabled')).toBeUndefined()
 
-    it('canSave=false 時按鈕反灰', async () => {
-      const store = useSkillStore()
-      const wrapper = mount(SkillTestAI, { props: { skillId: 'draft-xyz', canSave: false } })
-      await store.generateAITestScenarios('draft-xyz')
-      for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('draft-xyz', sc.id, sc.agentAnswer)
-      }
-      await wrapper.vm.$nextTick()
-      expect(wrapper.find('.ai-save-enable-btn').attributes('disabled')).toBeDefined()
-    })
-
-    it('點擊：呼叫 requestSaveDraft 同步拿到新技能 id，直接走 SkillEnableFlow（100% 全對時直接進 Agent 確認）', async () => {
-      const store = useSkillStore()
-      await store.generateAITestScenarios('draft-xyz', { name: '草稿技能', triggerHint: 'y', capabilities: [] })
-      for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('draft-xyz', sc.id, sc.agentAnswer) // 全對
-      }
-
-      // requestSaveDraft 模擬呼叫端的 conv.save()：同步建立真正的技能、轉記測試結果、
-      // 回傳新 id，不用靠 emit 再等 prop 非同步反應更新
-      const requestSaveDraft = () => {
-        const realId = store.createPersonalSkill({ name: '草稿技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-        store.migrateAITestState('draft-xyz', realId)
-        return realId
-      }
-      const wrapper = mount(SkillTestAI, { props: { skillId: 'draft-xyz', canSave: true, requestSaveDraft } })
-      await wrapper.vm.$nextTick()
-
-      const saveEnableBtn = wrapper.find('.ai-save-enable-btn')
-      expect(saveEnableBtn.exists()).toBe(true)
-      expect(saveEnableBtn.attributes('disabled')).toBeUndefined()
-      await saveEnableBtn.trigger('click')
-      await wrapper.vm.$nextTick()
-
-      const agentDialog = new DOMWrapper(document.body).find('.enable-agent-dialog')
-      expect(agentDialog.exists()).toBe(true) // 100% 全對，aiTestPassRate 已經是 1，直接進 Agent 確認
-      await agentDialog.findAll('.se-agent-chip').find(c => c.text().includes('通用助理'))!.trigger('click')
-      await agentDialog.findAll('button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
-
-      const realId = store.aiTestScenariosSkillId!
-      expect(store.findSkill(realId)!.isEnabled).toBe(true)
-      expect(store.findSkill(realId)!.assignedAgents).toEqual(['通用助理'])
-    })
-
-    it('canSave=false：按鈕反灰，點擊不會觸發任何東西（原生 disabled 行為）', async () => {
-      const store = useSkillStore()
-      await store.generateAITestScenarios('draft-xyz', { name: '草稿技能', triggerHint: 'y', capabilities: [] })
-      for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('draft-xyz', sc.id, sc.agentAnswer)
-      }
-      const requestSaveDraft = vi.fn(() => 'should-not-be-called')
-      const wrapper = mount(SkillTestAI, { props: { skillId: 'draft-xyz', canSave: false, requestSaveDraft } })
-      await wrapper.vm.$nextTick()
-
-      await wrapper.find('.ai-save-enable-btn').trigger('click')
-      await wrapper.vm.$nextTick()
-
-      expect(requestSaveDraft).not.toHaveBeenCalled()
-    })
-
-    it('canSave=true 但 requestSaveDraft 本身回傳 null（例如呼叫端另有判斷拒絕存檔）：不會打開任何對話框，不噴錯', async () => {
-      const store = useSkillStore()
-      await store.generateAITestScenarios('draft-xyz', { name: '草稿技能', triggerHint: 'y', capabilities: [] })
-      for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('draft-xyz', sc.id, sc.agentAnswer)
-      }
-      const requestSaveDraft = vi.fn(() => null)
-      const wrapper = mount(SkillTestAI, { props: { skillId: 'draft-xyz', canSave: true, requestSaveDraft } })
-      await wrapper.vm.$nextTick()
-
-      await wrapper.find('.ai-save-enable-btn').trigger('click')
-      await wrapper.vm.$nextTick()
-
-      expect(requestSaveDraft).toHaveBeenCalledTimes(1)
-      expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
-      expect(new DOMWrapper(document.body).find('.enable-agent-dialog').exists()).toBe(false)
-    })
-
-    it('沒全對：存檔後照樣測過，不擋，直接走 Agent 確認', async () => {
-      const store = useSkillStore()
-      await store.generateAITestScenarios('draft-xyz', { name: '草稿技能2', triggerHint: 'y', capabilities: [] })
-      const scenarios = [...store.aiTestScenarios]
-      expect(scenarios.length).toBeGreaterThan(1)
-      for (let i = 0; i < scenarios.length - 1; i++) {
-        store.answerAITestScenario('draft-xyz', scenarios[i].id, !scenarios[i].agentAnswer)
-      }
-      store.answerAITestScenario('draft-xyz', scenarios.at(-1)!.id, scenarios.at(-1)!.agentAnswer)
-      expect(store.aiTestReport!.correct).not.toBe(store.aiTestReport!.total)
-
-      // 存檔時 migrateAITestState 把這輪結果記到新技能上：測過就能啟用，不看對錯
-      const requestSaveDraft = () => {
-        const realId = store.createPersonalSkill({ name: '草稿技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-        store.migrateAITestState('draft-xyz', realId)
-        return realId
-      }
-      const wrapper = mount(SkillTestAI, { props: { skillId: 'draft-xyz', canSave: true, requestSaveDraft } })
-      await wrapper.vm.$nextTick()
-
-      await wrapper.find('.ai-save-enable-btn').trigger('click')
-      await wrapper.vm.$nextTick()
-
-      expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
-      const agentDialog = new DOMWrapper(document.body).find('.enable-agent-dialog')
-      expect(agentDialog.exists()).toBe(true)
-      await agentDialog.findAll('.se-agent-chip').find(c => c.text().includes('通用助理'))!.trigger('click')
-      await agentDialog.findAll('button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
-
-      const realId = store.aiTestScenariosSkillId!
-      expect(store.findSkill(realId)!.isEnabled).toBe(true)
-    })
+    await wrapper.find('.ai-enable-btn').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
+    const agentDialog = new DOMWrapper(document.body).find('.enable-agent-dialog')
+    expect(agentDialog.exists()).toBe(true)
+    await agentDialog.findAll('button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
+    expect(store.findSkill(realId)!.isEnabled).toBe(true)
   })
+})
+
+describe('SkillTestAI：交卷後在測試報告裡引導下一步（不推進對話河道）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('全對、已存檔還沒啟用：引導按「啟用技能」', async () => {
+    const store = useSkillStore()
+    const id = store.createPersonalSkill({ name: '引導技能A', instructions: 'x', description: 'y', assignedAgents: ['工程助理'] })
+    const w = mount(SkillTestAI, { props: { skillId: id } })
+    await store.generateAITestScenarios(id)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.agentAnswer)
+    await w.vm.$nextTick()
+    const next = w.find('.report-next')
+    expect(next.classes()).toContain('is-pass')
+    expect(next.text()).toContain('啟用技能')
+    expect(w.find('.report-next-retest').exists()).toBe(false)
+  }, 10000)
+
+  it('全對、已經是啟用中：說不用再啟用，「啟用技能」反灰', async () => {
+    const store = useSkillStore()
+    const w = mount(SkillTestAI, { props: { skillId: 'personal-001' } })
+    await store.generateAITestScenarios('personal-001')
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario('personal-001', sc.id, sc.agentAnswer)
+    await w.vm.$nextTick()
+    expect(w.find('.report-next').text()).toContain('不用再啟用')
+    expect(w.find('.report-next .ai-enable-btn').attributes('disabled')).toBeDefined()
+  }, 10000)
+
+  it('沒全對：列出怎麼改（用呼叫端給的 editHint）、怎麼重測；「重新測試」直接重新出題', async () => {
+    const store = useSkillStore()
+    const id = store.createPersonalSkill({ name: '引導技能B', instructions: 'x', description: 'y', assignedAgents: ['工程助理'] })
+    const w = mount(SkillTestAI, { props: { skillId: id, editHint: '到對話裡告訴 Agent 哪裡要調整' } })
+    await store.generateAITestScenarios(id)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.agentAnswer)
+    await w.vm.$nextTick()
+    const next = w.find('.report-next')
+    expect(next.classes()).toContain('is-fail')
+    expect(next.text()).toContain(`判斷錯了 ${store.aiTestScenarios.length} 題`)
+    expect(next.text()).toContain('到對話裡告訴 Agent 哪裡要調整')
+    expect(next.text()).toContain('重新測試')
+
+    await w.find('.report-next-retest').trigger('click')
+    await new Promise(r => setTimeout(r, 950))
+    await w.vm.$nextTick()
+    expect(store.aiTestScenarios.every(s => s.status === 'pending')).toBe(true)
+    expect(w.find('.ai-report').exists()).toBe(false)
+  }, 10000)
+
+  it('沒全對也有啟用那一行：已存檔就指向「啟用技能」；草稿還沒存檔則先引導「儲存」', async () => {
+    const store = useSkillStore()
+    const id = store.createPersonalSkill({ name: '引導技能C', instructions: 'x', description: 'y', assignedAgents: ['工程助理'] })
+    const w = mount(SkillTestAI, { props: { skillId: id } })
+    await store.generateAITestScenarios(id)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.agentAnswer)
+    await w.vm.$nextTick()
+    expect(w.find('.report-next').text()).toContain('測過就能啟用、不用全對')
+    expect(w.find('.report-next .ai-enable-btn').attributes('disabled')).toBeUndefined()
+
+    const d = mount(SkillTestAI, { props: { skillId: 'draft-guide', draftContext: { name: '草稿', description: 'y', capabilities: [], assignedAgents: ['工程助理'] } } })
+    await store.generateAITestScenarios('draft-guide', { name: '草稿', description: 'y', capabilities: [], assignedAgents: ['工程助理'] })
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario('draft-guide', sc.id, !sc.agentAnswer)
+    await d.vm.$nextTick()
+    expect(d.find('.report-next').text()).toContain('先按「儲存」')
+    expect(d.find('.report-next .ai-enable-btn').attributes('disabled')).toBeDefined()
+  }, 10000)
 })

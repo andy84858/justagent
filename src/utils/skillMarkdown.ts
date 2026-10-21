@@ -45,7 +45,6 @@ export function buildSkillMarkdown(skill: Skill): string {
   lines.push('---')
   lines.push(`name: ${slugify(skill.name)}`)
   lines.push(`description: ${skill.description}`)
-  if (skill.triggerHint) lines.push(`trigger: ${skill.triggerHint}`)
   lines.push('---')
   lines.push('')
   lines.push(`# ${skill.name}`)

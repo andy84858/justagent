@@ -12,7 +12,7 @@ describe('duplicateAsPersonalSkill 保留 composition', () => {
     const sourceId = store.createPersonalSkill({
       name: '渠道週報',
       instructions: '依序產出以下章節：\n1. 渠道核心 KPI：各渠道工作階段數、轉換率、收益、每工作階段收益。',
-      triggerHint: 't',
+      description: 't',
       isEnabled: true,
       assignedAgents: [],
       composition: { sectionIds: ['ch_kpi', 'ch_traffic'] },
@@ -30,7 +30,7 @@ describe('duplicateAsPersonalSkill 保留 composition', () => {
     const sourceId = store.createPersonalSkill({
       name: '查 ERP 庫存',
       instructions: '1. 查詢庫存',
-      triggerHint: 't',
+      description: 't',
       isEnabled: true,
       assignedAgents: [],
     })

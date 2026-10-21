@@ -873,6 +873,13 @@
   }
 }
 
+// 啟用時確認可調用 Agent：chip 跟對話框其他內容一樣置中，最後一排跟下方按鈕
+// 留出間距——不然 chip 淡入上浮的動畫期間會疊到「確認並啟用」上
+.drawer-confirm-dialog.enable-agent-dialog .se-agent-grid {
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
 // 啟用閘門對話框「立即測試」：就地嵌入 SkillTestAI，對話框放寬、內容區自己捲動
 .drawer-confirm-dialog.enable-gate-dialog.is-testing {
   width: 640px;

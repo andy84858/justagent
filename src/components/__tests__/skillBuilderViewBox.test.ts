@@ -187,7 +187,7 @@ describe('skillBuilderViewBox', () => {
     expect(block.data.data.snapshot.draft.sectionIds).toEqual(['promo_kpi', 'ch_kpi'])
     expect(block.blockName).toBe('行銷週報')
 
-    // 回「基本設定」填其餘必填欄位：說明手打，觸發情境按「AI 建議」開出 3 句候選選一句，
+    // 回「基本設定」填其餘必填欄位：說明手打，
     // 關鍵字手打，覆蓋能力用「AI 建議」套用依章節算出的建議（欄位目前是空的，直接套用
     // 不會跳確認對話框），指派 Agent 至少勾一個
     await stepTabs[0].trigger('click')
@@ -195,10 +195,7 @@ describe('skillBuilderViewBox', () => {
     await wrapper.find('.sce-tag-input').trigger('keydown.enter') // 關鍵字：AI 建議要先有關鍵字才給產生
     await wrapper.find('.sbbf-textarea').setValue('每週一產出的行銷週報')
     const aiBtns = wrapper.findAll('.sbbf-ai-btn')
-    await aiBtns[1].trigger('click') // 觸發情境：開出 3 句候選
-    await flushPromises()
-    await wrapper.findAll('.sbbf-suggestion-chip')[0].trigger('click') // 選第一句套用
-    await aiBtns[2].trigger('click') // 覆蓋能力
+    await aiBtns[1].trigger('click') // 覆蓋能力
     await wrapper.find('.se-agent-chip').trigger('click')
     await flushPromises()
 

@@ -51,13 +51,6 @@
                 </div>
 
                 <div class="svc-field">
-                  <div class="svc-field-label">觸發關鍵字</div>
-                  <div :class="['svc-field-val', fieldClass(v1.triggerHint, v2.triggerHint, 'old')]">
-                    {{ v1.triggerHint || '（未設定）' }}
-                  </div>
-                </div>
-
-                <div class="svc-field">
                   <div class="svc-field-label">覆蓋能力</div>
                   <div class="svc-caps">
                     <span
@@ -103,13 +96,6 @@
                 <div class="svc-field">
                   <div class="svc-field-label">說明</div>
                   <div :class="['svc-field-val', fieldClass(v1.description, v2.description, 'new')]">{{ v2.description }}</div>
-                </div>
-
-                <div class="svc-field">
-                  <div class="svc-field-label">觸發關鍵字</div>
-                  <div :class="['svc-field-val', fieldClass(v1.triggerHint, v2.triggerHint, 'new')]">
-                    {{ v2.triggerHint || '（未設定）' }}
-                  </div>
                 </div>
 
                 <div class="svc-field">

@@ -56,10 +56,10 @@ const statusTagClass = computed(() => {
   return ''
 })
 
-// 後端技能卡片顯示最新版與有沒有測過；其餘維持原本的啟用／測試狀態文字
+// 後端技能卡片只顯示有沒有測過（「我的技能」不顯示版本號）；其餘維持原本的啟用／測試狀態文字
 const statusText = computed(() => {
   const bv = props.skill.backendVersion
-  if (bv) return `第 ${bv.version} 版 · ${bv.tested ? '測過' : '沒測過'}`
+  if (bv) return bv.tested ? '測過' : '沒測過'
   if (props.skill.isEnabled) return '啟用中'
   return props.skill.aiTestPassRate == null ? '尚未測試' : '停用中'
 })

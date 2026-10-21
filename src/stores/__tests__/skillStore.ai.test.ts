@@ -78,7 +78,7 @@ describe('generateAITestScenarios', () => {
     const id = store.createPersonalSkill({
       name: '行銷週報快篩',
       instructions: 'x',
-      triggerHint: '當使用者要求產出行銷報告時',
+      description: '當使用者要求產出行銷報告時',
       assignedAgents: [],
       capabilities: ['會員人物誌', '活動排行'],
     })
@@ -87,25 +87,25 @@ describe('generateAITestScenarios', () => {
     expect(store.aiTestScenarios.some(s => s.input.includes('會員人物誌'))).toBe(true)
   })
 
-  it('個人技能沒有覆蓋能力標籤：退回用觸發情境裡的關鍵字；兩者都沒有則退回技能名稱', async () => {
+  it('個人技能沒有覆蓋能力標籤：退回用說明裡的關鍵字；兩者都沒有則退回技能名稱', async () => {
     const store = useSkillStore()
     const withHint = store.createPersonalSkill({
-      name: '查詢技能', instructions: 'x', triggerHint: '當使用者詢問庫存數量、倉庫存量、缺貨狀態等相關問題時使用', assignedAgents: [],
+      name: '查詢技能', instructions: 'x', description: '當使用者詢問庫存數量、倉庫存量、缺貨狀態等相關問題時使用', assignedAgents: [],
     })
     await store.generateAITestScenarios(withHint)
     expect(store.aiTestScenarios.some(s => s.input.includes('庫存'))).toBe(true)
 
-    const bare = store.createPersonalSkill({ name: '裸技能', instructions: 'x', triggerHint: '', assignedAgents: [] })
+    const bare = store.createPersonalSkill({ name: '裸技能', instructions: 'x', description: '', assignedAgents: [] })
     await store.generateAITestScenarios(bare)
     expect(store.aiTestScenarios.some(s => s.input === '裸技能')).toBe(true)
   })
 
-  it('積木組裝的技能（有 composition）：觸發情境優先於覆蓋能力，就算覆蓋能力有填也不用', async () => {
+  it('積木組裝的技能（有 composition）：說明優先於覆蓋能力，就算覆蓋能力有填也不用', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({
       name: '行銷週報',
       instructions: 'x',
-      triggerHint: '當使用者詢問庫存查詢相關問題時',
+      description: '當使用者詢問庫存查詢相關問題時',
       assignedAgents: [],
       capabilities: ['會員人物誌', '活動排行'],
       composition: { sectionIds: ['promo_kpi'] },
@@ -115,12 +115,12 @@ describe('generateAITestScenarios', () => {
     expect(store.aiTestScenarios.some(s => s.input.includes('會員人物誌'))).toBe(false)
   })
 
-  it('積木組裝的技能：觸發情境抓不到字（太短／空白）才退回覆蓋能力', async () => {
+  it('積木組裝的技能：說明抓不到字（太短／空白）才退回覆蓋能力', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({
       name: '行銷週報',
       instructions: 'x',
-      triggerHint: '',
+      description: '',
       assignedAgents: [],
       capabilities: ['會員人物誌'],
       composition: { sectionIds: ['promo_kpi'] },
@@ -134,14 +134,14 @@ describe('generateAITestScenarios', () => {
     const id = store.createPersonalSkill({
       name: '行銷週報',
       instructions: 'x',
-      triggerHint: '當使用者詢問庫存查詢相關問題時',
+      description: '當使用者詢問庫存查詢相關問題時',
       assignedAgents: [],
       capabilities: ['會員人物誌'],
     })
     await store.generateAITestScenarios(id)
     // 只檢查正例（這顆技能自己的關鍵字來源）：反例現在可能因為「沒指派 Agent 時
     // 借用團隊內最相似技能的 Agent」這個新功能，合理地帶進剛好也含「庫存查詢」
-    // 字樣的其他技能關鍵字，不代表觸發情境蓋過了覆蓋能力的優先順序
+    // 字樣的其他技能關鍵字，不代表說明蓋過了覆蓋能力的優先順序
     const positives = store.aiTestScenarios.filter(s => s.expectedTrigger)
     expect(positives.some(s => s.input.includes('會員人物誌'))).toBe(true)
     expect(positives.some(s => s.input.includes('庫存查詢'))).toBe(false)
@@ -150,7 +150,7 @@ describe('generateAITestScenarios', () => {
   it('動態產生的觸發邊緣題目，不管關鍵字多寡都至少 5 題（反例題庫會補齊）', async () => {
     const store = useSkillStore()
     // 完全沒有任何可用內容：只能退回技能名稱當唯一的正例關鍵字
-    const bare = store.createPersonalSkill({ name: '裸技能', instructions: 'x', triggerHint: '', assignedAgents: [] })
+    const bare = store.createPersonalSkill({ name: '裸技能', instructions: 'x', description: '', assignedAgents: [] })
     await store.generateAITestScenarios(bare)
     expect(store.aiTestScenarios.length).toBeGreaterThanOrEqual(5)
     // 只有一個關鍵字時不該出現「關鍵字重複兩次」的疊字題目
@@ -158,7 +158,7 @@ describe('generateAITestScenarios', () => {
 
     // 覆蓋能力標籤很多：正例題目變多，但不會爆量也一樣有反例
     const rich = store.createPersonalSkill({
-      name: '多能力技能', instructions: 'x', triggerHint: 'y', assignedAgents: [],
+      name: '多能力技能', instructions: 'x', description: 'y', assignedAgents: [],
       capabilities: ['能力A', '能力B', '能力C', '能力D', '能力E'],
     })
     await store.generateAITestScenarios(rich)
@@ -169,11 +169,11 @@ describe('generateAITestScenarios', () => {
   it('搶觸發偵測：共用 Agent 又文字相似的技能，其關鍵字會被當成「觸發邊緣」反例，並在 expectedBehavior 指名是哪顆技能', async () => {
     const store = useSkillStore()
     const aId = store.createPersonalSkill({
-      name: '庫存查詢助手A', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      name: '庫存查詢助手A', instructions: '查詢庫存數量與倉庫存量', description: '當使用者詢問庫存數量、倉庫存量時',
       assignedAgents: ['客服中心助理'], capabilities: ['庫存查詢'],
     })
     const bId = store.createPersonalSkill({
-      name: '庫存查詢助手B', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      name: '庫存查詢助手B', instructions: '查詢庫存數量與倉庫存量', description: '當使用者詢問庫存數量、倉庫存量時',
       assignedAgents: ['客服中心助理'], capabilities: ['庫存盤點'],
     })
     await store.generateAITestScenarios(bId)
@@ -188,10 +188,10 @@ describe('generateAITestScenarios', () => {
   it('搶觸發偵測：沒有指派 Agent、團隊內也找不到內容相近的技能可借用時，反例全部退回無關關鍵字池', async () => {
     const store = useSkillStore()
     store.createPersonalSkill({
-      name: '沒指派助手A', instructions: 'x', triggerHint: '當使用者詢問測試時', assignedAgents: [], capabilities: ['測試能力'],
+      name: '沒指派助手A', instructions: 'x', description: '當使用者詢問測試時', assignedAgents: [], capabilities: ['測試能力'],
     })
     const bId = store.createPersonalSkill({
-      name: '沒指派助手B', instructions: 'x', triggerHint: '當使用者詢問測試時', assignedAgents: [], capabilities: ['測試能力'],
+      name: '沒指派助手B', instructions: 'x', description: '當使用者詢問測試時', assignedAgents: [], capabilities: ['測試能力'],
     })
     await store.generateAITestScenarios(bId)
     // 沒指派助手A 自己也沒有 Agent，不符合「借用」的候選資格（候選一定要本身有指派
@@ -202,11 +202,11 @@ describe('generateAITestScenarios', () => {
   it('搶觸發偵測：沒有指派 Agent 時改用純內容相似度在團隊內找最像的技能，索引回它指派的 Agent 借來測試', async () => {
     const store = useSkillStore()
     const aId = store.createPersonalSkill({
-      name: '庫存盤點助手A', instructions: '盤點庫存數量與調撥記錄', triggerHint: '當使用者詢問庫存盤點或調撥時',
+      name: '庫存盤點助手A', instructions: '盤點庫存數量與調撥記錄', description: '當使用者詢問庫存盤點或調撥時',
       assignedAgents: ['倉儲管理助理'], capabilities: ['庫存盤點'],
     })
     const bId = store.createPersonalSkill({
-      name: '庫存盤點助手B', instructions: '盤點庫存數量與調撥記錄', triggerHint: '當使用者詢問庫存盤點或調撥時',
+      name: '庫存盤點助手B', instructions: '盤點庫存數量與調撥記錄', description: '當使用者詢問庫存盤點或調撥時',
       assignedAgents: [], capabilities: ['庫存覆核'],
     })
     await store.generateAITestScenarios(bId)
@@ -227,10 +227,10 @@ describe('generateAITestScenarios', () => {
   it('搶觸發偵測：競爭技能的關鍵字剛好跟自己的正例一字不差時，直接丟掉這題，不會同一句輸入正反例矛盾', async () => {
     const store = useSkillStore()
     store.createPersonalSkill({
-      name: '完全同標籤A', instructions: 'x', triggerHint: 'y', assignedAgents: ['工程助理'], capabilities: ['共用標籤'],
+      name: '完全同標籤A', instructions: 'x', description: 'y', assignedAgents: ['工程助理'], capabilities: ['共用標籤'],
     })
     const bId = store.createPersonalSkill({
-      name: '完全同標籤B', instructions: 'x', triggerHint: 'y', assignedAgents: ['工程助理'], capabilities: ['共用標籤'],
+      name: '完全同標籤B', instructions: 'x', description: 'y', assignedAgents: ['工程助理'], capabilities: ['共用標籤'],
     })
     await store.generateAITestScenarios(bId)
     const matches = store.aiTestScenarios.filter(s => s.input === '共用標籤')
@@ -241,18 +241,18 @@ describe('generateAITestScenarios', () => {
   it('生成題目期間的敘事文字：有指派 Agent 時講出 Agent 跟找到的相似技能；沒指派時講另一套；每次生成都重算', async () => {
     const store = useSkillStore()
     const aId = store.createPersonalSkill({
-      name: '敘事技能A', instructions: '查詢庫存', triggerHint: '當使用者詢問庫存時',
+      name: '敘事技能A', instructions: '查詢庫存', description: '當使用者詢問庫存時',
       assignedAgents: ['會議記錄助理'], capabilities: ['庫存查詢'],
     })
     const bId = store.createPersonalSkill({
-      name: '敘事技能B', instructions: '查詢庫存', triggerHint: '當使用者詢問庫存時',
+      name: '敘事技能B', instructions: '查詢庫存', description: '當使用者詢問庫存時',
       assignedAgents: ['會議記錄助理'], capabilities: ['庫存查詢'],
     })
     await store.generateAITestScenarios(bId)
     expect(store.aiTestGenerationNarration.some(l => l.includes('會議記錄助理'))).toBe(true)
     expect(store.aiTestGenerationNarration.some(l => l.includes('敘事技能A'))).toBe(true)
 
-    const noAgentId = store.createPersonalSkill({ name: '敘事技能C', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const noAgentId = store.createPersonalSkill({ name: '敘事技能C', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(noAgentId)
     expect(store.aiTestGenerationNarration.some(l => l.includes('還沒有指派 Agent'))).toBe(true)
     expect(store.aiTestGenerationNarration.some(l => l.includes('敘事技能A'))).toBe(false)
@@ -281,13 +281,13 @@ describe('generateAITestScenarios', () => {
   })
 
   // 還沒存檔的草稿想先測試：store 裡還沒有這顆技能（或這個 id 根本不是真正的技能
-  // id，只是草稿佔位 id），draftContext 補上目前草稿的 name／triggerHint／capabilities
+  // id，只是草稿佔位 id），draftContext 補上目前草稿的 name／description／capabilities
   // 當作組題關鍵字的來源
   it('skillId 在 store 裡找不到技能、但有帶 draftContext：用 draftContext 的內容組題目關鍵字', async () => {
     const store = useSkillStore()
     await store.generateAITestScenarios('draft-abc', {
       name: '草稿技能',
-      triggerHint: '當使用者詢問庫存時',
+      description: '當使用者詢問庫存時',
       capabilities: ['庫存查詢', '缺貨提醒'],
     })
     expect(store.aiTestScenarios.every(s => s.tag === 'trigger_edge')).toBe(true)
@@ -297,17 +297,17 @@ describe('generateAITestScenarios', () => {
   it('skillId 真的對應到技能：優先用 store 裡的技能內容，忽略 draftContext（例如技能已存檔但 draftContext 是舊的）', async () => {
     const store = useSkillStore()
     const id = store.createPersonalSkill({
-      name: '已存檔技能', instructions: 'x', triggerHint: 'y', assignedAgents: [], capabilities: ['真正的能力'],
+      name: '已存檔技能', instructions: 'x', description: 'y', assignedAgents: [], capabilities: ['真正的能力'],
     })
-    await store.generateAITestScenarios(id, { name: '不該被用到', triggerHint: '', capabilities: ['不該出現的標籤'] })
+    await store.generateAITestScenarios(id, { name: '不該被用到', description: '', capabilities: ['不該出現的標籤'] })
     expect(store.aiTestScenarios.some(s => s.input.includes('真正的能力'))).toBe(true)
     expect(store.aiTestScenarios.some(s => s.input.includes('不該出現的標籤'))).toBe(false)
   })
 
-  it('每次產生題目都記下當下的 name／triggerHint／capabilities 快照', async () => {
+  it('每次產生題目都記下當下的 name／description／capabilities 快照', async () => {
     const store = useSkillStore()
-    await store.generateAITestScenarios('draft-abc', { name: '草稿技能', triggerHint: 'y', capabilities: ['a'] })
-    expect(store.aiTestScenariosSnapshot).toBe(JSON.stringify({ name: '草稿技能', triggerHint: 'y', capabilities: ['a'] }))
+    await store.generateAITestScenarios('draft-abc', { name: '草稿技能', description: 'y', capabilities: ['a'] })
+    expect(store.aiTestScenariosSnapshot).toBe(JSON.stringify({ name: '草稿技能', description: 'y', capabilities: ['a'] }))
   })
 })
 
@@ -318,8 +318,8 @@ describe('migrateAITestState', () => {
 
   it('草稿佔位 id 換成真正的技能 id：aiTestScenariosSkillId 跟著改，不會被當成換了一顆技能而清掉', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '剛存檔的技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    await store.generateAITestScenarios('draft-abc', { name: '剛存檔的技能', triggerHint: 'y', capabilities: [] })
+    const id = store.createPersonalSkill({ name: '剛存檔的技能', instructions: 'x', description: 'y', assignedAgents: [] })
+    await store.generateAITestScenarios('draft-abc', { name: '剛存檔的技能', description: 'y', capabilities: [] })
     store.migrateAITestState('draft-abc', id)
     expect(store.aiTestScenariosSkillId).toBe(id)
     expect(store.aiTestScenarios.length).toBeGreaterThan(0)
@@ -330,8 +330,8 @@ describe('migrateAITestState', () => {
 
   it('已經有完整測試報告：把答對比例寫回剛存檔的技能，不用為了同樣內容重新作答一次', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '剛存檔的技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    await store.generateAITestScenarios('draft-abc', { name: '剛存檔的技能', triggerHint: 'y', capabilities: [] })
+    const id = store.createPersonalSkill({ name: '剛存檔的技能', instructions: 'x', description: 'y', assignedAgents: [] })
+    await store.generateAITestScenarios('draft-abc', { name: '剛存檔的技能', description: 'y', capabilities: [] })
     for (const sc of [...store.aiTestScenarios]) {
       store.answerAITestScenario('draft-abc', sc.id, sc.agentAnswer)
     }
@@ -413,7 +413,7 @@ describe('answerAITestScenario', () => {
 
   it('答完一輪後，答對比例會寫回這顆技能的 aiTestPassRate（有值就是測過）', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '測試技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '測試技能', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
     const scenarios = [...store.aiTestScenarios]
     for (const sc of scenarios) {
@@ -425,7 +425,7 @@ describe('answerAITestScenario', () => {
 
   it('重新生成測驗：該技能的 aiTestPassRate 重設為未測試狀態，isEnabled 不受影響', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '測試技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '測試技能2', instructions: 'x', description: 'y', assignedAgents: [] })
     store.toggleSkill(id)
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
@@ -477,7 +477,7 @@ describe('submitAITestAnswers：統一送答案，一次全部計分', () => {
 
   it('答對比例寫回技能的 aiTestPassRate，跟逐題作答的既有行為一致', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '批次送出技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '批次送出技能', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
     const scenarios = [...store.aiTestScenarios]
     const answers = Object.fromEntries(scenarios.map(sc => [sc.id, sc.agentAnswer]))
@@ -497,11 +497,11 @@ describe('答題 Agent：使用者選 Agent 作答、自己標註正確答案', 
     expect(store.getAITestCallableAgents('sys-cs-001')).toEqual({ agents: ['客服中心助理', '電商小幫手'], source: 'assigned' })
 
     store.createPersonalSkill({
-      name: '庫存盤點助手A', instructions: '盤點庫存數量與調撥記錄', triggerHint: '當使用者詢問庫存盤點或調撥時',
+      name: '庫存盤點助手A', instructions: '盤點庫存數量與調撥記錄', description: '當使用者詢問庫存盤點或調撥時',
       assignedAgents: ['倉儲管理助理'], capabilities: ['庫存盤點'],
     })
     const bId = store.createPersonalSkill({
-      name: '庫存盤點助手B', instructions: '盤點庫存數量與調撥記錄', triggerHint: '當使用者詢問庫存盤點或調撥時',
+      name: '庫存盤點助手B', instructions: '盤點庫存數量與調撥記錄', description: '當使用者詢問庫存盤點或調撥時',
       assignedAgents: [], capabilities: ['庫存覆核'],
     })
     expect(store.getAITestCallableAgents(bId)).toEqual({ agents: ['倉儲管理助理'], source: 'inferred', inferredFrom: '庫存盤點助手A' })
@@ -532,11 +532,11 @@ describe('答題 Agent：使用者選 Agent 作答、自己標註正確答案', 
   it('搶觸發反例是 Agent 最容易搞混的地方：第一題搶觸發反例 Agent 會判斷錯（誤觸發）', async () => {
     const store = useSkillStore()
     store.createPersonalSkill({
-      name: '庫存查詢助手A', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      name: '庫存查詢助手A', instructions: '查詢庫存數量與倉庫存量', description: '當使用者詢問庫存數量、倉庫存量時',
       assignedAgents: ['客服中心助理'], capabilities: ['庫存查詢'],
     })
     const bId = store.createPersonalSkill({
-      name: '庫存查詢助手B', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      name: '庫存查詢助手B', instructions: '查詢庫存數量與倉庫存量', description: '當使用者詢問庫存數量、倉庫存量時',
       assignedAgents: ['客服中心助理'], capabilities: ['庫存盤點'],
     })
     await store.generateAITestScenarios(bId, undefined, '客服中心助理')
@@ -548,11 +548,11 @@ describe('答題 Agent：使用者選 Agent 作答、自己標註正確答案', 
   it('答題 Agent 調用不到的競爭技能，不算搶觸發', async () => {
     const store = useSkillStore()
     store.createPersonalSkill({
-      name: '庫存查詢助手A', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      name: '庫存查詢助手A', instructions: '查詢庫存數量與倉庫存量', description: '當使用者詢問庫存數量、倉庫存量時',
       assignedAgents: ['客服中心助理'], capabilities: ['庫存查詢'],
     })
     const bId = store.createPersonalSkill({
-      name: '庫存查詢助手B', instructions: '查詢庫存數量與倉庫存量', triggerHint: '當使用者詢問庫存數量、倉庫存量時',
+      name: '庫存查詢助手B', instructions: '查詢庫存數量與倉庫存量', description: '當使用者詢問庫存數量、倉庫存量時',
       assignedAgents: ['客服中心助理', '工程助理'], capabilities: ['庫存盤點'],
     })
     await store.generateAITestScenarios(bId, undefined, '工程助理')

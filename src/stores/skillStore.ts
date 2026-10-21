@@ -35,7 +35,6 @@ export interface SkillVersion {
   name: string
   description: string
   instructions?: string
-  triggerHint?: string
   capabilities?: SkillCapability[]
   createdAt: string
   createdBy?: string
@@ -85,7 +84,6 @@ export interface SkillSuggestionEntry {
   id: string
   name: string
   description: string
-  triggerHint: string
   steps: string[]
   reason: string
   conversationId: string
@@ -120,7 +118,6 @@ export interface Skill {
   forkSourceId?: string
   forkSourceVersion?: string
   instructions?: string
-  triggerHint?: string
   capabilities?: SkillCapability[]
   keywords?: string[]          // 只有積木組裝必填；對話方式不會有這個欄位
   functionType?: SkillFunctionType   // 探索頁分類/篩選用，選填不影響既有消費者
@@ -140,6 +137,9 @@ export interface Skill {
   hasLibraryUpdate?: boolean
   submitNote?: string
   submitMode?: 'version_update' | 'new_skill'
+  // 「更新版本」送審時使用者選定要更新的 Library 技能；預設帶入 derivedFrom，
+  // 但使用者可以改選其他技能（或手寫建立、沒有來源的技能也能指定要更新哪一個）
+  updateTargetId?: string
   targetScope?: 'enterprise' | 'team'
   targetTeamName?: string
   submittedBy?: string
@@ -165,7 +165,6 @@ export interface CreateSkillPayload {
   name: string
   description?: string
   instructions: string
-  triggerHint: string
   // 選填：createPersonalSkill() 不讀這個欄位（個人技能一律以停用落地，見該函式註解）；
   // createSkill()（Library／企業技能發佈用）才會用到，沒帶時預設 true。
   isEnabled?: boolean
@@ -182,7 +181,6 @@ export interface UpdateSkillPayload {
   name: string
   description?: string
   instructions: string
-  triggerHint: string
   isEnabled: boolean
   assignedAgents: string[]
   files?: SkillFile[]
@@ -193,7 +191,7 @@ export interface UpdateSkillPayload {
 // AI 賦能對話修改用：只允許動這幾個內容欄位，不碰狀態／版本／來源關係。
 // assignedAgents／keywords 只有積木方式的「基本設定」步驟會帶到；對話方式不傳這兩個
 // 欄位（composable 的 save() 傳 undefined），維持原本「指派 Agent 只能透過啟用流程調整」的行為
-export type StudioPatch = Partial<Pick<Skill, 'name' | 'description' | 'instructions' | 'triggerHint' | 'capabilities' | 'assignedAgents' | 'keywords' | 'composition'>>
+export type StudioPatch = Partial<Pick<Skill, 'name' | 'description' | 'instructions' | 'capabilities' | 'assignedAgents' | 'keywords' | 'composition'>>
 
 export interface DraftSkill {
   id: string
@@ -204,7 +202,6 @@ export interface DraftSkill {
   forkSourceId?: string
   createdAt: string
   updatedAt: string
-  triggerHint?: string
   assignedAgents?: string[]
   files?: SkillFile[]
 }
@@ -321,7 +318,6 @@ const MOCK_SKILLS: Skill[] = [
         forkSourceVersion: '初始客服版',
         upstreamUpdateStatus: 'update_available' as const,
         instructions: '你是專門處理退貨問題的客服助理。\n\n當客戶提出退貨請求時：\n1. 查詢訂單狀態確認購買日期\n2. 確認是否在 30 天退貨期限內\n3. 依據退貨政策給出具體建議\n4. 如有疑問轉接人工客服',
-        triggerHint: '退貨、換貨、退款、品質問題',
         capabilities: [
           '訂單狀態查詢',
           '退貨資格判斷',
@@ -355,7 +351,6 @@ const MOCK_SKILLS: Skill[] = [
             name: '客服機器人 (退貨版)',
             description: '針對退貨問題，依設定的服務原則回應退貨政策與審核',
             instructions: '你是專門處理退貨問題的客服助理。\n\n當客戶提出退貨請求時：\n1. 查詢訂單狀態確認購買日期\n2. 確認是否在 30 天退貨期限內\n3. 依據退貨政策給出具體建議\n4. 如有疑問轉接人工客服',
-            triggerHint: '退貨、換貨、退款、品質問題',
             capabilities: [
               '訂單狀態查詢',
               '退貨資格判斷',
@@ -376,7 +371,6 @@ const MOCK_SKILLS: Skill[] = [
             name: '客服機器人 (退貨版)',
             description: '針對退貨問題，依設定的服務原則回應退貨政策與審核，新增超保固期彈性處理',
             instructions: '你是專門處理退貨問題的客服助理。\n\n當客戶提出退貨請求時：\n1. 查詢訂單狀態確認購買日期\n2. 確認是否在 30 天退貨期限內\n3. 依據退貨政策給出具體建議\n4. 若超過期限但有正當理由，提供「主管特批申請」流程\n5. 如有疑問轉接人工客服\n\n特殊規則：\n- 商品瑕疵不受期限限制，隨時可申請\n- VIP 客戶享有 45 天退貨優惠期',
-            triggerHint: '退貨、換貨、退款、品質問題、保固、瑕疵、VIP',
             capabilities: [
               '訂單狀態查詢',
               '退貨資格判斷',
@@ -581,7 +575,6 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.99,
     avgLatencyMs: 120,
     instructions: '你是 ERP 庫存查詢助理。\n根據 SKU 查詢各倉庫即時庫存量。\n\n支援功能：\n- 指定倉庫查詢\n- 多倉庫匯總\n- 低於安全存量自動標示',
-    triggerHint: '庫存、SKU、倉庫、庫存查詢',
     files: [
       {
         id: 'sf-ext-erp-001-1',
@@ -614,7 +607,6 @@ const MOCK_SKILLS: Skill[] = [
         name: 'ERP 庫存查詢',
         description: '根據產品 ID 查詢即時庫存量',
         instructions: '你是 ERP 庫存查詢助理。\n根據 SKU 查詢即時庫存量並回報。',
-        triggerHint: '庫存、SKU、庫存查詢',
         capabilities: [
           '即時庫存查詢',
         ],
@@ -633,7 +625,6 @@ const MOCK_SKILLS: Skill[] = [
         name: 'ERP 庫存查詢',
         description: '根據產品 ID 查詢即時庫存量，支援多個倉庫',
         instructions: '你是 ERP 庫存查詢助理。\n根據 SKU 查詢各倉庫即時庫存量。\n\n支援功能：\n- 指定倉庫查詢\n- 多倉庫匯總\n- 低於安全存量自動標示',
-        triggerHint: '庫存、SKU、倉庫、庫存查詢',
         capabilities: [
           '即時庫存查詢',
           '多倉庫整合',
@@ -665,7 +656,6 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.87,
     avgLatencyMs: 410,
     instructions: '你是業務團隊的週報助理。\n\n每週根據提供的銷售數據，自動生成結構化業績週報：\n1. 本週總業績與目標達成率\n2. Top 5 商品銷售排行\n3. 各區域業績比較\n4. 下週改善建議\n\n輸出格式以 Markdown 條列式為主，數字加粗標示。',
-    triggerHint: '週報、業績、銷售報告、商品排行、達標率',
     capabilities: [
       '銷售數據分析',
       '商品排行生成',
@@ -688,7 +678,6 @@ const MOCK_SKILLS: Skill[] = [
         name: '業績週報生成',
         description: '根據本週銷售數據自動整理業績摘要，含商品排行與目標達成率分析',
         instructions: '你是業務團隊的週報助理。\n\n每週根據提供的銷售數據，自動生成結構化業績週報：\n1. 本週總業績與目標達成率\n2. Top 5 商品銷售排行\n3. 各區域業績比較\n4. 下週改善建議',
-        triggerHint: '週報、業績、銷售報告',
         capabilities: [
           '銷售數據分析',
           '商品排行生成',
@@ -720,7 +709,6 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.91,
     avgLatencyMs: 320,
     instructions: '你是行銷文案助理，根據活動主題、目標受眾與品牌調性生成行銷文案。\n\n輸出包含：\n1. 社群貼文（Facebook / Instagram / LinkedIn 各一）\n2. EDM 主旨行（3 個選項）\n3. CTA 按鈕文案（2 個選項）\n\n語調依品牌調性調整，預設為專業但親切。',
-    triggerHint: '文案、行銷、貼文、EDM、社群、活動',
     capabilities: [
       '多平台文案生成',
       'CTA最佳化',
@@ -803,12 +791,12 @@ const MOCK_AI_SCENARIO_TEMPLATES: Record<string, ScenarioTemplate[]> = {
   ],
 }
 
-// 觸發情境是一整句話，簡單切出長度 ≥2 的詞塊當關鍵字──不是真的中文斷詞，
+// 說明是一整句話，簡單切出長度 ≥2 的詞塊當關鍵字──不是真的中文斷詞，
 // 只是要湊出幾個看起來像關鍵字的片段，跟 findSimilarSkill() 的 bigram 比對是不同用途
-function extractTriggerKeywords(triggerHint: string | undefined): string[] {
-  const hint = triggerHint?.trim()
-  if (!hint) return []
-  return hint
+function extractDescriptionKeywords(description: string | undefined): string[] {
+  const text = description?.trim()
+  if (!text) return []
+  return text
     .replace(/[，。！？、；：,.!?;:「」『』]/g, ' ')
     .split(/\s+/)
     .filter(w => w.length >= 2)
@@ -824,27 +812,26 @@ const NEGATIVE_KEYWORD_SETS = ['天氣 心情 電影', '旅遊 美食 運動', '
 // 技能的主要功能」「今天天氣真好」這類「正常流程」「邊界情況」範例句子其實跟這顆技能的
 // 實際內容完全無關，對使用者來說沒有驗證意義——那兩個標籤需要真正理解技能完整語意才寫得出
 // 有意義的題目，沒辦法無中生有。只留「觸發邊緣」：用這顆技能自己的覆蓋能力標籤（沒有的話
-// 退回觸發情境裡的關鍵字，再沒有就用技能名稱本身）組成片語輸入，測的是「關鍵字夠不夠精準
+// 退回說明裡的關鍵字，再沒有就用技能名稱本身）組成片語輸入，測的是「關鍵字夠不夠精準
 // 讓它正確判斷要不要觸發」，這點所有技能都適用、也都跟內容本身相關。
 // 題數至少 5 題：關鍵字夠多時正例最多到 4 題、反例固定 2 題；關鍵字很少（甚至只有技能名稱
 // 這一個）時正例可能只有 1 題，改從反例池多補幾題撐到底線，而不是讓題目少到沒驗證意義
-// 只收 name／triggerHint／capabilities／composition 四個欄位：草稿還沒存檔時沒有完整的
+// 只收 name／description／capabilities／composition 四個欄位：草稿還沒存檔時沒有完整的
 // Skill 物件可用，只需要這四個就能組題目關鍵字，不用整顆 Skill
 // assignedAgents 只用來決定「答題 Agent 可以選誰」，不參與組題關鍵字
-export type TriggerEdgeSource = Pick<Skill, 'name' | 'triggerHint' | 'capabilities' | 'composition' | 'assignedAgents'>
+export type TriggerEdgeSource = Pick<Skill, 'name' | 'capabilities' | 'composition' | 'assignedAgents'> & { description?: string }
 
-// 積木組裝的技能（有 composition）：「觸發情境」是使用者在「基本設定」步驟手寫、
-// 專門描述「什麼時候該觸發」的必填欄位，比覆蓋能力（偏「這顆技能做什麼」而非
-// 「什麼時候該用」）更貼近是非題要驗證的東西，優先用它抓關鍵字，沒抓到字才退回
-// 覆蓋能力。對話建立的技能沒有這層區分（兩個欄位都是 AI 推導或口語補充的，沒有
-// 「哪個更權威」的差異），維持原本「覆蓋能力優先」不變
+// 積木組裝的技能（有 composition）：「說明」是使用者在「基本設定」步驟手寫的必填欄位，
+// 比覆蓋能力（章節名稱拼出來的標籤）更貼近使用者自己對「什麼時候該用」的描述，優先用它
+// 抓關鍵字，沒抓到字才退回覆蓋能力。對話建立的技能說明常是使用者第一句口語需求，
+// 維持原本「覆蓋能力優先」不變
 function keywordPoolFor(source: TriggerEdgeSource | undefined): string[] {
   const name = source?.name?.trim() || '這顆技能'
-  const fromTriggerHint = extractTriggerKeywords(source?.triggerHint)
+  const fromDescription = extractDescriptionKeywords(source?.description)
   const fromCapabilities = source?.capabilities ?? []
   const keywords = source?.composition
-    ? (fromTriggerHint.length ? fromTriggerHint : fromCapabilities)
-    : (fromCapabilities.length ? fromCapabilities : fromTriggerHint)
+    ? (fromDescription.length ? fromDescription : fromCapabilities)
+    : (fromCapabilities.length ? fromCapabilities : fromDescription)
   return keywords.length ? keywords : [name]
 }
 
@@ -867,7 +854,7 @@ function bigramOverlapScore(a: string, b: string): number {
 function bestTextMatch(haystack: string, candidates: Skill[]): { skill: Skill; score: number } | null {
   let best: { skill: Skill; score: number } | null = null
   for (const s of candidates) {
-    const score = bigramOverlapScore(haystack, `${s.name}${s.triggerHint ?? ''}${s.instructions ?? ''}`)
+    const score = bigramOverlapScore(haystack, `${s.name}${s.description ?? ''}${s.instructions ?? ''}`)
     if (score > 0 && (!best || score > best.score)) best = { skill: s, score }
   }
   return best
@@ -890,7 +877,7 @@ function findCompetingSkills(
   candidates: Skill[],
   answeringAgent?: string,
 ): { competing: Skill[]; inferredFrom?: Skill } {
-  const haystack = `${skill.name}${skill.triggerHint ?? ''}${skill.instructions ?? ''}`
+  const haystack = `${skill.name}${skill.description ?? ''}${skill.instructions ?? ''}`
   let agents = new Set(skill.assignedAgents ?? [])
   let inferredFrom: Skill | undefined
 
@@ -906,7 +893,7 @@ function findCompetingSkills(
 
   const competing = candidates
     .filter(s => s.id !== skill.id && (s.assignedAgents ?? []).some(a => agents.has(a)))
-    .map(s => ({ skill: s, score: bigramOverlapScore(haystack, `${s.name}${s.triggerHint ?? ''}${s.instructions ?? ''}`) }))
+    .map(s => ({ skill: s, score: bigramOverlapScore(haystack, `${s.name}${s.description ?? ''}${s.instructions ?? ''}`) }))
     .filter(x => x.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 2)
@@ -941,7 +928,7 @@ function buildGenerationNarration(
         : '沒有發現其他搶著被觸發的相似技能。',
     )
   }
-  lines.push(`由「${answeringAgent}」擔任答題 Agent，逐題判斷該不該觸發這顆技能。`)
+  lines.push(`由「${answeringAgent}」逐題判斷該不該觸發這顆技能。`)
   lines.push('正在產生測試情境...')
   return lines
 }
@@ -1052,7 +1039,6 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     avgLatencyMs: 0,
     assignedAgents: ['會議記錄助理', '業務分析助理'],
     instructions: '你是一個週報助理，協助使用者根據本週資料自動生成結構化週報。',
-    triggerHint: '週報、會議紀錄、任務清單、彙整',
     capabilities: [
       '資料整合',
       '週報格式輸出',
@@ -1244,7 +1230,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
   },
   {
     // 用「AI 賦能」(SkillStudio) 的「用行銷積木組裝」方式建立——composition
-    // 記錄選了哪些章節積木，instructions/triggerHint/capabilities 都是
+    // 記錄選了哪些章節積木，instructions/capabilities 都是
     // deriveFromSections() 依選中的章節依序組出來的內容，格式要跟那份邏輯一致
     id: 'personal-007',
     name: '行銷週報快篩',
@@ -1261,7 +1247,6 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     testPassRate: 0,
     avgLatencyMs: 0,
     instructions: '依序產出以下章節：\n1. 會員人物誌：性別 × 年齡層 × 主力購買品類 × RFM 行為分群的四維輪廓。\n2. 活動排行：各促銷活動帶動效果排行，並自動生成圖表。\n3. 渠道別流量與收益貢獻：各渠道流量佔比與收益貢獻對照，圖表自動生成。',
-    triggerHint: '當使用者要求產出行銷報告，或提到「TA 用戶畫像、行銷活動成效、渠道績效」相關分析時',
     assignedAgents: ['業務分析助理'],
     capabilities: [
       '會員人物誌',
@@ -1277,7 +1262,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     // 閘門對話框——demo 時不用先去找哪顆技能符合條件
     id: 'personal-008',
     name: '待測試新流程示範（demo）',
-    description: '示範項目：尚未通過 AI 快速測試，點「啟用技能」會先看到測試閘門對話框',
+    description: '示範項目：尚未通過 AI 快速測試，點「啟用」會先看到測試閘門對話框',
     type: 'extension',
     origin: 'manually_created',
     creationMethod: 'manual',
@@ -1293,7 +1278,6 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     // routeIntent 的 findSimilarSkill 是全域 bigram 比對沒有門檻，一有共同的
     // 兩字重疊就可能被誤判成「找到相近技能」，見 useSkillStudioConversation.ts
     instructions: '這是示範用的一顆項目，內容可以隨時調整，主要用來展示啟用前的測試流程。',
-    triggerHint: '示範用途，沒有特定觸發情境',
     assignedAgents: ['通用助理'],
     capabilities: [
       '示範能力',
@@ -1347,9 +1331,9 @@ export function canEnableSkill(skill: Skill): boolean {
   return isSkillTested(skill)
 }
 
-// 啟用前的檢查沒過時，決策對話框要顯示的說明文字
+// 啟用前還沒測過時，決策對話框要顯示的說明文字：建議先測，但不強制——使用者可以不測試直接啟用
 export function describeAiTestGateReason(): string {
-  return '這顆技能這一版還沒測過。請先做一次 AI 快速測試，交卷就算測過，不用全部答對。'
+  return '這顆技能這一版還沒測過。建議先做一次 AI 快速測試（交卷就算測過，不用全部答對）；也可以不測試，直接啟用。'
 }
 
 export const useSkillStore = defineStore('skillStore', () => {
@@ -1380,7 +1364,7 @@ export const useSkillStore = defineStore('skillStore', () => {
   const aiTestScenarios = ref<AITestScenario[]>([])
   const aiTestReport = ref<AITestReport | null>(null)
   const aiTestScenariosSkillId = ref<string | null>(null)
-  // 產生題目當下用來組關鍵字的 name／triggerHint／capabilities 快照（JSON 字串）：
+  // 產生題目當下用來組關鍵字的 name／description／capabilities 快照（JSON 字串）：
   // 跟「目前的草稿內容」比對，用來判斷題目是不是已經跟不上最新的編輯內容，
   // 跟存不存檔無關——草稿還沒存檔也一樣可能需要提醒「重新生成」
   const aiTestScenariosSnapshot = ref<string | null>(null)
@@ -1472,7 +1456,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       testPassRate: 0,
       avgLatencyMs: 0,
       instructions: draft.instructions,
-      triggerHint: draft.triggerHint,
       assignedAgents: draft.assignedAgents,
       forkSourceId: draft.forkSourceId,
     }
@@ -1593,7 +1576,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       testPassRate: 0,
       avgLatencyMs: 0,
       instructions: data.instructions,
-      triggerHint: data.triggerHint,
       assignedAgents: data.assignedAgents,
       files: data.files ?? [],
       capabilities: data.capabilities ?? [],
@@ -1615,7 +1597,6 @@ export const useSkillStore = defineStore('skillStore', () => {
     }
     if (patch.description !== undefined) skill.description = patch.description
     if (patch.instructions !== undefined) skill.instructions = patch.instructions
-    if (patch.triggerHint !== undefined) skill.triggerHint = patch.triggerHint
     if (patch.capabilities !== undefined) skill.capabilities = [...patch.capabilities]
     if (patch.assignedAgents !== undefined) skill.assignedAgents = [...patch.assignedAgents]
     if (patch.keywords !== undefined) skill.keywords = [...patch.keywords]
@@ -1635,7 +1616,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       name: data.name,
       description: data.description ?? '',
       instructions: data.instructions,
-      triggerHint: data.triggerHint,
       assignedAgents: data.assignedAgents,
       type: 'extension',
       origin: 'manually_created',
@@ -1656,7 +1636,6 @@ export const useSkillStore = defineStore('skillStore', () => {
     skill.name = data.name
     if (data.description !== undefined) skill.description = data.description
     skill.instructions = data.instructions
-    skill.triggerHint = data.triggerHint
     skill.isEnabled = data.isEnabled
     skill.assignedAgents = data.assignedAgents
     skill.files = data.files ?? []
@@ -1818,13 +1797,16 @@ export const useSkillStore = defineStore('skillStore', () => {
     note: string,
     versionName: string,
     targetScope: 'enterprise' | 'team' = 'enterprise',
-    targetTeamName?: string
+    targetTeamName?: string,
+    updateTargetId?: string
   ): void {
     const skill = myPersonalSkillsRef.value.find(s => s.id === id)
     if (!skill) return
     skill.personalStatus = 'reviewing'
     skill.submitNote = note
     skill.submitMode = mode
+    const targetId = mode === 'version_update' ? (updateTargetId ?? skill.derivedFrom) : undefined
+    skill.updateTargetId = targetId
     skill.targetScope = targetScope
     skill.targetTeamName = targetScope === 'team' ? targetTeamName : undefined
     skill.submittedBy = 'jocelyn.tseng'
@@ -1832,8 +1814,8 @@ export const useSkillStore = defineStore('skillStore', () => {
     // 更新版本模式：在來源 Library 技能的版本歷史新增一筆「審核中」版本，
     // 內容是這顆個人技能目前的快照。「建立新技能」模式的技能還不存在於
     // Library，沒有版本歷史可以掛
-    if (mode === 'version_update' && skill.derivedFrom) {
-      const target = _findAny(skill.derivedFrom)
+    if (targetId) {
+      const target = _findAny(targetId)
       if (target) {
         target.versions ??= []
         const now = new Date().toISOString()
@@ -1846,7 +1828,6 @@ export const useSkillStore = defineStore('skillStore', () => {
           name: skill.name,
           description: skill.description,
           instructions: skill.instructions,
-          triggerHint: skill.triggerHint,
           capabilities: skill.capabilities,
           createdAt: now,
           createdBy: skill.submittedBy,
@@ -1879,7 +1860,6 @@ export const useSkillStore = defineStore('skillStore', () => {
     target.name = ver.name
     target.description = ver.description
     if (ver.instructions !== undefined) target.instructions = ver.instructions
-    if (ver.triggerHint !== undefined) target.triggerHint = ver.triggerHint
     if (ver.capabilities !== undefined) target.capabilities = ver.capabilities
 
     target.auditLog ??= []
@@ -1928,7 +1908,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       testPassRate: 0,
       avgLatencyMs: 0,
       instructions: source.instructions,
-      triggerHint: source.triggerHint,
       capabilities: source.capabilities ? [...source.capabilities] : undefined,
       // 來源若是用行銷積木組裝出來的技能，複本要保留 composition——否則複本重開時
       // 會被 draftFromSkill() 誤判成對話建立，只給對話編輯介面，跟來源的建立方式不一致
@@ -1988,7 +1967,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       id: 'demo-weekly-report-digest',
       name: '週報摘要整理',
       description: '整理本週對話中的重點需求，套用固定格式產出週報摘要',
-      triggerHint: '偵測到「彙整本週重點＋套用週報格式」類型的整理需求',
       steps: ['彙整本週對話重點', '套用週報格式產出摘要'],
       reason: '示範用資料，方便直接看到「AI 建議建立的技能」的樣子',
       conversationId: 'demo',
@@ -1997,7 +1975,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       id: 'demo-complaint-triage',
       name: '客訴分類彙整',
       description: '將客服對話中的客訴內容自動分類，彙整成週期性報表',
-      triggerHint: '偵測到「客服對話標記＋客訴週報彙整」類型的整理需求',
       steps: ['標記對話中的客訴類別', '彙整成客訴分類週報'],
       reason: '示範用資料，方便直接看到複數建議同時存在的樣子',
       conversationId: 'demo',
@@ -2006,7 +1983,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       id: 'demo-inventory-alert',
       name: '庫存異常示警',
       description: '偵測庫存數量低於安全水位時，自動整理成示警清單',
-      triggerHint: '偵測到「庫存低於安全水位＋自動示警」類型的整理需求',
       steps: ['查詢各品項庫存數量', '篩選低於安全水位的品項並示警'],
       reason: '示範用資料，方便直接看到複數建議同時存在的樣子',
       conversationId: 'demo',
@@ -2015,7 +1991,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       id: 'demo-meeting-action-items',
       name: '會議行動項目追蹤',
       description: '從會議記錄中擷取行動項目，整理成待辦追蹤清單',
-      triggerHint: '偵測到「會議記錄整理＋行動項目追蹤」類型的整理需求',
       steps: ['擷取會議記錄中的行動項目', '整理成待辦追蹤清單並標註負責人'],
       reason: '示範用資料，方便直接看到複數建議同時存在的樣子',
       conversationId: 'demo',
@@ -2042,7 +2017,6 @@ export const useSkillStore = defineStore('skillStore', () => {
         name: draft.name,
         description: draft.description,
         instructions: draft.instructions,
-        triggerHint: draft.triggerHint ?? '',
         isEnabled: true,
         assignedAgents: draft.assignedAgents ?? [],
       })
@@ -2123,7 +2097,7 @@ export const useSkillStore = defineStore('skillStore', () => {
   }
 
   // draftContext：還沒存檔的草稿想先測試時，store 裡找不到這顆技能（或還是舊版本），
-  // 用呼叫端目前編輯中的 name／triggerHint／capabilities 當作組題關鍵字的來源
+  // 用呼叫端目前編輯中的 name／description／capabilities 當作組題關鍵字的來源
   // 還沒存檔的草稿先測試過，存檔那一刻才拿到真正的技能 id：測試結果是同一份草稿
   // 測出來的，不該因為 id 從佔位的草稿 id 換成真正的技能 id，就被
   // ensureAITestStateForSkill 誤判成「換了一顆技能」而清掉。已經有完整報告的話，
@@ -2139,9 +2113,9 @@ export const useSkillStore = defineStore('skillStore', () => {
     skill.aiTestPassRate = rate
   }
 
-  // 生成題目前讓使用者選「答題 Agent」的候選：可以調用這顆技能的 Agent。
+  // 「答題 Agent」的候選：可以調用這顆技能的 Agent（使用者不選，generateAITestScenarios 自動挑）。
   // 還沒指派 Agent 時，比照搶觸發掃描借用團隊內最相似技能的 Agent（source: 'inferred'）；
-  // 連借都借不到（全新草稿、團隊內沒有相近技能）才開放所有 Agent 讓使用者自己挑
+  // 連借都借不到（全新草稿、團隊內沒有相近技能）才退回所有 Agent
   function getAITestCallableAgents(
     skillId: string,
     draftContext?: TriggerEdgeSource,
@@ -2182,14 +2156,14 @@ export const useSkillStore = defineStore('skillStore', () => {
       ? findCompetingSkills(skill, [...myPersonalSkills.value, ...flatSkills.value], agent)
       : { competing: [], inferredFrom: undefined }
     aiTestGenerationNarration.value = MOCK_AI_SCENARIO_TEMPLATES[skillId]
-      ? [`正在為「${source?.name?.trim() || '這顆技能'}」產生測試情境，由「${agent}」擔任答題 Agent...`]
+      ? [`正在為「${source?.name?.trim() || '這顆技能'}」產生測試情境，由「${agent}」逐題判斷...`]
       : buildGenerationNarration(source, skill, competingSkills, inferredFrom, agent)
     aiTestIsGenerating.value = true
 
     await new Promise(r => setTimeout(r, 900))
     aiTestScenariosSnapshot.value = JSON.stringify({
       name: source?.name ?? '',
-      triggerHint: source?.triggerHint ?? '',
+      description: source?.description ?? '',
       capabilities: source?.capabilities ?? [],
     })
     const templates = MOCK_AI_SCENARIO_TEMPLATES[skillId] ?? generateDynamicTriggerEdgeScenarios(source, competingSkills)
@@ -2233,11 +2207,11 @@ export const useSkillStore = defineStore('skillStore', () => {
     let summary: string
     const agent = aiTestAnsweringAgent.value ? `「${aiTestAnsweringAgent.value}」` : 'Agent'
     if (rate === 1) {
-      summary = `${agent}全部判斷正確，這顆技能的觸發條件描述得夠清楚。`
+      summary = `${agent}全部判斷正確，這顆技能的說明描述得夠清楚。`
     } else if (rate >= 0.7) {
-      summary = `${agent}判斷對 ${correct} / ${total} 題，整體不錯；看看判斷錯的題目，補強 triggerHint 或說明，讓 Agent 更容易分辨。`
+      summary = `${agent}判斷對 ${correct} / ${total} 題，整體不錯；看看判斷錯的題目，補強說明，讓 Agent 更容易分辨。`
     } else {
-      summary = `${agent}只判斷對 ${correct} / ${total} 題，建議重新檢視這顆技能的 triggerHint 與說明，修改後再測一次。`
+      summary = `${agent}只判斷對 ${correct} / ${total} 題，建議重新檢視這顆技能的說明，修改後再測一次。`
     }
 
     aiTestReport.value = { total, correct, byTag, summary }
@@ -2299,7 +2273,7 @@ export const useSkillStore = defineStore('skillStore', () => {
       role: 'agent',
       content: `（Mock）已依「${name}」的技能指令處理您的問題：「${message}」${capsText}，正在產生結果...`,
       toolTrace: [
-        { name: 'match-trigger-hint', latencyMs: 156 },
+        { name: 'match-skill-description', latencyMs: 156 },
         { name: 'apply-instructions', latencyMs: 234 },
       ],
     })

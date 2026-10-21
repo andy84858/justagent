@@ -53,15 +53,15 @@ describe('SkillEditor 全新建立多一個「測試」步驟', () => {
   it('建立模式的步驟指示器有 4 格，最後一格是「測試」', async () => {
     const { wrapper } = await mountCreate()
     const labels = wrapper.findAll('.se-step-label').map(l => l.text())
-    expect(labels).toEqual(['基本資訊', '技能指令', '確認', '測試'])
+    expect(labels).toEqual(['基本資訊', '技能內文', '確認', '測試'])
   })
 
   it('編輯既有技能：步驟指示器維持 3 格，沒有「測試」', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '既有技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '既有技能', instructions: 'x', description: 'y', assignedAgents: [] })
     const { wrapper } = await mountEditFor(id)
     const labels = wrapper.findAll('.se-step-label').map(l => l.text())
-    expect(labels).toEqual(['基本資訊', '技能指令', '確認'])
+    expect(labels).toEqual(['基本資訊', '技能內文', '確認'])
   })
 
   it('確認步驟按「下一步」：立即建立技能（未啟用）、留在編輯頁、切到測試步驟並渲染對應 skillId 的 SkillTestAI', async () => {
@@ -69,7 +69,7 @@ describe('SkillEditor 全新建立多一個「測試」步驟', () => {
     const { wrapper, router } = await mountCreate()
     const editor = wrapper.findComponent(SkillEditor)
     ;(editor.vm as any).form.name = '全新技能A'
-    ;(editor.vm as any).form.triggerHint = '當使用者需要這個技能時'
+    ;(editor.vm as any).form.description = '當使用者需要這個技能時'
     ;(editor.vm as any).form.capabilities = ['能力A']
     ;(editor.vm as any).form.assignedAgents = ['通用助理']
     ;(editor.vm as any).currentStep = 2
@@ -94,7 +94,7 @@ describe('SkillEditor 全新建立多一個「測試」步驟', () => {
     const { wrapper, router } = await mountCreate()
     const editor = wrapper.findComponent(SkillEditor)
     ;(editor.vm as any).form.name = '全新技能B'
-    ;(editor.vm as any).form.triggerHint = '當使用者需要這個技能時'
+    ;(editor.vm as any).form.description = '當使用者需要這個技能時'
     ;(editor.vm as any).form.capabilities = ['能力A']
     ;(editor.vm as any).form.assignedAgents = ['通用助理']
     ;(editor.vm as any).currentStep = 2
@@ -112,11 +112,11 @@ describe('SkillEditor 全新建立多一個「測試」步驟', () => {
     expect(router.currentRoute.value.path).toBe('/view/Skills')
   })
 
-  it('技能建立後，「基本資訊」「技能指令」步驟鎖定不能再點回去，「確認」仍可切回', async () => {
+  it('技能建立後，「基本資訊」「技能內文」步驟鎖定不能再點回去，「確認」仍可切回', async () => {
     const { wrapper } = await mountCreate()
     const editor = wrapper.findComponent(SkillEditor)
     ;(editor.vm as any).form.name = '全新技能C'
-    ;(editor.vm as any).form.triggerHint = '當使用者需要這個技能時'
+    ;(editor.vm as any).form.description = '當使用者需要這個技能時'
     ;(editor.vm as any).form.capabilities = ['能力A']
     ;(editor.vm as any).form.assignedAgents = ['通用助理']
     ;(editor.vm as any).currentStep = 2
@@ -126,12 +126,12 @@ describe('SkillEditor 全新建立多一個「測試」步驟', () => {
 
     const steps = wrapper.findAll('.se-step')
     expect(steps[0].attributes('disabled')).toBeDefined() // 基本資訊：鎖定
-    expect(steps[1].attributes('disabled')).toBeDefined() // 技能指令：鎖定
+    expect(steps[1].attributes('disabled')).toBeDefined() // 技能內文：鎖定
     expect(steps[2].attributes('disabled')).toBeUndefined() // 確認：仍可切回查看
 
     await steps[2].trigger('click')
     expect((editor.vm as any).currentStep).toBe(2)
-    // 回到確認步驟後，不應該再顯示「上一步」（會通往被鎖定的技能指令步驟）
+    // 回到確認步驟後，不應該再顯示「上一步」（會通往被鎖定的技能內文步驟）
     expect(wrapper.findAll('.se-footer button').some(b => b.text().includes('上一步'))).toBe(false)
   })
 
@@ -139,7 +139,7 @@ describe('SkillEditor 全新建立多一個「測試」步驟', () => {
     const { wrapper } = await mountCreate()
     const editor = wrapper.findComponent(SkillEditor)
     ;(editor.vm as any).form.name = '全新技能D'
-    ;(editor.vm as any).form.triggerHint = '當使用者需要這個技能時'
+    ;(editor.vm as any).form.description = '當使用者需要這個技能時'
     ;(editor.vm as any).form.capabilities = ['能力A']
     ;(editor.vm as any).form.assignedAgents = ['通用助理']
     ;(editor.vm as any).currentStep = 2
@@ -158,7 +158,7 @@ describe('SkillEditor 全新建立多一個「測試」步驟', () => {
     const { wrapper } = await mountCreate()
     const editor = wrapper.findComponent(SkillEditor)
     ;(editor.vm as any).form.name = '全新技能E'
-    ;(editor.vm as any).form.triggerHint = '當使用者需要這個技能時'
+    ;(editor.vm as any).form.description = '當使用者需要這個技能時'
     ;(editor.vm as any).form.capabilities = ['能力A']
     ;(editor.vm as any).form.assignedAgents = ['通用助理']
     ;(editor.vm as any).currentStep = 2

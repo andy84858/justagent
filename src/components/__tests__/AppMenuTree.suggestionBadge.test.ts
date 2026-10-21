@@ -32,11 +32,11 @@ describe('AppMenuTree「技能管理」旁的 AI 建議徽章', () => {
     const store = useSkillStore()
     store.pendingSuggestions.map(s => s.id).forEach(id => store.dismissSuggestion(id))
     store.addSuggestion({
-      id: 's1', name: '技能A', description: 'x', triggerHint: 'y',
+      id: 's1', name: '技能A', description: 'x',
       steps: [], reason: 'r1', conversationId: 'conv4',
     })
     store.addSuggestion({
-      id: 's2', name: '技能B', description: 'x', triggerHint: 'y',
+      id: 's2', name: '技能B', description: 'x',
       steps: [], reason: 'r2', conversationId: 'conv4',
     })
     const wrapper = await mountTree()
@@ -51,7 +51,7 @@ describe('AppMenuTree「技能管理」旁的 AI 建議徽章', () => {
     const store = useSkillStore()
     store.pendingSuggestions.map(s => s.id).forEach(id => store.dismissSuggestion(id))
     store.addSuggestion({
-      id: 's1', name: '技能A', description: 'x', triggerHint: 'y',
+      id: 's1', name: '技能A', description: 'x',
       steps: [], reason: 'r1', conversationId: 'conv4',
     })
     const wrapper = await mountTree()

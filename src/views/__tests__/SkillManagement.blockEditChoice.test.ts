@@ -45,7 +45,7 @@ describe('SkillManagement 編輯選擇框：積木組裝的技能只給積木面
     const skillId = store.createPersonalSkill({
       name: '行銷週報',
       instructions: '依序產出以下章節：\n1. 促銷核心 KPI：完成訂單數、GMV、折扣總額、折扣佔比、規則數。',
-      triggerHint: '當使用者要求產出行銷報告，或提到「行銷活動成效」相關分析時',
+      description: '當使用者要求產出行銷報告，或提到「行銷活動成效」相關分析時',
       isEnabled: true,
       assignedAgents: [],
       composition: { sectionIds: ['promo_kpi'] },
@@ -87,7 +87,7 @@ describe('SkillManagement 編輯選擇框：積木組裝的技能只給積木面
     const sourceId = store.createPersonalSkill({
       name: '渠道週報',
       instructions: '依序產出以下章節：\n1. 渠道核心 KPI：各渠道工作階段數、轉換率、收益、每工作階段收益。',
-      triggerHint: 't',
+      description: 't',
       isEnabled: true,
       assignedAgents: [],
       composition: { sectionIds: ['ch_kpi'] },

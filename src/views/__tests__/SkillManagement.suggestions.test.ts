@@ -51,7 +51,7 @@ describe('SkillManagement 建議建立的技能', () => {
     store.pendingSuggestions.map(s => s.id).forEach(id => store.dismissSuggestion(id))
     store.addSuggestion({
       id: 'conv4-sales-report', name: '產品銷售報告整理', description: '查詢並產出報告',
-      triggerHint: '偵測到銷售整理需求', steps: ['查詢數據', '套用規範產出'],
+      steps: ['查詢數據', '套用規範產出'],
       reason: '查詢銷售資料＋套用部門報告規範', conversationId: 'conv4',
     })
     const { wrapper } = await mountPage()
@@ -68,7 +68,7 @@ describe('SkillManagement 建議建立的技能', () => {
     store.pendingSuggestions.map(s => s.id).forEach(id => store.dismissSuggestion(id))
     store.addSuggestion({
       id: 'conv4-sales-report', name: '產品銷售報告整理', description: '查詢並產出報告',
-      triggerHint: '偵測到銷售整理需求', steps: ['查詢數據', '套用規範產出'],
+      steps: ['查詢數據', '套用規範產出'],
       reason: '查詢銷售資料＋套用部門報告規範', conversationId: 'conv4',
     })
     const { wrapper } = await mountPage()
@@ -87,7 +87,7 @@ describe('SkillManagement 建議建立的技能', () => {
     store.pendingSuggestions.map(s => s.id).forEach(id => store.dismissSuggestion(id))
     store.addSuggestion({
       id: 'conv4-sales-report', name: '產品銷售報告整理', description: '查詢並產出報告',
-      triggerHint: '偵測到銷售整理需求', steps: ['查詢數據', '套用規範產出'],
+      steps: ['查詢數據', '套用規範產出'],
       reason: '查詢銷售資料＋套用部門報告規範', conversationId: 'conv4',
     })
     const { wrapper, router } = await mountPage()
@@ -109,7 +109,7 @@ describe('SkillManagement 建議建立的技能', () => {
     store.pendingSuggestions.map(s => s.id).forEach(id => store.dismissSuggestion(id))
     store.addSuggestion({
       id: 'conv4-sales-report', name: '產品銷售報告整理', description: '查詢並產出報告',
-      triggerHint: '偵測到銷售整理需求', steps: ['查詢數據', '套用規範產出'],
+      steps: ['查詢數據', '套用規範產出'],
       reason: '查詢銷售資料＋套用部門報告規範', conversationId: 'conv4',
     })
     const { wrapper, router } = await mountPage()
@@ -133,7 +133,7 @@ describe('SkillManagement 建議建立的技能', () => {
     store.pendingSuggestions.map(s => s.id).forEach(id => store.dismissSuggestion(id))
     store.addSuggestion({
       id: 'conv4-sales-report', name: '產品銷售報告整理', description: '查詢並產出報告',
-      triggerHint: '偵測到銷售整理需求', steps: ['查詢數據', '套用規範產出'],
+      steps: ['查詢數據', '套用規範產出'],
       reason: '查詢銷售資料＋套用部門報告規範', conversationId: 'conv4',
     })
     const { wrapper } = await mountPage()
@@ -163,11 +163,11 @@ describe('SkillManagement 建議建立的技能', () => {
     const store = useSkillStore()
     store.pendingSuggestions.map(s => s.id).forEach(id => store.dismissSuggestion(id))
     store.addSuggestion({
-      id: 'suggest-a', name: '建議技能A', description: 'x', triggerHint: 'y',
+      id: 'suggest-a', name: '建議技能A', description: 'x',
       steps: [], reason: '來源A', conversationId: 'conv4',
     })
     store.addSuggestion({
-      id: 'suggest-b', name: '建議技能B', description: 'x', triggerHint: 'y',
+      id: 'suggest-b', name: '建議技能B', description: 'x',
       steps: [], reason: '來源B', conversationId: 'conv5',
     })
     const { wrapper } = await mountPage()

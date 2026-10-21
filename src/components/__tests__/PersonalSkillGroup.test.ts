@@ -47,3 +47,12 @@ describe('PersonalSkillGroup：skillIconName（怎麼來的一眼圖示）', () 
     expect(derived.find('.tile-icon .material-symbols-outlined').text()).toBe('person')
   })
 })
+
+describe('PersonalSkillGroup：狀態文字', () => {
+  it('後端技能只顯示有沒有測過，不顯示版本號', () => {
+    const w = mountTile(baseSkill({ backendVersion: { version: 3, tested: true } } as Partial<Skill>))
+    const text = w.find('.status-text').text()
+    expect(text).toBe('測過')
+    expect(w.text()).not.toContain('第 3 版')
+  })
+})

@@ -31,6 +31,9 @@
         <span v-if="submittedBy" class="src-meta-item">
           <i class="material-symbols-outlined">person</i>送審人：{{ submittedBy }}
         </span>
+        <span v-if="updateTargetName" class="src-meta-item">
+          <i class="material-symbols-outlined">update</i>更新對象：{{ updateTargetName }}
+        </span>
         <span v-if="derivedFromName" class="src-meta-item">
           <i class="material-symbols-outlined">link</i>來源：{{ derivedFromName }}
         </span>
@@ -165,6 +168,13 @@ const submitModeLabel = computed(() =>
 const targetScope = computed(() => props.skill.targetScope ?? 'enterprise')
 const targetTeamName = computed(() => props.skill.targetTeamName)
 const submittedBy = computed(() => props.skill.submittedBy)
+
+const updateTargetName = computed(() => {
+  if (submitMode.value !== 'version_update') return null
+  const targetId = props.skill.updateTargetId ?? props.skill.derivedFrom
+  if (!targetId) return null
+  return store.flatSkills.find(s => s.id === targetId)?.name ?? null
+})
 
 const derivedFromName = computed(() => {
   if (!props.skill.derivedFrom) return null

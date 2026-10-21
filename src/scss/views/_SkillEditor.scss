@@ -130,13 +130,6 @@
     @media (max-width: $breakpoint-tablet) { grid-template-columns: 1fr; }
   }
 
-  .se-secondary-section {
-    border: 1px solid var(--divider-a50);
-    border-radius: 12px;
-    padding: 14px 16px;
-    background: var(--surface);
-  }
-
   .se-label {
     display: block;
     font-size: 14px;

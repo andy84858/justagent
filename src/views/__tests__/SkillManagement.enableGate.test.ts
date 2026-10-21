@@ -37,7 +37,7 @@ describe('SkillManagement 啟用前的測試閘門', () => {
   it('技能從沒測過：點「啟用技能」不會直接切換，改彈出決策對話框', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能', instructions: 'x', description: 'y', assignedAgents: [] })
     const { wrapper } = await mountPage()
     ;(wrapper.vm as any).detailSkillId = id
     await wrapper.vm.$nextTick()
@@ -56,7 +56,7 @@ describe('SkillManagement 啟用前的測試閘門', () => {
   it('測過但有題目不一致：不擋，直接進 Agent 確認，勾選並送出後啟用並指派', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.agentAnswer) // 全部不一致
     const { wrapper } = await mountPage()
@@ -81,7 +81,7 @@ describe('SkillManagement 啟用前的測試閘門', () => {
   it('已經全對過的技能：點「啟用技能」不彈閘門失敗對話框，但仍要過 Agent 確認才真的啟用', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
     for (const sc of [...store.aiTestScenarios]) {
       store.answerAITestScenario(id, sc.id, sc.agentAnswer)
@@ -107,7 +107,7 @@ describe('SkillManagement 啟用前的測試閘門', () => {
   it('決策對話框選「取消」：對話框關閉，不啟用、不導頁', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能4', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能4', instructions: 'x', description: 'y', assignedAgents: [] })
     const { wrapper, router } = await mountPage()
     const push = vi.spyOn(router, 'push')
     ;(wrapper.vm as any).detailSkillId = id
@@ -125,7 +125,7 @@ describe('SkillManagement 啟用前的測試閘門', () => {
   it('停用方向（目前已啟用）：一律直接切換，不檢查、不彈窗', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '要停用的技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '要停用的技能', instructions: 'x', description: 'y', assignedAgents: [] })
     store.toggleSkill(id)
     const { wrapper } = await mountPage()
     ;(wrapper.vm as any).detailSkillId = id

@@ -212,7 +212,7 @@
               <div v-if="isPersonal && hasPersonalStatusDetails" class="psv-details">
                 <div v-if="skill.submitMode || (skill.personalStatus === 'reviewing' && skill.targetScope)" class="psv-head">
                   <span v-if="skill.submitMode" class="psv-mode">
-                    {{ skill.submitMode === 'version_update' ? '更新版本' : '建立新技能' }}
+                    {{ skill.submitMode === 'version_update' ? '更新版本' : '建立新技能' }}<template v-if="updateTargetName">：{{ updateTargetName }}</template>
                   </span>
                   <span
                     v-if="skill.personalStatus === 'reviewing' && skill.targetScope"
@@ -456,7 +456,8 @@ const isBackend = computed(() => !!props.skill?.backendVersion)
 const statusText = computed(() => {
   const s = props.skill
   if (!s) return ''
-  if (s.backendVersion) return `${s.isEnabled ? '啟用中 · ' : ''}第 ${s.backendVersion.version} 版 · ${s.backendVersion.tested ? '測過' : '沒測過'}`
+  // 「我的技能」不顯示版本號，只留啟用與測試狀態
+  if (s.backendVersion) return `${s.isEnabled ? '啟用中 · ' : ''}${s.backendVersion.tested ? '測過' : '沒測過'}`
   if (s.isEnabled) return '啟用中'
   return isPersonal.value && s.aiTestPassRate == null ? '尚未測試' : '已停用'
 })
@@ -528,6 +529,15 @@ const activeVersion = computed(() => props.skill?.versions?.find(v => v.status =
 const reviewingVersion = computed(() =>
   props.skill?.versions?.find(v => v.status === 'reviewing')
 )
+
+// 送審「更新版本」時使用者選定要更新的 Library 技能（舊資料沒有 updateTargetId 就退回來源技能）
+const updateTargetName = computed(() => {
+  const s = props.skill
+  if (!s || s.submitMode !== 'version_update') return ''
+  const targetId = s.updateTargetId ?? s.derivedFrom
+  if (!targetId) return ''
+  return skillStore.findSkill(targetId)?.name ?? ''
+})
 
 const lineageSource = computed(() => {
   const s = props.skill

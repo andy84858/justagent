@@ -7,11 +7,15 @@
             <div class="confirm-icon confirm-icon--update">
               <i class="material-symbols-outlined">rule</i>
             </div>
-            <h4>還不能啟用「{{ gateSkill.name }}」</h4>
+            <h4>「{{ gateSkill.name }}」還沒測試過</h4>
             <p>{{ describeAiTestGateReason() }}</p>
             <div class="confirm-actions confirm-actions--column">
               <button class="custom-btn custom-main-btn" @click="startTesting">
                 <i class="material-symbols-outlined">science</i>立即測試
+              </button>
+              <!-- 測試是建議、不是強制：使用者可以略過測試，直接進「確認可調用 Agent」 -->
+              <button class="custom-btn enable-skip-test-btn" @click="enterAgentStep(gateSkill)">
+                <i class="material-symbols-outlined">bolt</i>不測試，直接啟用
               </button>
               <button class="custom-btn" @click="resolveCancelled">
                 取消
@@ -19,7 +23,8 @@
             </div>
           </template>
 
-          <!-- 「立即測試」：就地在同一個對話框裡測，原本的選擇按鈕收起來；交卷（測過即可，不用全對）後才能接著選 Agent -->
+          <!-- 「立即測試」：就地在同一個對話框裡測，原本的選擇按鈕收起來。交卷（測過即可，不用全對）後按「繼續啟用」；
+               測到一半不想測了也能按「不測試，直接啟用」直接進選 Agent -->
           <template v-else>
             <h4>測試「{{ gateSkill.name }}」</h4>
             <div class="enable-gate-test">
@@ -30,11 +35,10 @@
                 取消
               </button>
               <button
-                class="custom-btn custom-main-btn"
-                :disabled="!gatePassed"
+                :class="['custom-btn custom-main-btn', { 'enable-skip-test-btn': !gatePassed }]"
                 @click="enterAgentStep(gateSkill)"
               >
-                <i class="material-symbols-outlined">check_circle</i>繼續啟用
+                <i class="material-symbols-outlined">{{ gatePassed ? 'check_circle' : 'bolt' }}</i>{{ gatePassed ? '繼續啟用' : '不測試，直接啟用' }}
               </button>
             </div>
           </template>

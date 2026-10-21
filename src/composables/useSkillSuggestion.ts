@@ -12,7 +12,6 @@ export interface SkillSuggestion {
   id: string          // 一則建議一個 id，佇列以此去重
   name: string
   description: string
-  triggerHint: string
   steps: string[]     // 依序編號組成 instructions，同時每步轉成一項覆蓋能力
   reason: string      // 「我留意到「{reason}」這類流程…」
 }
@@ -27,7 +26,6 @@ export function suggestionToPrefill(s: SkillSuggestion): Partial<SkillDraft> {
   return {
     name: s.name,
     description: s.description,
-    triggerHint: s.triggerHint,
     instructions: s.steps.map((step, i) => `${i + 1}. ${step}`).join('\n'),
     // hashtag 不支援空白，步驟文字轉成能力標籤時去掉
     capabilities: s.steps.map(step => step.replace(/\s+/g, '')),

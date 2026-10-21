@@ -7,14 +7,14 @@ describe('skillStore.setAssignedAgents', () => {
 
   it('整份取代 assignedAgents，不是新增', () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '測試技能', instructions: 'x', triggerHint: 'y', assignedAgents: ['通用助理'] })
+    const id = store.createPersonalSkill({ name: '測試技能', instructions: 'x', description: 'y', assignedAgents: ['通用助理'] })
     store.setAssignedAgents(id, ['客服中心助理', '電商小幫手'])
     expect(store.findSkill(id)!.assignedAgents).toEqual(['客服中心助理', '電商小幫手'])
   })
 
   it('傳空陣列會清空既有指派', () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '測試技能2', instructions: 'x', triggerHint: 'y', assignedAgents: ['通用助理'] })
+    const id = store.createPersonalSkill({ name: '測試技能2', instructions: 'x', description: 'y', assignedAgents: ['通用助理'] })
     store.setAssignedAgents(id, [])
     expect(store.findSkill(id)!.assignedAgents).toEqual([])
   })

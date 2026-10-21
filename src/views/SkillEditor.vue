@@ -54,12 +54,12 @@
           </div>
         </template>
 
-        <!-- Step 1：技能指令 -->
+        <!-- Step 1：技能內文 -->
         <template v-else-if="currentStep === 1">
           <div class="se-primary-section">
-            <label class="se-label">技能指令（Instructions）</label>
+            <label class="se-label">技能內文</label>
             <p class="se-hint">
-              定義此技能的角色、行為規則與限制。Agent 執行此技能時依照這份指令運作。
+              定義此技能的角色、行為規則與限制。Agent 執行此技能時依照這份內文運作。
               可使用 Markdown，支援條列式規則與範例。
             </p>
             <div class="se-editor-wrap">
@@ -69,20 +69,6 @@
                 :placeholder="instructionsPlaceholder"
               />
               <div class="se-char-count">{{ form.instructions.length }} 字元</div>
-            </div>
-          </div>
-
-          <div class="se-section">
-            <div class="se-secondary-section">
-              <label class="se-label">觸發時機 <span class="se-required">*</span></label>
-              <p class="se-hint">描述 Agent 在什麼情境下應優先選用此技能，幫助路由判斷更準確。</p>
-              <textarea
-                v-model="form.triggerHint"
-                class="custom-input se-textarea-sm"
-                placeholder="例：當用戶詢問庫存數量、倉庫存量、缺貨狀態等相關問題時使用"
-                rows="3"
-                maxlength="300"
-              />
             </div>
           </div>
 
@@ -109,15 +95,11 @@
                 <i class="material-symbols-outlined lively-icon">description</i>內容摘要
               </div>
               <div class="se-confirm-row">
-                <span class="se-confirm-key">指令</span>
+                <span class="se-confirm-key">技能內文</span>
                 <span class="se-confirm-val">
                   <span v-if="form.instructions">{{ form.instructions.length }} 字元</span>
                   <span v-else class="se-empty">（未填寫）</span>
                 </span>
-              </div>
-              <div v-if="form.triggerHint" class="se-confirm-row">
-                <span class="se-confirm-key">觸發時機</span>
-                <span class="se-confirm-val">{{ form.triggerHint }}</span>
               </div>
               <div class="se-confirm-row">
                 <span class="se-confirm-key">覆蓋能力</span>
@@ -237,14 +219,14 @@ const isDraftMode = !!draftId
 const isNewCreate = !isEditMode && !isDraftMode
 
 const STEPS = isNewCreate
-  ? (['基本資訊', '技能指令', '確認', '測試'] as const)
-  : (['基本資訊', '技能指令', '確認'] as const)
+  ? (['基本資訊', '技能內文', '確認', '測試'] as const)
+  : (['基本資訊', '技能內文', '確認'] as const)
 const currentStep = ref(0)
 // 離開「確認」步驟那一刻才真的呼叫 createPersonalSkill()，拿到 id 才能把
 // SkillTestAI 綁到這顆剛建立的技能上
 const createdSkillId = ref<string | null>(null)
 const isTestStep = computed(() => isNewCreate && currentStep.value === STEPS.length - 1)
-// 技能建立後，「基本資訊」「技能指令」的欄位內容已經跟已建立的技能脫勾——
+// 技能建立後，「基本資訊」「技能內文」的欄位內容已經跟已建立的技能脫勾——
 // 不讓使用者點回去改，避免改了欄位卻忘記其實沒有寫回技能，測試結果跟畫面對不起來。
 // 「確認」「測試」都是唯讀畫面，兩者之間可以互看
 function isStepLocked(i: number) {
@@ -289,7 +271,8 @@ const conflictSourceName = computed(() => {
 const form = reactive({
   name: existingSkill?.name ?? existingDraft?.name ?? '',
   instructions: existingSkill?.instructions ?? existingDraft?.instructions ?? '',
-  triggerHint: existingSkill?.triggerHint ?? existingDraft?.triggerHint ?? '',
+  // 精靈不再提供「說明」欄位；編輯既有技能／草稿時沿用原本的值，不要被清空
+  description: existingSkill?.description ?? existingDraft?.description ?? '',
   assignedAgents: existingSkill?.assignedAgents
     ? [...existingSkill.assignedAgents]
     : existingDraft?.assignedAgents
@@ -310,12 +293,11 @@ const willGoThroughEnableFlow = computed(() =>
   isEditMode && !!existingSkill && form.isEnabled && !existingSkill.isEnabled
 )
 
-// 唯一不受「只卡最終送出」限制的必填（名稱）卡在能不能往下一步走；觸發時機／覆蓋能力／
+// 唯一不受「只卡最終送出」限制的必填（名稱）卡在能不能往下一步走；覆蓋能力／
 // 指派 Agent 必填只卡在真正送出（建立技能／儲存變更）那一刻，中途步驟之間可以留白
 const missingRequiredFields = computed(() => {
   const missing: string[] = []
   if (!form.name.trim()) missing.push('技能名稱')
-  if (!form.triggerHint.trim()) missing.push('觸發時機')
   if (!form.capabilities.length) missing.push('覆蓋能力')
   if (!willGoThroughEnableFlow.value && !form.assignedAgents.length) missing.push('指派 Agent')
   return missing
@@ -336,7 +318,7 @@ function buildPayload() {
   return {
     name: form.name.trim(),
     instructions: form.instructions.trim(),
-    triggerHint: form.triggerHint.trim(),
+    description: form.description.trim(),
     assignedAgents: [...form.assignedAgents],
     isEnabled: form.isEnabled,
     files: [...form.files],
