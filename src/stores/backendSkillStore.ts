@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
   activateBackendSkill,
+  deleteBackendSkill,
   describeConversationError,
   listBackendSkills,
   listBackendSkillVersions,
@@ -56,5 +57,21 @@ export const useBackendSkillStore = defineStore('backendSkills', () => {
     }
   }
 
-  return { skills, versionsBySkill, loading, errorHint, activatedIds, loadSkills, loadVersions, refreshAfterSave, activate }
+  // 刪除：後端連同所有版本一起刪、救不回來。成功就把清單、版本與啟用記錄裡的這個技能一起拿掉；
+  // 失敗不動畫面上的資料，把後端的白話原因帶回給畫面
+  async function remove(skillId: string): Promise<{ ok: boolean; message: string }> {
+    try {
+      const done = await deleteBackendSkill(skillId)
+      skills.value = skills.value.filter(s => s.skill_id !== skillId)
+      const rest = { ...versionsBySkill.value }
+      delete rest[skillId]
+      versionsBySkill.value = rest
+      activatedIds.value = activatedIds.value.filter(id => id !== skillId)
+      return { ok: true, message: `已刪除（${done.deleted_versions} 個版本）` }
+    } catch (error) {
+      return { ok: false, message: describeConversationError(error) }
+    }
+  }
+
+  return { skills, versionsBySkill, loading, errorHint, activatedIds, loadSkills, loadVersions, refreshAfterSave, activate, remove }
 })

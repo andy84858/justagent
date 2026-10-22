@@ -160,6 +160,12 @@ export async function submitConversationTest(
   return res.data
 }
 
+// 刪除技能：後端把這個技能的所有版本一起刪，刪了就回不來。找不到回 404 加白話原因
+export async function deleteBackendSkill(skillId: string): Promise<{ skill_id: string; deleted_versions: number }> {
+  const res = await httpService.delete<{ skill_id: string; deleted_versions: number }>(`/skills/${skillId}`)
+  return res.data
+}
+
 // 啟用技能：後端只檢查最新一版有沒有測過（不要求全對）。沒測過回 409 加白話原因
 export async function activateBackendSkill(skillId: string): Promise<{ skill_id: string; version: number; activated: boolean }> {
   const res = await httpService.post<{ skill_id: string; version: number; activated: boolean }>(`/skills/${skillId}/activate`)

@@ -931,7 +931,14 @@ function confirmSubmitSkill() {
   submitVersionName.value = ''
 }
 
-function handlePersonalDelete(skill: Skill) {
+async function handlePersonalDelete(skill: Skill) {
+  // 後端技能：交給後端連同所有版本一起刪；失敗就把原因講給使用者聽，抽屜留著
+  if (skill.backendVersion) {
+    const result = await backendStore.remove(skill.id)
+    popDialog.toast(result.message)
+    if (result.ok && detailSkillId.value === skill.id) detailSkillId.value = null
+    return
+  }
   store.deletePersonalSkill(skill.id)
   if (detailSkillId.value === skill.id) detailSkillId.value = null
 }

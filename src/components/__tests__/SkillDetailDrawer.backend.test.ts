@@ -35,16 +35,31 @@ describe('SkillDetailDrawer：後端技能', () => {
     expect(w.find('.markdown-body').text()).toContain('步驟')
   })
 
-  it('還沒接後端的操作不顯示：複製、送審、刪除；測試、編輯與啟用可用', async () => {
+  it('還沒接後端的操作不顯示：複製、送審；測試、編輯、啟用與刪除可用', async () => {
     const w = mountDrawer(backendSkill)
     await flushPromises()
     const text = w.text()
-    for (const label of ['複製', '送審', '刪除此技能']) {
+    for (const label of ['複製', '送審']) {
       expect(text).not.toContain(label)
     }
     expect(text).toContain('編輯')
     expect(text).toContain('測試')
     expect(text).toContain('啟用技能')
+    expect(text).toContain('刪除此技能')
+  })
+
+  it('刪除：先跳確認，說明所有版本一起刪；確定後發出 delete 事件，取消則不發', async () => {
+    const w = mountDrawer(backendSkill)
+    await flushPromises()
+
+    await w.find('.drawer-delete-btn').trigger('click')
+    expect(w.text()).toContain('所有版本都會一併刪除')
+    await w.findAll('.confirm-actions button')[0].trigger('click')
+    expect(w.emitted('delete')).toBeUndefined()
+
+    await w.find('.drawer-delete-btn').trigger('click')
+    await w.findAll('.confirm-actions button')[1].trigger('click')
+    expect(w.emitted('delete')).toHaveLength(1)
   })
 
   it('版本歷史來自後端，從某一版修改會發出事件', async () => {

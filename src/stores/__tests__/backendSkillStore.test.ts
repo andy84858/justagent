@@ -8,6 +8,7 @@ vi.mock('@/services/skillConversationApi', async importOriginal => ({
   listBackendSkills: vi.fn(),
   listBackendSkillVersions: vi.fn(),
   activateBackendSkill: vi.fn(),
+  deleteBackendSkill: vi.fn(),
 }))
 
 const v = (skill_id: string, version: number, tested = false): api.BackendSkillVersion => ({
@@ -79,5 +80,44 @@ describe('backendSkillStore：啟用', () => {
     const result = await store.activate('s1')
     expect(result).toEqual({ ok: false, message: '這一版還沒測過，請先測試再啟用' })
     expect(store.activatedIds).not.toContain('s1')
+  })
+})
+
+describe('backendSkillStore：刪除', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.resetAllMocks()
+  })
+
+  it('成功：呼叫後端刪除，清單、版本列表與啟用記錄裡的這個技能都拿掉，別的技能不動', async () => {
+    vi.mocked(api.listBackendSkills).mockResolvedValue([v('s1', 2), v('s2', 1)])
+    vi.mocked(api.listBackendSkillVersions).mockResolvedValue([v('s1', 1), v('s1', 2)])
+    vi.mocked(api.deleteBackendSkill).mockResolvedValue({ skill_id: 's1', deleted_versions: 2 })
+    const store = useBackendSkillStore()
+    await store.loadSkills()
+    await store.loadVersions('s1')
+    store.activatedIds = ['s1', 's2']
+
+    const result = await store.remove('s1')
+
+    expect(api.deleteBackendSkill).toHaveBeenCalledWith('s1')
+    expect(result).toEqual({ ok: true, message: '已刪除（2 個版本）' })
+    expect(store.skills.map(s => s.skill_id)).toEqual(['s2'])
+    expect(store.versionsBySkill.s1).toBeUndefined()
+    expect(store.activatedIds).toEqual(['s2'])
+  })
+
+  it('失敗：後端的白話原因原樣帶出，畫面上的資料不動', async () => {
+    vi.mocked(api.listBackendSkills).mockResolvedValue([v('s1', 1)])
+    vi.mocked(api.deleteBackendSkill).mockRejectedValue(
+      Object.assign(new Error('x'), { isAxiosError: true, response: { status: 404, data: { detail: '找不到這個技能' } } }),
+    )
+    const store = useBackendSkillStore()
+    await store.loadSkills()
+
+    const result = await store.remove('s1')
+
+    expect(result).toEqual({ ok: false, message: '找不到這個技能' })
+    expect(store.skills).toHaveLength(1)
   })
 })

@@ -259,8 +259,8 @@
                 <p v-else class="section-empty-hint">尚未撰寫技能定義</p>
               </div>
 
-              <!-- 危險操作：審核中不能刪除，避免刪掉一個正在被審核的內容 -->
-              <div v-if="isPersonal && !isBackend && skill.personalStatus !== 'reviewing'" class="drawer-danger-zone">
+              <!-- 危險操作：審核中不能刪除，避免刪掉一個正在被審核的內容（後端技能沒有送審流程，不受這條限制） -->
+              <div v-if="isPersonal && (isBackend || skill.personalStatus !== 'reviewing')" class="drawer-danger-zone">
                 <div class="danger-zone-label">危險操作</div>
                 <button
                   class="custom-btn btn--danger-ghost drawer-delete-btn"
@@ -372,7 +372,8 @@
         <div class="drawer-confirm-dialog">
           <div class="confirm-icon"><i class="material-symbols-outlined">warning</i></div>
           <h4>確定要刪除「{{ skill.name }}」？</h4>
-          <p>刪除後此技能將無法繼續使用。</p>
+          <p v-if="isBackend">這個技能的所有版本都會一併刪除，刪了就回不來。</p>
+          <p v-else>刪除後此技能將無法繼續使用。</p>
           <div class="confirm-actions">
             <button class="custom-btn" @click="showConfirm = false">取消</button>
             <button class="custom-btn btn--danger-ghost" @click="confirmDelete">確定刪除</button>
@@ -450,7 +451,7 @@ const compareV2Id = ref('')
 const md = new MarkdownIt({ html: false, breaks: true, linkify: false })
 
 const isPersonal = computed(() => props.skill?.zone === 'personal')
-// 後端技能：編輯、測試、啟用（只能啟用，後端沒有停用）與版本可用，複製／送審／刪除還沒接後端
+// 後端技能：編輯、測試、啟用（只能啟用，後端沒有停用）、版本與刪除可用，複製／送審還沒接後端
 const isBackend = computed(() => !!props.skill?.backendVersion)
 
 const statusText = computed(() => {
