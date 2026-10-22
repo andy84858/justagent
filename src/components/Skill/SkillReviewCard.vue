@@ -31,6 +31,9 @@
         <span v-if="submittedBy" class="src-meta-item">
           <i class="material-symbols-outlined">person</i>送審人：{{ submittedBy }}
         </span>
+        <span v-if="updateTargetName" class="src-meta-item">
+          <i class="material-symbols-outlined">update</i>更新對象：{{ updateTargetName }}
+        </span>
         <span v-if="derivedFromName" class="src-meta-item">
           <i class="material-symbols-outlined">link</i>來源：{{ derivedFromName }}
         </span>
@@ -38,6 +41,17 @@
           <i class="material-symbols-outlined">sticky_note_2</i>{{ skill.submitNote }}
         </span>
       </div>
+    </div>
+
+    <!-- ── 技能定義：RD 六段（技能描述／步驟／例外或特殊情況／固定輸出格式／適用範圍／
+         覆蓋能力），審核要看的主體內容，預設展開；跟詳情抽屜、skill.md 同一份組法 ── -->
+    <div v-if="definitionHtml" class="src-section">
+      <div class="src-section-label" @click="showDefinition = !showDefinition">
+        <i class="material-symbols-outlined">description</i>
+        技能定義
+        <i :class="['material-symbols-outlined', 'src-chevron', { 'is-open': showDefinition }]">expand_more</i>
+      </div>
+      <div v-show="showDefinition" class="markdown-body src-definition" v-html="definitionHtml"></div>
     </div>
 
     <!-- ── 技能指令 ────────────────────────────── -->
@@ -132,6 +146,8 @@ import { ref, computed } from 'vue'
 import type { Skill } from '@/stores/skillStore'
 import { useSkillStore } from '@/stores/skillStore'
 import SkillMarkdownModal from '@/components/Skill/SkillMarkdownModal.vue'
+import MarkdownIt from 'markdown-it'
+import { buildSkillDefinitionMarkdown } from '@/utils/skillMarkdown'
 
 const props = defineProps<{ skill: Skill }>()
 const emit = defineEmits<{
@@ -142,6 +158,7 @@ const emit = defineEmits<{
 
 const store = useSkillStore()
 const showInstructions = ref(false)
+const showDefinition = ref(true)
 const showMarkdown = ref(false)
 const showRejectDialog = ref(false)
 const rejectFeedback = ref('')
@@ -158,6 +175,12 @@ function confirmApprove() {
   showApproveDialog.value = false
 }
 
+const md = new MarkdownIt({ html: false, breaks: true, linkify: false })
+const definitionHtml = computed(() => {
+  const source = buildSkillDefinitionMarkdown(props.skill)
+  return source ? md.render(source) : ''
+})
+
 const submitMode = computed(() => props.skill.submitMode ?? 'new_skill')
 const submitModeLabel = computed(() =>
   submitMode.value === 'version_update' ? '更新版本' : '建立新技能'
@@ -165,6 +188,13 @@ const submitModeLabel = computed(() =>
 const targetScope = computed(() => props.skill.targetScope ?? 'enterprise')
 const targetTeamName = computed(() => props.skill.targetTeamName)
 const submittedBy = computed(() => props.skill.submittedBy)
+
+const updateTargetName = computed(() => {
+  if (submitMode.value !== 'version_update') return null
+  const targetId = props.skill.updateTargetId ?? props.skill.derivedFrom
+  if (!targetId) return null
+  return store.flatSkills.find(s => s.id === targetId)?.name ?? null
+})
 
 const derivedFromName = computed(() => {
   if (!props.skill.derivedFrom) return null

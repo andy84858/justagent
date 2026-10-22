@@ -117,40 +117,67 @@ describe('SkillStudioWorkspace', () => {
     }
   })
 
-  it('儲存／放棄固定在左欄，切到「測試」tab 依然看得到、按得到，不會跟著 tab 消失', async () => {
+  it('修改後還沒存：「測試」tab 反灰；儲存後技能轉成停用中、自動帶到「測試」，啟用按鈕可按', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
+      const store = useSkillStore()
+      store.findSkill('personal-001')!.isEnabled = true
       const { wrapper } = mountWorkspace({ skillId: 'personal-001' })
       await flushPromises()
+      const testTab = () => wrapper.findAll('.ssp-tab-btn')[1]
+      expect(testTab().attributes('disabled')).toBeUndefined()
+
       const input = wrapper.find('.SkillStudioChat input.custom-input')
       await input.setValue('名稱改成「亂改的名字」')
       await input.trigger('keydown.enter')
       await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
 
-      // 切到測試 tab
-      await wrapper.findAll('.ssp-tab-btn')[1].trigger('click')
-      await flushPromises()
-      expect(wrapper.find('.ssp-test-body').exists()).toBe(true)
+      // 改了還沒存：測試 tab 反灰，點了也不會切過去
+      expect(testTab().attributes('disabled')).toBeDefined()
+      expect(wrapper.find('.ssp-test-body').exists()).toBe(false)
 
-      // SkillStudioPreview 本身不再重複渲染儲存／放棄（hideFooter）
-      expect(wrapper.find('.ssp-footer').exists()).toBe(false)
-
-      // 左欄的儲存／放棄仍然看得到、按得到
+      // 左欄的儲存／放棄看得到、按得到
       const saveBtn = wrapper.find('.studio-save-btn')
-      expect(saveBtn.exists()).toBe(true)
       expect(saveBtn.attributes('disabled')).toBeUndefined()
       const discardBtn = wrapper.findAll('.studio-save-footer button').find(b => b.text().includes('放棄修改'))!
       expect(discardBtn.exists()).toBe(true)
 
       await saveBtn.trigger('click')
-      expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改')
+      await flushPromises()
+      expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改，技能目前停用中，到「測試」重新測試後再啟用')
+      expect(store.findSkill('personal-001')!.isEnabled).toBe(false)
+      expect(testTab().attributes('disabled')).toBeUndefined()
+      expect(wrapper.find('.ssp-test-body').exists()).toBe(true)
     } finally {
       vi.useRealTimers()
     }
   })
 
-  describe('有測試紀錄時，儲存鍵升級成「儲存並啟用」', () => {
+  it('停在「測試」tab 時又改了內容：跳回「技能預覽」', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const { wrapper } = mountWorkspace({ skillId: 'personal-001' })
+      await flushPromises()
+      await wrapper.findAll('.ssp-tab-btn')[1].trigger('click')
+      await flushPromises()
+      expect(wrapper.find('.ssp-test-body').exists()).toBe(true)
+
+      // 測試 tab 底下看不到對話框，直接透過 workspace 左欄的對話送出
+      const input = wrapper.find('.SkillStudioChat input.custom-input')
+      await input.setValue('名稱改成「亂改的名字」')
+      await input.trigger('keydown.enter')
+      await vi.advanceTimersByTimeAsync(800)
+      await flushPromises()
+
+      expect(wrapper.find('.ssp-test-body').exists()).toBe(false)
+      expect(wrapper.findAll('.ssp-tab-btn')[0].classes()).toContain('is-active')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  describe('儲存歸儲存、啟用歸啟用：存檔鍵不會變成「儲存並啟用」', () => {
     it('沒有測試紀錄：維持「儲存修改」，點擊走原本單純存檔的邏輯', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
       try {
@@ -166,85 +193,46 @@ describe('SkillStudioWorkspace', () => {
         expect(saveBtn.text()).toContain('儲存修改')
         expect(saveBtn.attributes('disabled')).toBeUndefined()
         await saveBtn.trigger('click')
-        expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改')
+        expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改，技能目前停用中，到「測試」重新測試後再啟用')
       } finally {
         vi.useRealTimers()
       }
     })
 
-    it('personal-001（本來就啟用中）測到 100%：按鈕變「儲存並啟用」，點擊直接進 Agent 確認（不會先看到閘門失敗對話框），確認後不會把已啟用的技能切回停用', async () => {
-      const store = useSkillStore()
-      expect(store.findSkill('personal-001')!.isEnabled).toBe(true)
-      const { wrapper } = mountWorkspace({ skillId: 'personal-001' })
-      await flushPromises()
-      await store.generateAITestScenarios('personal-001')
-      for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('personal-001', sc.id, sc.expectedTrigger) // 全對
+    it('有測試紀錄（沒全對）時，存檔鍵還是「儲存修改」，只存檔、不跳啟用對話框、不改啟用狀態', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        const store = useSkillStore()
+        const id = store.createPersonalSkill({ name: '待啟用技能', instructions: 'x', description: 'y', assignedAgents: ['工程助理'], steps: ['x'] })
+        const { wrapper } = mountWorkspace({ skillId: id })
+        await flushPromises()
+        const gen = store.generateAITestScenarios(id)
+        await vi.advanceTimersByTimeAsync(900)
+        await gen
+        for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.agentAnswer)
+        await flushPromises()
+
+        const input = wrapper.find('.SkillStudioChat input.custom-input')
+        await input.setValue('名稱改成「改過的名字」')
+        await input.trigger('keydown.enter')
+        await vi.advanceTimersByTimeAsync(800)
+        await flushPromises()
+
+        const saveBtn = wrapper.find('.studio-save-btn')
+        expect(saveBtn.text()).toContain('儲存修改')
+        expect(saveBtn.text()).not.toContain('啟用')
+        await saveBtn.trigger('click')
+        await flushPromises()
+        expect(popDialog.toast).toHaveBeenCalledWith('已儲存修改，技能目前停用中，到「測試」重新測試後再啟用')
+        expect(new DOMWrapper(document.body).find('.enable-agent-dialog').exists()).toBe(false)
+        expect(store.findSkill(id)!.isEnabled).toBe(false)
+        // 舊報告是測舊版本的，不能拿來啟用新版本：測過記號、報告都清掉，看不到啟用按鈕
+        expect(store.findSkill(id)!.aiTestPassRate).toBeNull()
+        expect(store.aiTestReport).toBeNull()
+        expect(wrapper.find('.ai-enable-btn').exists()).toBe(false)
+      } finally {
+        vi.useRealTimers()
       }
-      await flushPromises()
-
-      const saveBtn = wrapper.find('.studio-save-btn')
-      expect(saveBtn.text()).toContain('儲存並啟用')
-      await saveBtn.trigger('click')
-      await flushPromises()
-
-      expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
-      const agentDialog = new DOMWrapper(document.body).find('.enable-agent-dialog')
-      expect(agentDialog.exists()).toBe(true)
-      await agentDialog.findAll('.se-agent-chip').find(c => c.text().includes('通用助理'))!.trigger('click')
-      await agentDialog.findAll('button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
-
-      expect(store.findSkill('personal-001')!.isEnabled).toBe(true) // 還是啟用中，沒被切回停用
-      expect(store.findSkill('personal-001')!.assignedAgents).toEqual(['通用助理'])
-    })
-
-    it('尚未啟用的技能測到非 100%：按鈕變「儲存並啟用」，測過就不擋，直接走 Agent 確認並真的啟用', async () => {
-      const store = useSkillStore()
-      const id = store.createPersonalSkill({ name: '待啟用技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-      expect(store.findSkill(id)!.isEnabled).toBe(false)
-      const { wrapper } = mountWorkspace({ skillId: id })
-      await flushPromises()
-      await store.generateAITestScenarios(id)
-      const scenarios = [...store.aiTestScenarios]
-      expect(scenarios.length).toBeGreaterThan(1)
-      for (let i = 0; i < scenarios.length - 1; i++) {
-        store.answerAITestScenario(id, scenarios[i].id, !scenarios[i].expectedTrigger)
-      }
-      store.answerAITestScenario(id, scenarios.at(-1)!.id, scenarios.at(-1)!.expectedTrigger)
-      expect(store.aiTestReport!.correct).not.toBe(store.aiTestReport!.total)
-      await flushPromises()
-
-      const saveBtn = wrapper.find('.studio-save-btn')
-      expect(saveBtn.text()).toContain('儲存並啟用')
-      await saveBtn.trigger('click')
-      await flushPromises()
-
-      expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
-      const agentDialog = new DOMWrapper(document.body).find('.enable-agent-dialog')
-      expect(agentDialog.exists()).toBe(true)
-      await agentDialog.findAll('.se-agent-chip').find(c => c.text().includes('通用助理'))!.trigger('click')
-      await agentDialog.findAll('button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
-
-      expect(store.findSkill(id)!.isEnabled).toBe(true)
-    })
-
-    it('取消：不存任何東西，isEnabled 不受影響', async () => {
-      const store = useSkillStore()
-      const { wrapper } = mountWorkspace({ skillId: 'personal-001' })
-      await flushPromises()
-      await store.generateAITestScenarios('personal-001')
-      for (const sc of [...store.aiTestScenarios]) {
-        store.answerAITestScenario('personal-001', sc.id, sc.expectedTrigger)
-      }
-      await flushPromises()
-
-      await wrapper.find('.studio-save-btn').trigger('click')
-      await flushPromises()
-      const agentDialog = new DOMWrapper(document.body).find('.enable-agent-dialog')
-      await agentDialog.findAll('button').find(b => b.text().includes('取消'))!.trigger('click')
-
-      expect(store.findSkill('personal-001')!.isEnabled).toBe(true)
-      expect(store.findSkill('personal-001')!.assignedAgents ?? []).toEqual([])
     })
   })
 
@@ -325,6 +313,12 @@ describe('SkillStudioWorkspace', () => {
       await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
 
+      // 新建技能要先確認可調用 Agent，確認過才能直接用存檔鍵存
+      await input.setValue('通用助理')
+      await input.trigger('keydown.enter')
+      await vi.advanceTimersByTimeAsync(800)
+      await flushPromises()
+
       expect(wrapper.find('.ssp-title').text()).toBe('查 ERP 庫存')
       await wrapper.find('.studio-save-btn').trigger('click')
       await flushPromises()
@@ -373,12 +367,17 @@ describe('SkillStudioWorkspace', () => {
       await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
 
+      await input.setValue('通用助理')
+      await input.trigger('keydown.enter')
+      await vi.advanceTimersByTimeAsync(800)
+      await flushPromises()
+
       await input.setValue('這樣可以，存到個人技能')
       await input.trigger('keydown.enter')
       await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
 
-      store.createPersonalSkill({ name: '週報自動生成', instructions: '', triggerHint: '', assignedAgents: [] })
+      store.createPersonalSkill({ name: '週報自動生成', instructions: '', assignedAgents: [] })
       await flushPromises()
 
       await input.setValue('名稱改成「週報自動生成」')
@@ -416,40 +415,18 @@ describe('SkillStudioWorkspace', () => {
     expect(wrapper.find('.SkillMethodChooser').exists()).toBe(true)
   })
 
-  it('AI 快速測試回報沒有全對：左側對話收到引導訊息，轉去 clarify', async () => {
+  it('測試相關的提示（生成中敘事、生成完成、測試報告）都不推進左側對話河道', async () => {
     const store = useSkillStore()
     const { wrapper } = mountWorkspace({ skillId: 'personal-001' })
     await flushPromises()
+    const before = wrapper.findAll('.chat-bubble').length
+
+    await store.generateAITestScenarios('personal-001')
+    await flushPromises()
     store.aiTestReport = { total: 5, correct: 3, byTag: {} as any, summary: '' }
     await flushPromises()
-    const last = wrapper.findAll('.chat-bubble').at(-1)!
-    expect(last.classes()).toContain('bubble--agent')
-    expect(last.text()).toContain('3/5')
-    expect(last.text()).toContain('60%')
-  })
 
-  it('引導訊息後打字說「重新測試」：工作區切到測試 tab（conv 自己切不了，靠 requestTestTab 訊號橋接）', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      const store = useSkillStore()
-      const { wrapper } = mountWorkspace({ skillId: 'personal-001' })
-      await flushPromises()
-      store.aiTestReport = { total: 5, correct: 3, byTag: {} as any, summary: '' }
-      await flushPromises()
-      expect(wrapper.findAll('.ssp-tab-btn')[0].classes()).toContain('is-active')
-
-      const last = wrapper.findAll('.chat-bubble').at(-1)!
-      expect(last.find('.ssc-action-chip').exists()).toBe(false)
-
-      const input = wrapper.find('.SkillStudioChat input.custom-input')
-      await input.setValue('重新測試')
-      await input.trigger('keydown.enter')
-      await vi.advanceTimersByTimeAsync(800)
-      await flushPromises()
-      expect(wrapper.findAll('.ssp-tab-btn')[1].classes()).toContain('is-active')
-    } finally {
-      vi.useRealTimers()
-    }
+    expect(wrapper.findAll('.chat-bubble')).toHaveLength(before)
   })
 
   it('修改模式下說要建立新技能，點「對，開新的」確認：導向全新的建立流程（conv 自己切不了路由，靠 requestNewSkillDrawer 訊號橋接）', async () => {
@@ -522,10 +499,7 @@ describe('SkillStudioWorkspace', () => {
     await wrapper.find('.sce-tag-input').trigger('keydown.enter') // 關鍵字：AI 建議要先有關鍵字才給產生
     await wrapper.find('.sbbf-textarea').setValue('每週一產出的行銷週報')
     const aiBtns = wrapper.findAll('.sbbf-ai-btn')
-    await aiBtns[1].trigger('click') // 觸發情境：開出 3 句候選
-    await flushPromises()
-    await wrapper.findAll('.sbbf-suggestion-chip')[0].trigger('click') // 選第一句套用
-    await aiBtns[2].trigger('click') // 覆蓋能力：欄位是空的，AI 建議直接套用、不跳確認
+    await aiBtns[1].trigger('click') // 覆蓋能力：欄位是空的，AI 建議直接套用、不跳確認
     await wrapper.find('.se-agent-chip').trigger('click')
     await flushPromises()
 
@@ -539,7 +513,7 @@ describe('SkillStudioWorkspace', () => {
   it('skillId 指向有 composition 的技能：切到積木組成子步驟可見勾選還原', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '渠道週報', instructions: '依序產出以下章節：\n1. 渠道核心 KPI', triggerHint: 't', isEnabled: true, assignedAgents: [], composition: { sectionIds: ['ch_kpi'] } })
+    const id = store.createPersonalSkill({ name: '渠道週報', instructions: '依序產出以下章節：\n1. 渠道核心 KPI', description: 't', isEnabled: true, assignedAgents: [], composition: { sectionIds: ['ch_kpi'] } })
     const { wrapper } = mountWorkspace({ skillId: id })
     await flushPromises()
     expect(wrapper.find('.SkillBlockBasicsForm').exists()).toBe(true)
@@ -559,7 +533,7 @@ describe('SkillStudioWorkspace', () => {
 
     it('from: conv4 且有交接資料：直接進對話模式、套用預填草稿與開場白，並顯示返回連結', async () => {
       setSkillHandoff({
-        prefill: { name: '產品銷售報告整理', instructions: '1. 查詢資料\n2. 套用規範產出' },
+        prefill: { name: '產品銷售報告整理', instructions: '1. 查詢資料\n2. 套用規範產出', steps: ['查詢資料', '套用規範產出'] },
         openingMessage: '這顆技能來自本對話的「查詢銷售資料」流程，設定我先填好了。',
         origin: { conversationId: 'conv4', reason: '查詢銷售資料＋套用部門報告規範' },
       })
@@ -584,14 +558,21 @@ describe('SkillStudioWorkspace', () => {
 
     it('儲存後再按返回：conv4 對話會補一句「已建立」確認訊息', async () => {
       setSkillHandoff({
-        prefill: { name: '產品銷售報告整理', instructions: '1. 查詢資料' },
+        prefill: { name: '產品銷售報告整理', instructions: '1. 查詢資料', steps: ['查詢資料'] },
         openingMessage: '開場白',
         origin: { conversationId: 'conv4', reason: '查詢銷售資料＋套用部門報告規範' },
       })
       const { wrapper, router } = mountWorkspace({ from: 'conv4' })
       await flushPromises()
-      await wrapper.find('.studio-save-btn').trigger('click')
+      await wrapper.find('.studio-save-btn').trigger('click') // 新建：先在對話裡問可調用 Agent
       await flushPromises()
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      const input = wrapper.find('.SkillStudioChat input.custom-input')
+      await input.setValue('通用助理')
+      await input.trigger('keydown.enter')
+      await vi.advanceTimersByTimeAsync(800)
+      await flushPromises()
+      vi.useRealTimers()
       await wrapper.find('.studio-back-link').trigger('click')
       await flushPromises()
       expect(router.currentRoute.value.name).toBe('AiViewer')

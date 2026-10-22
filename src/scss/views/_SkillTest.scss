@@ -2,13 +2,34 @@
 .SkillTest {
   height: 100%;
 
+  // 這頁的 banner 不畫底線，右側放一行說明文字（跟清單卡片之間用留白分隔）；
+  // 選擇器要比 _layout.scss 的 `.main .views-page .page-banner` 更具體才蓋得過
+  &.views-page .views-page-content-box .page-banner {
+    border-bottom: none;
+    padding-bottom: 0;
+    align-items: flex-end;
+
+    .banner-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-faint);
+
+      .material-symbols-outlined { font-size: 16px; }
+    }
+  }
+
   .skill-test-layout {
     display: grid;
-    grid-template-columns: 240px 1fr;
-    // 扣掉 .views-page 上下 padding（36+36）與新增的 page-banner 實際佔用高度
-    // （含底下 24px margin），加了頁面標題/麵包屑後這個值要跟著調整，
-    // 不然版面會比可視高度多出一截，讓整個頁面多一層外層捲軸
-    height: calc(100vh - 172px);
+    grid-template-columns: 280px 1fr;
+    background: var(--surface);
+    border: 1px solid var(--divider-a50);
+    border-radius: $radius-lg;
+    // 扣掉 .views-page 上下 padding（36+36）與 page-banner 實際佔用高度
+    // （含底下 24px margin；這頁 banner 沒有底線與 padding-bottom），
+    // banner 高度改了這個值要跟著調整，不然版面會比可視高度多出一截，讓整個頁面多一層外層捲軸
+    height: calc(100vh - 151px);
     overflow: hidden;
   }
 
@@ -21,9 +42,12 @@
     overflow: hidden;
 
     .sidebar-head {
-      padding: 14px 16px;
-      font-size: 13px;
-      font-weight: 600;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      font-size: 14px;
+      font-weight: 700;
       border-bottom: 1px solid var(--divider-a50);
       color: var(--text);
     }
@@ -34,14 +58,13 @@
     }
 
     .sidebar-item {
-      padding: 10px 16px;
-      font-size: 13px;
+      padding: 10px 18px;
+      font-size: 14px;
       cursor: pointer;
-      border-bottom: 1px solid var(--page-bg);
       display: flex;
       align-items: center;
       gap: 8px;
-      color: var(--text-muted);
+      color: var(--text);
       transition: background 0.15s;
 
       &:hover { background: var(--page-bg); }
@@ -51,19 +74,6 @@
         color: $color_main_2;
         font-weight: 500;
       }
-    }
-
-    // 跟技能管理（SkillTile／SkillDetailDrawer 的 icon--system/enterprise/team）
-    // 同一套配色：系統＝藍、企業＝品牌 teal、團隊＝紫，不要各頁各用一套顏色
-    .skill-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-
-      &.dot--system     { background: var(--tag-blue-text); }
-      &.dot--enterprise { background: $color_main_1; }
-      &.dot--team       { background: var(--tag-violet-text); }
     }
 
     .si-name {
@@ -142,43 +152,45 @@
     }
 
     .section-badge-row {
-      padding: 12px 16px 6px;
-
-      &:not(:first-child) {
-        margin-top: 4px;
-        padding-top: 12px;
-        border-top: 1px solid var(--divider-a50);
-      }
+      padding: 12px 16px 4px;
     }
 
-    .section-badge {
+    // 「我的技能」與各 Library 子分類都是同一種膠囊；子分類用跟技能管理
+    // （SkillTile／SkillDetailDrawer 的 icon--system/enterprise/team）同一套色系：
+    // 系統＝藍、企業＝teal、團隊＝紫，不要各頁各用一套顏色
+    .section-badge,
+    .subgroup-label {
       @extend %badge-shape;
-      font-size: 10.5px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-
-      &--mine    { background: var(--tag-teal-bg); color: var(--tag-teal-text); }
-      &--library { background: var(--divider-a50); color: var(--text-muted); }
+      font-size: 13px;
+      font-weight: 700;
+      padding: 5px 14px;
+      color: var(--text);
     }
+
+    .section-badge--mine { background: var(--tag-slate-bg); }
 
     .subgroup-label {
-      padding: 8px 16px 3px 13px;
-      font-size: 11px;
+      &--system     { background: var(--tag-blue-bg); }
+      &--enterprise { background: var(--tag-teal-bg); }
+      &--team       { background: var(--tag-violet-bg); }
+    }
+
+    .section-label {
+      margin-top: 8px;
+      padding: 14px 16px 2px;
+      border-top: 1px solid var(--divider-a50);
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-faint);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      border-left: 3px solid transparent;
-      margin-left: 3px;
-
-      &--system     { border-left-color: var(--tag-blue-text); }
-      &--enterprise { border-left-color: $color_main_1; }
-      &--team       { border-left-color: var(--tag-violet-text); }
     }
   }
 
   // ── 右側 Panel ──
+  // 沙盒頁右下角有全站的浮動按鈕，剛好壓在 AI 快速測試「送出答案」上，右側留出它的位置
+  .ai-submit-bar { padding-right: 72px; }
+
   .test-panel {
+    min-width: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -187,15 +199,17 @@
 
   .test-panel-head {
     background: var(--surface);
-    padding: 14px 20px;
+    height: 52px;
+    flex-shrink: 0;
+    padding: 0 16px 0 20px;
     border-bottom: 1px solid var(--divider-a50);
     display: flex;
     align-items: center;
     justify-content: space-between;
 
     .panel-title {
-      font-size: 14px;
-      font-weight: 600;
+      font-size: 15px;
+      font-weight: 700;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -208,14 +222,10 @@
       flex-shrink: 0;
     }
 
-    .ask-studio-btn,
+    .reset-chat-btn,
     .info-toggle-btn {
       font-size: 12px;
       padding: 5px 12px;
-    }
-
-    .ask-studio-btn .material-symbols-outlined {
-      color: $color_main_1;
     }
   }
 
@@ -362,20 +372,6 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-
-  .chat-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--divider-a50);
-
-    .system-hint {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-  }
 
   .chat-messages {
     flex: 1;
@@ -538,12 +534,22 @@
 
   .chat-input-row {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     padding: 12px 16px;
     border-top: 1px solid var(--divider-a50);
+    background: var(--surface);
 
     .custom-input {
       flex: 1;
+      height: 40px;
+    }
+
+    .custom-btn {
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      justify-content: center;
+      flex-shrink: 0;
     }
   }
 }

@@ -119,7 +119,7 @@ export const routes: RouteRecordRaw[] = [
       {
         path: '/view/SkillTest',
         name: 'SkillTest',
-        component: () => import('@/views/SkillTest.vue'),
+        component: () => import('@/views/SkillTestVersions.vue'),
         meta: { title: '技能測試沙盒', parentName: 'SkillManagement' },
       },
       {

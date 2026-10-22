@@ -1,0 +1,140 @@
+/* Scoped embed of agent-setup-demo's css/style.css + css/workspace.css under #page-agents,
+   so its generic class names (.btn/.label/.hint/.badge) never bleed into the rest of
+   skill-admin.html and vice versa. Source JS (data.js/workspace.js/app.js) is reused as-is
+   from agent-setup-demo/js/ — only the CSS needed this scoping pass. */
+
+#page-agents, #page-agents * { box-sizing: border-box; }
+#page-agents .ws-embed-root {
+  position: relative;
+  font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+}
+#page-agents .btn {
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+}
+#page-agents .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+#page-agents .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+#page-agents .btn-primary:disabled { background: var(--accent); opacity: 0.4; }
+#page-agents .btn-danger { background: var(--block-soft); color: var(--block); border-color: var(--block); }
+#page-agents .label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+#page-agents .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+#page-agents .badge-locked { background: var(--accent-soft); color: var(--accent); }
+#page-agents .hint { font-size: 12px; color: var(--muted); }
+
+#page-agents .ws-shell {
+  display: flex;
+  height: calc(100vh - 110px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+#page-agents .ws-pane {
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+}
+#page-agents #ws-nav {
+  width: 220px;
+  flex-shrink: 0;
+  background: #fafafa;
+  border-right: 1px solid var(--line);
+  padding: var(--space-3);
+}
+#page-agents #ws-center {
+  flex: 1;
+  background: var(--panel);
+  padding: var(--space-4);
+}
+#page-agents #ws-bag {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--gem-bg);
+  border-left: 1px solid var(--gem-border);
+  padding: var(--space-3);
+}
+#page-agents .ws-nav-group { margin-bottom: var(--space-2); }
+#page-agents .ws-nav-npc { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; }
+#page-agents .ws-nav-toggle { width: 14px; text-align: center; color: var(--muted); }
+#page-agents .ws-nav-label { font-size: 13px; }
+#page-agents .ws-nav-label--dim { color: var(--muted); }
+#page-agents .ws-nav-variant { padding: 4px 0 4px 28px; font-size: 12px; display: flex; justify-content: space-between; cursor: pointer; }
+#page-agents .ws-nav-variant--disabled { cursor: not-allowed; }
+#page-agents .ws-nav-create { color: var(--accent); cursor: pointer; }
+#page-agents .ws-nav-create-npc { margin-top: var(--space-3); color: var(--accent); cursor: pointer; font-size: 13px; }
+#page-agents .ws-nav-form { margin-top: var(--space-2); display: flex; flex-direction: column; gap: 6px; }
+#page-agents .ws-nav-form-input { padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; }
+#page-agents .ws-nav-form-error { color: var(--block); font-size: 11px; }
+#page-agents .ws-nav-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
+#page-agents .ws-npc-header { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-3); }
+#page-agents .ws-npc-avatar { font-size: 28px; }
+#page-agents .ws-npc-name { font-size: 18px; font-weight: 600; }
+#page-agents .ws-npc-field { margin-bottom: var(--space-2); font-size: 13px; }
+#page-agents .ws-npc-name-input { font-size: 16px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 4px; }
+#page-agents .ws-model-block { margin-bottom: var(--space-3); padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); }
+#page-agents .ws-param-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; font-size: 12px; }
+#page-agents .ws-param-row input, #page-agents .ws-param-row select { width: 100px; padding: 2px 6px; }
+#page-agents .ws-param-error { color: var(--block); font-size: 11px; margin: 4px 0; }
+#page-agents .ws-reset-btn { position: absolute; top: 8px; right: 8px; z-index: 10; }
+
+/* Phase 2 additions (variant editor, ability area, bag catalog, modals) */
+#page-agents .ws-variant-titlebar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
+#page-agents .ws-variant-titlebar-name { font-size: 16px; font-weight: 600; }
+#page-agents .ws-variant-titlebar-actions { margin-left: auto; display: flex; gap: 6px; }
+/* Also used, unscoped, inside the body-level modals below (margin-left:auto is harmless there). */
+.ws-variant-titlebar-actions { margin-left: auto; display: flex; gap: 6px; }
+#page-agents .ws-variant-tabs { display: flex; gap: var(--space-4); border-bottom: 1px solid var(--line); margin-bottom: var(--space-3); }
+#page-agents .ws-variant-tab { padding-bottom: 6px; font-size: 13px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+#page-agents .ws-variant-tab--active { color: var(--accent); border-bottom-color: var(--accent); }
+#page-agents .ws-variant-tab-panel { min-height: 120px; }
+#page-agents .ws-variant-field { margin-bottom: var(--space-2); font-size: 13px; }
+#page-agents .ws-variant-field textarea, #page-agents .ws-variant-field input { width: 100%; }
+#page-agents .ws-ability-section { margin-bottom: var(--space-3); }
+#page-agents .ws-equipped-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; font-size: 12px; }
+#page-agents .ws-equipped-item .btn { margin-left: auto; padding: 2px 8px; height: auto; }
+#page-agents .ws-gem-chip { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--gem-bg); border: 1px solid var(--gem-border); }
+#page-agents .ws-bag-item { padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; }
+#page-agents .ws-bag-item--active { border-color: var(--accent); background: var(--accent-soft); }
+#page-agents .ws-bag-item--draft { opacity: 0.5; cursor: not-allowed; border-style: dashed; }
+#page-agents .ws-bag-warning { color: var(--warn); font-size: 11px; margin: 6px 0; }
+#page-agents .ws-bag-error { color: var(--block); font-size: 11px; margin: 6px 0; }
+/* Not #page-agents-scoped on purpose: these two modals are placed at body level in
+   skill-admin.html (siblings of .page, matching skill-admin's own .modal-mask pattern),
+   the same way they sit outside #app in the standalone agent-setup-demo/index.html. The
+   class name ws-modal-mask/ws-modal-box/ws-history-row is distinct from skill-admin's own
+   .modal-mask/.modal-box, so no collision risk from leaving these unscoped. */
+.ws-modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 50; }
+.ws-modal-mask.ws-modal--active { display: flex; }
+.ws-modal-box { background: var(--panel); border-radius: 8px; padding: var(--space-4); width: 360px; }
+.ws-history-row { padding: 4px 0; font-size: 13px; display: flex; justify-content: space-between; }
+
+/* Phase 3 additions (flyout detail panel) */
+#page-agents .ws-shell { position: relative; }
+#page-agents .ws-bag-item-detail-btn { margin-left: 6px; cursor: pointer; background: none; border: none; color: var(--muted); font-size: 12px; }
+#page-agents #ws-bag-detail-flyout { display: none; position: absolute; top: 0; bottom: 0; right: 300px; width: 460px; background: var(--panel); border-left: 1px solid var(--line); box-shadow: -4px 0 12px rgba(0,0,0,0.15); z-index: 40; overflow-y: auto; padding: var(--space-4); }
+#page-agents #ws-bag-detail-flyout.ws-flyout--active { display: block; }
+#page-agents .ws-center--dim { opacity: 0.4; }
+#page-agents .ws-flyout-close { float: right; }
+#page-agents .ws-flyout-header { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-3); clear: both; }
+#page-agents .ws-flyout-icon { font-size: 24px; }
+#page-agents .ws-flyout-type-label { font-size: 11px; color: var(--muted); }
+#page-agents .ws-flyout-name { font-size: 16px; font-weight: 600; }
+#page-agents .ws-flyout-level-row { display: flex; gap: 6px; margin-bottom: var(--space-3); flex-wrap: wrap; }
+#page-agents .ws-flyout-level-btn { padding: 4px 10px; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; font-size: 12px; background: var(--panel); }
+#page-agents .ws-flyout-level-btn--active { border-color: var(--accent); color: var(--accent); }
+#page-agents .ws-flyout-level-btn--draft { border-style: dashed; }
+#page-agents .ws-flyout-field { margin-bottom: var(--space-2); font-size: 13px; }
+#page-agents .ws-flyout-ref-list { font-size: 12px; color: var(--muted); }
+#page-agents .ws-flyout-ref-item { padding: 2px 0; }
+#page-agents .ws-flyout-error { color: var(--block); font-size: 12px; margin: 6px 0; }
+#page-agents .ws-flyout-actions { margin-top: var(--space-4); display: flex; gap: 8px; }
+#page-agents .ws-flyout-gem-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; }
+#page-agents .ws-flyout-field select[data-flyout-add-gem-select] { margin-right: 6px; }
+#page-agents .ws-bag-header { display: flex; align-items: center; justify-content: space-between; margin-top: 28px; margin-bottom: var(--space-2); }

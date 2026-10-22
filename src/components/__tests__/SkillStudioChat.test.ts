@@ -50,6 +50,16 @@ describe('SkillStudioChat', () => {
     expect(w.find('.ssc-chip').exists()).toBe(false)
   })
 
+  it('開場白之後又被動推進第二則 agent 訊息（例如測試生成中的敘事文字）時，也不再顯示建議 chip', () => {
+    const w = mountChat({
+      messages: [
+        { id: 'm1', role: 'agent', content: '你好，我們來調整這顆技能。' },
+        { id: 'm2', role: 'agent', content: '目前還沒有指派 Agent，先用技能本身的內容出題。' },
+      ] as StudioMessage[],
+    })
+    expect(w.find('.ssc-chip').exists()).toBe(false)
+  })
+
   it('輸入後按 Enter 或送出鈕會 emit send 並清空輸入框', async () => {
     const w = mountChat()
     const input = w.find('input.custom-input')

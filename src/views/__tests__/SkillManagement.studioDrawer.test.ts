@@ -61,7 +61,7 @@ describe('SkillManagement 抽屜：技能管理頁內建立/編輯不離開列�
   it('帶 ?skillId= 掛載（重新整理／分享連結情境）：抽屜打開在修改模式，內容正確', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '週報自動生成', instructions: '1. 產出週報', triggerHint: 't', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '週報自動生成', instructions: '1. 產出週報', description: 't', assignedAgents: [] })
     await mountAt({ skillId: id })
     expect(body().find('.ssd-panel').exists()).toBe(true)
     expect(body().find('.banner-title').text()).toBe('修改技能')
@@ -81,7 +81,7 @@ describe('SkillManagement 抽屜：技能管理頁內建立/編輯不離開列�
   it('點背景遮罩關閉：有未儲存變更時跳確認，取消則抽屜不關閉', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '週報自動生成', instructions: '1. 產出週報', triggerHint: 't', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '週報自動生成', instructions: '1. 產出週報', description: 't', assignedAgents: [] })
     await mountAt({ skillId: id })
     // loadSkill() 之後 gateStage 已經是 'active'（修改模式不用再走一輪意圖分流），
     // 送一句改名訊息會直接命中 interpretStudioMessage 的改名規則，讓 draft 變 dirty，
@@ -109,8 +109,8 @@ describe('SkillManagement 抽屜：技能管理頁內建立/編輯不離開列�
   it('抽屜開著時點另一顆技能的「編輯」：先跳確認，確認後換成新的編輯目標', async () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
-    const idA = store.createPersonalSkill({ name: '技能A', instructions: '1. A', triggerHint: 't', assignedAgents: [] })
-    const idB = store.createPersonalSkill({ name: '技能B', instructions: '1. B', triggerHint: 't', assignedAgents: [] })
+    const idA = store.createPersonalSkill({ name: '技能A', instructions: '1. A', description: 't', assignedAgents: [] })
+    const idB = store.createPersonalSkill({ name: '技能B', instructions: '1. B', description: 't', assignedAgents: [] })
     const { router } = await mountAt({ skillId: idA })
     expect(body().find('.banner-title-row .ssc-mode-chip').text()).toContain('修改：技能A')
 

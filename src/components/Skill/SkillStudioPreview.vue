@@ -11,6 +11,8 @@
       <button
         type="button"
         :class="['ssp-tab-btn', { 'is-active': props.activeTab === 'test' }]"
+        :disabled="props.testLocked"
+        :title="props.testLocked ? TEST_LOCKED_HINT : undefined"
         @click="emit('update:activeTab', 'test')"
       >
         <i class="material-symbols-outlined">science</i>測試
@@ -40,22 +42,48 @@
         </div>
 
         <div class="ssp-section">
-          <div class="ssp-section-label">說明</div>
+          <div class="ssp-section-label">技能描述</div>
           <p v-if="props.draft.description" class="ssp-text">{{ props.draft.description }}</p>
           <p v-else class="ssp-empty">跟 Agent 描述這個技能要做什麼</p>
         </div>
 
         <div class="ssp-section">
-          <div class="ssp-section-label">觸發條件</div>
-          <p v-if="props.draft.triggerHint" class="ssp-text">{{ props.draft.triggerHint }}</p>
-          <p v-else class="ssp-empty">尚未設定觸發條件</p>
+          <div class="ssp-section-label">技能內文</div>
+          <div v-if="instructionsHtml" class="markdown-body ssp-markdown" v-html="instructionsHtml"></div>
+          <p v-else class="ssp-empty">尚未撰寫技能內文</p>
         </div>
 
-        <div class="ssp-section">
-          <div class="ssp-section-label">技能指令</div>
-          <div v-if="instructionsHtml" class="markdown-body ssp-markdown" v-html="instructionsHtml"></div>
-          <p v-else class="ssp-empty">尚未撰寫技能指令</p>
-        </div>
+        <!-- RD 技能定義的步驟／例外或特殊情況／固定輸出格式／適用範圍。後端模式不顯示：
+             後端技能的內文本身就是整份 RD 格式，不拆成這幾欄 -->
+        <template v-if="!props.backendTest">
+          <div class="ssp-section">
+            <div class="ssp-section-label">步驟</div>
+            <ol v-if="props.draft.steps.length" class="ssp-text">
+              <li v-for="(step, i) in props.draft.steps" :key="`${i}-${step}`">{{ step }}</li>
+            </ol>
+            <p v-else class="ssp-empty">尚未列出步驟（必填）{{ isChat ? '，跟 Agent 說「步驟：…」就能補上' : '' }}</p>
+          </div>
+
+          <div class="ssp-section">
+            <div class="ssp-section-label">例外或特殊情況</div>
+            <ul v-if="props.draft.exceptions.length" class="ssp-text">
+              <li v-for="(ex, i) in props.draft.exceptions" :key="`${i}-${ex}`">{{ ex }}</li>
+            </ul>
+            <p v-else class="ssp-empty">選填{{ isChat ? '，跟 Agent 說「例外：…」就能補上' : '' }}</p>
+          </div>
+
+          <div class="ssp-section">
+            <div class="ssp-section-label">固定輸出格式</div>
+            <p v-if="props.draft.outputFormat" class="ssp-text">{{ props.draft.outputFormat }}</p>
+            <p v-else class="ssp-empty">選填{{ isChat ? '，跟 Agent 說「輸出格式：…」就能補上' : '' }}</p>
+          </div>
+
+          <div class="ssp-section">
+            <div class="ssp-section-label">適用範圍</div>
+            <p v-if="props.draft.applicableScope" class="ssp-text">{{ props.draft.applicableScope }}</p>
+            <p v-else class="ssp-empty">選填{{ isChat ? '，跟 Agent 說「適用範圍：…」就能補上' : '' }}</p>
+          </div>
+        </template>
 
         <div class="ssp-section">
           <div class="ssp-section-label">覆蓋能力</div>
@@ -65,7 +93,7 @@
           <p v-else class="ssp-empty">尚未拆解覆蓋能力項目</p>
         </div>
 
-        <div v-if="props.draft.method === 'blocks'" class="ssp-section">
+        <div class="ssp-section">
           <div class="ssp-section-label">指派 Agent</div>
           <div v-if="props.draft.assignedAgents.length" class="ssp-caps">
             <span v-for="agent in props.draft.assignedAgents" :key="agent" class="ssp-agent-chip">{{ agent }}</span>
@@ -126,7 +154,7 @@
     </template>
 
     <!-- ── 測試：不用先存檔，草稿內容就能先測；題目跟目前草稿內容不一致時
-         （改過 name／triggerHint／覆蓋能力）才提示重新生成，跟存不存檔無關 ── -->
+         （改過 name／說明／覆蓋能力）才提示重新生成，跟存不存檔無關 ── -->
     <template v-else>
       <!-- 後端模式：測試走後端（題目、交卷比對都在後端），不用下面的假資料測試 -->
       <div v-if="props.backendTest" class="ssp-test-body">
@@ -140,8 +168,7 @@
         <SkillTestAI
           :skill-id="effectiveTestId!"
           :draft-context="testDraftContext"
-          :can-save="props.canSave"
-          :request-save-draft="props.requestSaveDraft"
+          :edit-hint="testEditHint"
         />
         <div v-if="props.savedSkillId" class="ssp-test-foot">
           <span class="ssp-test-foot-text">想手動模擬使用者對話，或比較不同版本？</span>
@@ -177,6 +204,8 @@ const props = defineProps<{
   // 沒傳就退回 savedSkillId，維持舊行為（例如獨立測試沙盒一定是已存檔的技能）
   testSkillId?: string | null
   isDirty: boolean
+  // 修改既有技能、改了還沒存：「測試」tab 反灰（見 useSkillStudioConversation 的 testLocked）
+  testLocked?: boolean
   canSave: boolean
   activeTab: 'preview' | 'test'
   nameConflict?: boolean
@@ -187,9 +216,6 @@ const props = defineProps<{
   // 外殼（例如抽屜）把儲存／放棄移到固定不隨 tab 切換的位置時，這裡不用重複渲染
   // 自己的版本——見 SkillStudioWorkspace.vue 的 studio-save-footer
   hideFooter?: boolean
-  // 轉傳給 SkillTestAI 的「儲存並啟用」用：同步存草稿、回傳新技能 id（見
-  // useSkillStudioConversation.ts 的 save()）。這裡純轉手，不自己呼叫
-  requestSaveDraft?: () => string | null
   // 後端模式的測試：用這場後端對話出題與交卷；testedNote 是測過之後怎麼把記號記下來的說明
   backendTest?: boolean
   conversationId?: string | null
@@ -204,6 +230,8 @@ const emit = defineEmits<{
   discard: []
   'update:files': [files: SkillFile[]]
 }>()
+
+const TEST_LOCKED_HINT = '有未儲存的修改，先儲存再測試'
 
 const router = useRouter()
 const md = new MarkdownIt({ html: false, breaks: true, linkify: false })
@@ -224,23 +252,29 @@ const instructionsHtml = computed(() =>
 const effectiveTestId = computed(() => props.testSkillId ?? props.savedSkillId)
 
 // 草稿還沒存檔、或技能已存在但草稿改過還沒存時，用來補齊組題關鍵字的來源。
-// composition 要帶上：積木組裝的草稿測試時，組題要優先用觸發情境而不是覆蓋能力
+// composition 要帶上：積木組裝的草稿測試時，組題要優先用說明而不是覆蓋能力
 // （見 generateDynamicTriggerEdgeScenarios），沒有這個欄位會被誤判成對話建立的技能
+// 測試沒全對時，報告裡「下一步」要告訴使用者去哪裡改：對話方式在對話裡（抽屜左側／畫布的對話分頁），積木方式在基本設定
+const testEditHint = computed(() =>
+  props.draft.method === 'blocks' ? '回到「基本設定」調整技能描述' : '到對話裡告訴 Agent 哪裡要調整',
+)
+
 const testDraftContext = computed<TriggerEdgeSource>(() => ({
   name: props.draft.name,
-  triggerHint: props.draft.triggerHint,
+  description: props.draft.description,
   capabilities: props.draft.capabilities,
   composition: props.draft.method === 'blocks' ? { sectionIds: [...props.draft.sectionIds] } : undefined,
+  assignedAgents: props.draft.assignedAgents,
 }))
 
 // 題目是不是跟不上最新的草稿內容了——不是看存不存檔，是看「產生題目當下的
-// name／triggerHint／capabilities」跟「現在的草稿內容」是否還一致
+// name／description／capabilities」跟「現在的草稿內容」是否還一致
 const testContentStale = computed(() => {
   if (!store.aiTestReport) return false
   if (store.aiTestScenariosSkillId !== effectiveTestId.value) return false
   const current = JSON.stringify({
     name: props.draft.name,
-    triggerHint: props.draft.triggerHint,
+    description: props.draft.description,
     capabilities: props.draft.capabilities,
   })
   return current !== store.aiTestScenariosSnapshot
@@ -251,15 +285,22 @@ const saveEnabled = computed(() =>
   props.mode === 'create' ? props.canSave : props.canSave && props.isDirty
 )
 
-// 積木方式必填欄位比較多（說明／觸發情境／覆蓋能力／指派 Agent），存不了的時候
+// 積木方式必填欄位比較多（說明／覆蓋能力／指派 Agent），存不了的時候
 // 直接列出還缺什麼，不要讓使用者自己猜按鈕為什麼反灰
+const isChat = computed(() => props.draft.method === 'chat')
+
 const missingFieldsHint = computed(() => {
-  if (saveEnabled.value || props.draft.method !== 'blocks') return ''
+  if (saveEnabled.value) return ''
+  // 對話方式只有步驟可能單獨漏掉（名稱／內文一擬稿就有），跟 composable 的 missingFieldsHint 同一套規則
+  if (isChat.value) {
+    return props.draft.name.trim() && props.draft.instructions.trim() && !props.draft.steps.length && !props.backendTest
+      ? '還缺：步驟' : ''
+  }
+  if (props.draft.method !== 'blocks') return ''
   const missing: string[] = []
   if (!props.draft.name.trim()) missing.push('技能名稱')
   if (!props.draft.instructions.trim()) missing.push('積木組成（至少選一個章節）')
-  if (!props.draft.description.trim()) missing.push('說明')
-  if (!props.draft.triggerHint.trim()) missing.push('觸發情境')
+  if (!props.draft.description.trim()) missing.push('技能描述')
   if (!props.draft.capabilities.length) missing.push('覆蓋能力')
   if (!props.draft.keywords.length) missing.push('關鍵字')
   if (!props.draft.assignedAgents.length) missing.push('指派 Agent')
@@ -269,6 +310,8 @@ const missingFieldsHint = computed(() => {
 const status = computed<{ label: string; tone: 'amber' | 'slate' }>(() => {
   if (!props.savedSkillId) return { label: '未儲存草稿', tone: 'amber' }
   if (props.isDirty) return { label: '有未儲存變更', tone: 'amber' }
+  // 修改存檔後技能會轉成停用中（見 useSkillStudioConversation 的 save()），要到「測試」重新啟用
+  if (store.findSkill(props.savedSkillId)?.isEnabled === false) return { label: '個人技能 · 停用中', tone: 'amber' }
   return { label: '個人技能 · 可使用', tone: 'slate' }
 })
 </script>

@@ -5,7 +5,6 @@ import {
   DEFAULT_OPENING_MESSAGE,
   deriveFromSections,
   suggestDescriptionVariants,
-  suggestTriggerHintVariants,
   emptyDraft,
   extractSkillName,
   interpretStudioMessage,
@@ -51,14 +50,14 @@ describe('extractSkillName', () => {
 })
 
 describe('interpretStudioMessage', () => {
-  it('建立模式第一句：產生名稱／說明／觸發／三步驟／兩項能力，並帶三個動作 chip', () => {
+  it('建立模式第一句：產生名稱／說明／三步驟／兩項能力，並帶三個動作 chip', () => {
     const reply = interpretStudioMessage('幫我建立一個能查 ERP 庫存的技能', emptyDraft(), 'create')
     expect(reply.patch?.name).toBe('查 ERP 庫存')
     expect(reply.patch?.description).toBe('幫我建立一個能查 ERP 庫存的技能')
-    expect(reply.patch?.triggerHint).toBe('當使用者提到「查 ERP 庫存」相關需求時')
+    expect(reply.patch).not.toHaveProperty('triggerHint')
     expect(reply.patch?.instructions?.split('\n')).toHaveLength(3)
     expect(reply.patch?.capabilities).toHaveLength(2)
-    expect(reply.actions?.map(a => a.label)).toEqual(['看起來沒問題，儲存', '觸發條件要更精準', '再補一個步驟'])
+    expect(reply.actions?.map(a => a.label)).toEqual(['看起來沒問題，儲存', '技能描述要更精準', '再補一個步驟'])
   })
 
   it('改名：優先取引號內文字', () => {
@@ -68,17 +67,54 @@ describe('interpretStudioMessage', () => {
     expect(reply.content).toContain('庫存速查')
   })
 
-  it('觸發：更新 triggerHint', () => {
+  it('技能描述：「技能描述改成…」更新 description，回覆用「技能描述」', () => {
     const draft = { ...emptyDraft(), name: 'x' }
-    const reply = interpretStudioMessage('觸發條件改成當使用者問缺貨時', draft, 'edit')
-    expect(reply.patch?.triggerHint).toBe('當使用者問缺貨時')
+    const reply = interpretStudioMessage('技能描述改成當使用者問缺貨時查庫存', draft, 'edit')
+    expect(reply.patch?.description).toBe('當使用者問缺貨時查庫存')
+    expect(reply.content).toBe('技能描述已更新為：當使用者問缺貨時查庫存')
   })
 
-  it('加步驟：依現有步驟數接續編號', () => {
-    const draft = { ...emptyDraft(), name: 'x', instructions: '1. a\n2. b\n3. c' }
+  it('舊說法：「說明改成…」也更新 description', () => {
+    const draft = { ...emptyDraft(), name: 'x' }
+    const reply = interpretStudioMessage('說明改成當使用者問缺貨時查庫存', draft, 'edit')
+    expect(reply.patch?.description).toBe('當使用者問缺貨時查庫存')
+  })
+
+  it('觸發條件已併進說明：舊說法「觸發條件改成…」也更新 description', () => {
+    const draft = { ...emptyDraft(), name: 'x' }
+    const reply = interpretStudioMessage('觸發條件改成當使用者問缺貨時', draft, 'edit')
+    expect(reply.patch?.description).toBe('當使用者問缺貨時')
+  })
+
+  it('加步驟：寫進 RD 的步驟欄位、依現有步驟數接續編號，不動技能內文', () => {
+    const draft = { ...emptyDraft(), name: 'x', instructions: '內文', steps: ['a', 'b', 'c'] }
     const reply = interpretStudioMessage('再補一個步驟', draft, 'edit')
-    expect(reply.patch?.instructions).toBe('1. a\n2. b\n3. c\n4. 檢查輸出結果，必要時補充說明')
+    expect(reply.patch?.steps).toEqual(['a', 'b', 'c', '檢查輸出結果，必要時補充說明'])
+    expect(reply.patch?.instructions).toBeUndefined()
     expect(reply.content).toBe('已追加第 4 步。')
+  })
+
+  it('例外／輸出格式／適用範圍：各自寫進 RD 對應欄位', () => {
+    const draft = { ...emptyDraft(), name: 'x', exceptions: ['舊的'] }
+    expect(interpretStudioMessage('例外：查無資料時請使用者確認', draft, 'edit').patch?.exceptions)
+      .toEqual(['舊的', '查無資料時請使用者確認'])
+    expect(interpretStudioMessage('輸出格式改成表格', draft, 'edit').patch?.outputFormat).toBe('表格')
+    expect(interpretStudioMessage('適用範圍是所有倉庫', draft, 'edit').patch?.applicableScope).toBe('所有倉庫')
+  })
+
+  it('第一次擬稿：從描述與追問回答抓出步驟、例外；沒講步驟就放通用步驟', () => {
+    const withAnswers = interpretStudioMessage(
+      '幫我建立查庫存的技能\n如果查不到就請使用者確認料號\n先查倉庫，然後彙總數量',
+      emptyDraft(), 'create',
+    )
+    expect(withAnswers.patch?.steps).toEqual(['查倉庫', '彙總數量'])
+    expect(withAnswers.patch?.exceptions).toEqual(['如果查不到就請使用者確認料號'])
+    // 說明只留沒被抓成步驟／例外的內容，不重複
+    expect(withAnswers.patch?.description).toBe('幫我建立查庫存的技能')
+
+    const bare = interpretStudioMessage('幫我建立查庫存的技能', emptyDraft(), 'create')
+    expect(bare.patch?.steps).toHaveLength(3)
+    expect(bare.patch?.exceptions).toEqual([])
   })
 
   it('加能力：push 一項 capability（hashtag，不支援空白）', () => {
@@ -232,24 +268,63 @@ describe('useSkillStudioConversation', () => {
     expect(c.suggestionChips.value[0].label).toBe('幫我建立一個能查 ERP 庫存的技能')
     c.loadSkill('personal-001')
     const labels = c.suggestionChips.value.map(s => s.label)
-    expect(labels).toContain('調整技能指令')
-    expect(labels).toContain('調整觸發條件')
+    expect(labels).toContain('調整技能內文')
+    expect(labels).toContain('調整技能描述')
   })
 
   it('startCreate(prefill, openingMessage)：草稿預填、isDirty 為 true、canSave 依內容、開場訊息採用指定文字', () => {
     const c = useSkillStudioConversation()
     c.startCreate(
-      { name: '產品銷售報告整理', instructions: '1. 查詢\n2. 套用規範', triggerHint: '偵測到整理需求' },
+      { name: '產品銷售報告整理', instructions: '1. 查詢\n2. 套用規範', description: '偵測到整理需求', steps: ['查詢', '套用規範'] },
       '這顆技能來自本對話的「查詢銷售資料」流程。'
     )
     expect(c.mode.value).toBe('create')
     expect(c.draft.value.name).toBe('產品銷售報告整理')
-    expect(c.draft.value.description).toBe('')
+    expect(c.draft.value.description).toBe('偵測到整理需求')
     expect(c.draft.value.method).toBe('chat')
     expect(c.isDirty.value).toBe(true)
     expect(c.canSave.value).toBe(true)
     expect(c.messages.value).toHaveLength(1)
     expect(c.messages.value[0].content).toBe('這顆技能來自本對話的「查詢銷售資料」流程。')
+  })
+
+  it('積木方式缺技能描述：提示用「技能描述」而不是舊的「說明」', () => {
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('blocks')
+    c.updateBlocks({ name: 'x', sectionIds: ['promo_kpi'] })
+    expect(c.missingFieldsHint.value).toContain('技能描述')
+    expect(c.missingFieldsHint.value).not.toContain('說明')
+  })
+
+  it('步驟必填：預填沒有步驟就不能存，對話方式也會提示「還缺：步驟」', () => {
+    const c = useSkillStudioConversation()
+    c.startCreate({ name: '沒步驟的技能', instructions: '內文', description: '說明' })
+    expect(c.canSave.value).toBe(false)
+    expect(c.missingFieldsHint.value).toBe('還缺：步驟')
+    c.draft.value = { ...c.draft.value, steps: ['第一步'] }
+    expect(c.canSave.value).toBe(true)
+    expect(c.missingFieldsHint.value).toBe('')
+  })
+
+  it('積木方式：選章節同步帶出步驟；例外／輸出格式／適用範圍由 updateBlockOptional 編輯，存檔一起寫進技能', () => {
+    const store = useSkillStore()
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('blocks')
+    c.updateBlocks({ name: '渠道週報', sectionIds: ['promo_kpi'] })
+    expect(c.draft.value.steps).toEqual(['促銷核心 KPI：完成訂單數、GMV、折扣總額、折扣佔比、規則數。'])
+    c.updateBlockOptional({ exceptions: ['無數據時註記'], outputFormat: '附圖表', applicableScope: '行銷部' })
+    c.updateBlockDescription('說明')
+    c.updateBlockCapabilities(['a'])
+    c.updateBlockKeywords(['k'])
+    c.updateBlockAssignedAgents(['通用助理'])
+    const id = c.save()!
+    const saved = store.findSkill(id)!
+    expect(saved.steps).toHaveLength(1)
+    expect(saved.exceptions).toEqual(['無數據時註記'])
+    expect(saved.outputFormat).toBe('附圖表')
+    expect(saved.applicableScope).toBe('行銷部')
   })
 
   it('預填後的第一句走改名規則，不會被「第一句擬草稿」規則覆寫', async () => {
@@ -393,32 +468,26 @@ describe('useSkillStudioConversation', () => {
     expect(c.isDirty.value).toBe(false)
   })
 
-  it('deriveFromSections：編號步驟、分類觸發條件、每章一項能力；空清單全空', () => {
+  it('deriveFromSections：編號步驟、每章一項能力；空清單全空', () => {
     const d = deriveFromSections(['promo_kpi', 'ta_gender'])
     expect(d.instructions).toBe('依序產出以下章節：\n1. 促銷核心 KPI：完成訂單數、GMV、折扣總額、折扣佔比、規則數。\n2. 性別分布：會員性別分布資料，圖表自動生成。')
-    expect(d.triggerHint).toBe('當使用者要求產出行銷報告，或提到「TA 用戶畫像、行銷活動成效」相關分析時')
     // hashtag 不支援空白，章節名稱含空白的（「促銷核心 KPI」）轉成能力標籤時去掉
     expect(d.capabilities).toEqual(['促銷核心KPI', '性別分布'])
-    expect(deriveFromSections([])).toEqual({ instructions: '', triggerHint: '', capabilities: [] })
+    expect(d.steps).toEqual(['促銷核心 KPI：完成訂單數、GMV、折扣總額、折扣佔比、規則數。', '性別分布：會員性別分布資料，圖表自動生成。'])
+    expect(deriveFromSections([])).toEqual({ instructions: '', capabilities: [], steps: [] })
     expect(deriveFromSections(['nope']).instructions).toBe('')
   })
 
-  it('suggestDescriptionVariants／suggestTriggerHintVariants：各回傳 3 句不同措辭；空清單回傳空陣列', () => {
+  it('suggestDescriptionVariants：回傳 3 句不同措辭；空清單回傳空陣列', () => {
     const descriptions = suggestDescriptionVariants(['promo_kpi', 'ta_gender'])
     expect(descriptions).toHaveLength(3)
     expect(new Set(descriptions).size).toBe(3) // 三句彼此不同，不是同一句重複三次
     descriptions.forEach(d => expect(d).toContain('TA 用戶畫像、行銷活動成效'))
 
-    const triggerHints = suggestTriggerHintVariants(['promo_kpi', 'ta_gender'])
-    expect(triggerHints).toHaveLength(3)
-    expect(new Set(triggerHints).size).toBe(3)
-    triggerHints.forEach(t => expect(t).toContain('TA 用戶畫像、行銷活動成效'))
-
     expect(suggestDescriptionVariants([])).toEqual([])
-    expect(suggestTriggerHintVariants([])).toEqual([])
   })
 
-  it('updateBlocks：只在 blocks 方式生效；sectionIds 變動只重推導技能指令，不自動覆蓋說明／觸發情境／關鍵字／覆蓋能力', () => {
+  it('updateBlocks：只在 blocks 方式生效；sectionIds 變動只重推導技能指令，不自動覆蓋說明／關鍵字／覆蓋能力', () => {
     const c = useSkillStudioConversation()
     c.startCreate()
     c.chooseMethod('blocks')
@@ -427,13 +496,12 @@ describe('useSkillStudioConversation', () => {
     expect(c.canSave.value).toBe(false) // 還沒有章節
     c.updateBlocks({ sectionIds: ['promo_kpi'] })
     expect(c.draft.value.instructions).toContain('1. 促銷核心 KPI')
-    // 說明／觸發情境／覆蓋能力改成手動必填欄位，不再隨選章節自動覆蓋
+    // 說明／覆蓋能力改成手動必填欄位，不再隨選章節自動覆蓋
     expect(c.draft.value.capabilities).toHaveLength(0)
-    expect(c.draft.value.triggerHint).toBe('')
-    expect(c.canSave.value).toBe(false) // 還缺說明／觸發情境／關鍵字／覆蓋能力／指派 Agent
+    expect(c.draft.value.description).toBe('')
+    expect(c.canSave.value).toBe(false) // 還缺說明／關鍵字／覆蓋能力／指派 Agent
     expect(c.isDirty.value).toBe(true)
     c.updateBlockDescription('每週一產出')
-    c.updateBlockTriggerHint('當使用者要求產出週報時')
     c.updateBlockKeywords(['週報'])
     c.updateBlockCapabilities(['促銷核心KPI'])
     c.updateBlockAssignedAgents(['客服中心助理'])
@@ -455,7 +523,6 @@ describe('useSkillStudioConversation', () => {
     c.chooseMethod('blocks')
     c.updateBlocks({ name: '行銷週報', sectionIds: ['promo_kpi', 'ch_kpi'] })
     c.updateBlockDescription('每週一產出')
-    c.updateBlockTriggerHint('當使用者要求產出週報時')
     c.updateBlockKeywords(['週報'])
     c.updateBlockCapabilities(['促銷核心KPI'])
     c.updateBlockAssignedAgents(['客服中心助理'])
@@ -506,9 +573,9 @@ describe('classifyBuildOrModify', () => {
 describe('findSimilarSkill', () => {
   const skills: Skill[] = [
     {
-      id: 's1', name: '產品銷售報告整理', description: '', type: 'extension', origin: 'manually_created',
+      id: 's1', name: '產品銷售報告整理', description: '查詢銷售資料', type: 'extension', origin: 'manually_created',
       version: '初始版本', isEnabled: true, usageCount: 0, testPassRate: 0, avgLatencyMs: 0,
-      triggerHint: '查詢銷售資料', instructions: '整理銷售報告',
+      instructions: '整理銷售報告',
     },
   ]
 
@@ -557,7 +624,7 @@ describe('formatDraftSummary', () => {
     const draft = {
       ...emptyDraft(),
       name: '產品銷售報告整理',
-      triggerHint: '查詢銷售資料時',
+      description: '查詢銷售資料時',
       instructions: '1. 查詢資料\n2. 產出報告',
       capabilities: ['查詢資料'],
     }
@@ -821,7 +888,6 @@ describe('CLARIFY 補齊與關卡三確認', () => {
         name: '簽核文件資訊',
         description: '簽核企業檔案',
         instructions: '檢視核簽狀況',
-        triggerHint: '需要簽核文件時',
         assignedAgents: [],
         capabilities: ['test'],
         files: [],
@@ -845,6 +911,8 @@ describe('CLARIFY 補齊與關卡三確認', () => {
     await sendAndWait(c, '沒有特殊例外')
     await sendAndWait(c, '照標準流程執行')
     await sendAndWait(c, '對，沒錯')
+    expect(c.gateStage.value).toBe('confirmAgents')
+    await sendAndWait(c, '通用助理')
     expect(c.gateStage.value).toBe('gate3')
   }
 
@@ -858,9 +926,9 @@ describe('CLARIFY 補齊與關卡三確認', () => {
   it('clarify 階段一般描述：照既有 interpretStudioMessage 規則更新草稿，不轉關卡', async () => {
     const c = useSkillStudioConversation()
     await toClarify(c, '我要新增一份規定')
-    await sendAndWait(c, '觸發條件改成當使用者提到缺貨時')
+    await sendAndWait(c, '說明改成當使用者提到缺貨時查庫存')
     expect(c.gateStage.value).toBe('clarify')
-    expect(c.draft.value.triggerHint).toContain('缺貨')
+    expect(c.draft.value.description).toContain('缺貨')
   })
 
   it('clarify 階段說收尾語：轉關卡三，訊息帶草稿摘要', async () => {
@@ -1079,6 +1147,8 @@ describe('classifyGate3（模組內部邏輯，透過 gateStage 行為驗證，�
     await sendAndWait(c, '沒有特殊例外')
     await sendAndWait(c, '照標準流程執行')
     await sendAndWait(c, '對，沒錯')
+    expect(c.gateStage.value).toBe('confirmAgents')
+    await sendAndWait(c, '通用助理')
     expect(c.gateStage.value).toBe('gate3')
   }
 
@@ -1209,11 +1279,11 @@ describe('confirmKnownInfo：白話摘要確認', () => {
     expect(c.gateStage.value).toBe('confirmKnownInfo')
   }
 
-  it('確認：用累積的原始文字產生結構化草稿，直接轉關卡三，不留在 clarify', async () => {
+  it('確認：用累積的原始文字產生結構化草稿，轉「確認可調用 Agent」，不留在 clarify', async () => {
     const c = useSkillStudioConversation()
     await toConfirmKnownInfo(c)
     await sendAndWait(c, '對，沒錯')
-    expect(c.gateStage.value).toBe('gate3')
+    expect(c.gateStage.value).toBe('confirmAgents')
     expect(c.draft.value.name).toBeTruthy()
     expect(c.draft.value.instructions).toBeTruthy()
   })
@@ -1233,7 +1303,7 @@ describe('confirmKnownInfo：白話摘要確認', () => {
 
     // 補充完後正常確認，草稿內容應該要包含補充進去的文字
     await sendAndWait(c, '對，沒錯')
-    expect(c.gateStage.value).toBe('gate3')
+    expect(c.gateStage.value).toBe('confirmAgents')
   })
 
   it('看不懂：換句話重述摘要，不清空草稿，不跳關', async () => {
@@ -1246,179 +1316,12 @@ describe('confirmKnownInfo：白話摘要確認', () => {
   })
 })
 
-describe('notifyTestResult：AI 快速測試沒有全對時，左側對話主動引導調整', () => {
-  beforeEach(() => setActivePinia(createPinia()))
-
-  it('答對比例不是 100%：轉 clarify，推一則帶答對比例的引導訊息', () => {
-    const c = useSkillStudioConversation()
-    c.startCreate()
-    c.chooseMethod('chat')
-    const before = c.messages.value.length
-    c.notifyTestResult({ total: 8, correct: 6, byTag: {} as any, summary: '' })
-    expect(c.gateStage.value).toBe('clarify')
-    expect(c.messages.value.length).toBe(before + 1)
-    const last = c.messages.value.at(-1)!
-    expect(last.role).toBe('agent')
-    expect(last.content).toContain('6/8')
-    expect(last.content).toContain('75%')
-  })
-
-  it('全對（100%）、已存檔：不轉關卡，推一句引導去右側測試報告點「啟用技能」的訊息', () => {
-    const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '已存檔技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    const c = useSkillStudioConversation()
-    c.loadSkill(id)
-    const before = c.messages.value.length
-    const stageBefore = c.gateStage.value
-    c.notifyTestResult({ total: 8, correct: 8, byTag: {} as any, summary: '' })
-    expect(c.gateStage.value).toBe(stageBefore) // 不打斷後續對話，維持原本關卡
-    expect(c.messages.value.length).toBe(before + 1)
-    const last = c.messages.value.at(-1)!
-    expect(last.role).toBe('agent')
-    expect(last.content).toContain('啟用技能')
-    // 對話和預覽是左右並排（見 SkillStudioWorkspace），不是上下堆疊，
-    // 「下面」會指錯方向，固定成「右側」跟其他引導訊息的措辭一致
-    expect(last.content).toContain('右側的測試報告')
-    expect(last.content).not.toContain('下面')
-  })
-
-  it('全對（100%）、已存檔但這顆技能早就啟用中：不叫使用者去點一個不會出現的「啟用技能」按鈕', () => {
-    const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '早就上線的技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    store.toggleSkill(id) // 先讓它變成啟用中
-    expect(store.findSkill(id)!.isEnabled).toBe(true)
-    const c = useSkillStudioConversation()
-    c.loadSkill(id)
-    c.notifyTestResult({ total: 8, correct: 8, byTag: {} as any, summary: '' })
-    const last = c.messages.value.at(-1)!
-    expect(last.content).toContain('啟用中的狀態')
-    expect(last.content).not.toContain('到右側的測試報告點「啟用技能」')
-  })
-
-  it('全對（100%）、還沒存檔：引導先儲存，不是叫使用者去點一個還不存在的「啟用技能」按鈕', () => {
-    const c = useSkillStudioConversation()
-    c.startCreate()
-    c.chooseMethod('chat')
-    const before = c.messages.value.length
-    c.notifyTestResult({ total: 8, correct: 8, byTag: {} as any, summary: '' })
-    expect(c.messages.value.length).toBe(before + 1)
-    const last = c.messages.value.at(-1)!
-    expect(last.content).toContain('儲存')
-    expect(last.content).not.toContain('右側的測試報告')
-  })
-
-  it('沒有全對的引導訊息不附快捷按鈕——全部靠使用者自己打字（「重新測試」「不改，直接啟用」）', () => {
-    const c = useSkillStudioConversation()
-    c.startCreate()
-    c.chooseMethod('chat')
-    c.notifyTestResult({ total: 8, correct: 6, byTag: {} as any, summary: '' })
-    const last = c.messages.value.at(-1)!
-    expect(last.actions).toBeUndefined()
-  })
-
-  it('點「重新測試」：呼叫 store.generateAITestScenarios 重新出題、設定 requestTestTab 單次訊號、轉回 active（不是自由文字編輯）', async () => {
-    vi.useFakeTimers()
-    try {
-      const store = useSkillStore()
-      const id = store.createPersonalSkill({ name: '待重測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-      const spy = vi.spyOn(store, 'generateAITestScenarios')
-      const c = useSkillStudioConversation()
-      c.loadSkill(id)
-      c.notifyTestResult({ total: 8, correct: 6, byTag: {} as any, summary: '' })
-      expect(c.gateStage.value).toBe('clarify')
-      expect(c.requestTestTab.value).toBe(false)
-
-      const p = c.send('重新測試')
-      await vi.advanceTimersByTimeAsync(800)
-      await p
-      // 已存檔：testSkillId 就是真正的技能 id；draftContext 補上目前草稿的
-      // name／triggerHint／capabilities，store 裡找不到技能或技能內容是舊版時可以退回用它
-      expect(spy).toHaveBeenCalledWith(id, { name: '待重測技能', triggerHint: 'y', capabilities: [] })
-      expect(c.requestTestTab.value).toBe(true)
-      expect(c.gateStage.value).toBe('active')
-      expect(c.messages.value.at(-1)!.content).toContain('換一批新題目')
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('還沒存檔的草稿點「重新測試」：一樣能重新出題，掛在草稿佔位 testSkillId 底下，不要求先存檔', async () => {
-    vi.useFakeTimers()
-    try {
-      const store = useSkillStore()
-      const spy = vi.spyOn(store, 'generateAITestScenarios')
-      const c = useSkillStudioConversation()
-      c.startCreate()
-      c.chooseMethod('chat')
-      c.notifyTestResult({ total: 8, correct: 6, byTag: {} as any, summary: '' })
-
-      const p = c.send('重新測試')
-      await vi.advanceTimersByTimeAsync(800)
-      await p
-      expect(c.savedSkillId.value).toBeNull()
-      expect(spy).toHaveBeenCalledWith(c.testSkillId.value, expect.objectContaining({ name: c.draft.value.name }))
-      expect(c.requestTestTab.value).toBe(true)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('點「不改，直接啟用」：已測過（沒全對也行）就啟用，不改任何草稿內容，轉回 active', async () => {
-    vi.useFakeTimers()
-    try {
-      const store = useSkillStore()
-      const id = store.createPersonalSkill({ name: '待啟用技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-      expect(store.findSkill(id)!.isEnabled).toBe(false)
-      const gen = store.generateAITestScenarios(id)
-      await vi.advanceTimersByTimeAsync(900)
-      await gen
-      for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.expectedTrigger) // 全部不一致
-      const c = useSkillStudioConversation()
-      c.loadSkill(id)
-      c.notifyTestResult({ total: 8, correct: 6, byTag: {} as any, summary: '' })
-
-      const p = c.send('不改，直接啟用')
-      await vi.advanceTimersByTimeAsync(800)
-      await p
-      const skill = store.findSkill(id)!
-      expect(skill.isEnabled).toBe(true)
-      expect(skill.instructions).toBe('x') // 沒有改動草稿內容
-      expect(c.gateStage.value).toBe('active')
-      expect(c.messages.value.at(-1)!.content).toContain('已啟用')
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-})
-
-describe('notifyTestResult：沒測過就不能「直接啟用」', () => {
-  beforeEach(() => setActivePinia(createPinia()))
-
-  it('還沒做過測試就說「不改，直接啟用」：不啟用，講清楚要先測試', async () => {
-    vi.useFakeTimers()
-    try {
-      const store = useSkillStore()
-      const id = store.createPersonalSkill({ name: '沒測過技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-      const c = useSkillStudioConversation()
-      c.loadSkill(id)
-      c.notifyTestResult({ total: 8, correct: 6, byTag: {} as any, summary: '' })
-      const p = c.send('不改，直接啟用')
-      await vi.advanceTimersByTimeAsync(800)
-      await p
-      expect(store.findSkill(id)!.isEnabled).toBe(false)
-      expect(c.messages.value.at(-1)!.content).toContain('還沒測過')
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-})
-
 describe('修改模式下明確說要建立新技能：先確認，確認後捨棄目前修改開新流程', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
   function makeEditingConv() {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '查 ERP 庫存', instructions: '1. 查詢', triggerHint: '問庫存時', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '查 ERP 庫存', instructions: '1. 查詢', description: '問庫存時', assignedAgents: [] })
     const c = useSkillStudioConversation()
     c.loadSkill(id)
     return { store, c, id }
@@ -1444,12 +1347,12 @@ describe('修改模式下明確說要建立新技能：先確認，確認後捨�
     vi.useFakeTimers()
     try {
       const { c } = makeEditingConv()
-      const before = c.draft.value.instructions
+      const before = c.draft.value.steps.length
       const p = c.send('再補一個步驟：建立工單')
       await vi.advanceTimersByTimeAsync(800)
       await p
       expect(c.gateStage.value).toBe('active')
-      expect(c.draft.value.instructions).not.toBe(before)
+      expect(c.draft.value.steps).toHaveLength(before + 1)
     } finally {
       vi.useRealTimers()
     }
@@ -1523,5 +1426,157 @@ describe('修改模式下明確說要建立新技能：先確認，確認後捨�
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('確認可調用 Agent：草稿產出後、最終確認前多一關', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function sendAndWait(c: ReturnType<typeof useSkillStudioConversation>, text: string) {
+    const p = c.send(text)
+    await vi.advanceTimersByTimeAsync(800)
+    await p
+  }
+
+  async function toConfirmAgents(c: ReturnType<typeof useSkillStudioConversation>) {
+    c.startCreate()
+    c.chooseMethod('chat')
+    await sendAndWait(c, '我要新增一份規定')
+    await sendAndWait(c, '沒有特殊例外')
+    await sendAndWait(c, '照標準流程執行')
+    await sendAndWait(c, '對，沒錯')
+    expect(c.gateStage.value).toBe('confirmAgents')
+  }
+
+  it('問題訊息只帶「就用建議的」chip，沒有略過的選項', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    const last = c.messages.value.at(-1)!
+    expect(last.content).toContain('哪些 Agent 可以調用')
+    expect(last.actions).toHaveLength(1)
+    expect(last.actions![0].label).toMatch(/^就用建議的：/)
+  })
+
+  it('不能不指派：說「先不指派」會被擋下來，留在這關再問一次', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    await sendAndWait(c, '先不指派，啟用時再選')
+    expect(c.gateStage.value).toBe('confirmAgents')
+    expect(c.draft.value.assignedAgents).toEqual([])
+    expect(c.messages.value.at(-1)!.content).toContain('至少要指派一個 Agent')
+  })
+
+  it('直接打 Agent 名稱（可以好幾個）：寫進草稿，進最終確認，摘要列出可調用 Agent', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    await sendAndWait(c, '工程助理跟客服中心助理')
+    expect(c.draft.value.assignedAgents).toEqual(['客服中心助理', '工程助理'])
+    expect(c.gateStage.value).toBe('gate3')
+    expect(c.messages.value.at(-1)!.content).toContain('可調用 Agent：客服中心助理、工程助理')
+  })
+
+  it('點「就用建議的」：用建議的 Agent', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    const accept = c.messages.value.at(-1)!.actions![0].label
+    await sendAndWait(c, accept)
+    expect(c.draft.value.assignedAgents.length).toBeGreaterThan(0)
+    expect(c.gateStage.value).toBe('gate3')
+  })
+
+  it('對不到 Agent 名稱也不是同意／略過：留在這關再問一次', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    await sendAndWait(c, '嗯')
+    expect(c.gateStage.value).toBe('confirmAgents')
+  })
+
+  it('存檔時把可調用 Agent 寫進技能（對話方式也會存，不再固定空陣列）', async () => {
+    const store = useSkillStore()
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    await sendAndWait(c, '工程助理')
+    await sendAndWait(c, '可以')
+    expect(store.findSkill(c.savedSkillId.value!)!.assignedAgents).toEqual(['工程助理'])
+  })
+
+  it('最終確認退回 clarify 後再說「這樣就好」：不再重問 Agent；clarify 裡講 Agent 名稱可直接改', async () => {
+    const c = useSkillStudioConversation()
+    await toConfirmAgents(c)
+    await sendAndWait(c, '通用助理')
+    await sendAndWait(c, '不對，我要改')
+    expect(c.gateStage.value).toBe('clarify')
+    await sendAndWait(c, 'Agent 改成倉儲管理助理')
+    expect(c.draft.value.assignedAgents).toEqual(['倉儲管理助理'])
+    await sendAndWait(c, '這樣就好')
+    expect(c.gateStage.value).toBe('gate3')
+  })
+})
+
+describe('confirmAgentsBeforeSave：新建的對話技能直接按存檔鍵，也要先確認可調用 Agent', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers()
+  })
+  afterEach(() => vi.useRealTimers())
+
+  async function sendAndWait(c: ReturnType<typeof useSkillStudioConversation>, text: string) {
+    const p = c.send(text)
+    await vi.advanceTimersByTimeAsync(800)
+    await p
+  }
+
+  it('還沒問過 Agent（例如預填草稿直接按存檔）：攔下來在對話裡問，回答後直接存檔、寫進 Agent', async () => {
+    const store = useSkillStore()
+    const c = useSkillStudioConversation()
+    c.startCreate({ name: '預填技能', instructions: '1. 做事', description: '需要時', steps: ['做事'] })
+    c.chooseMethod('chat')
+    expect(c.confirmAgentsBeforeSave()).toBe(true)
+    expect(c.gateStage.value).toBe('confirmAgents')
+    expect(c.savedSkillId.value).toBeNull()
+
+    await sendAndWait(c, '工程助理')
+    expect(c.savedSkillId.value).toBeTruthy()
+    expect(store.findSkill(c.savedSkillId.value!)!.assignedAgents).toEqual(['工程助理'])
+    expect(c.gateStage.value).toBe('active')
+    expect(c.messages.value.at(-1)!.content).toContain('已存成個人技能')
+  })
+
+  it('對話裡已經確認過 Agent：不再攔截', async () => {
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('chat')
+    await sendAndWait(c, '我要新增一份規定')
+    await sendAndWait(c, '沒有特殊例外')
+    await sendAndWait(c, '照標準流程執行')
+    await sendAndWait(c, '對，沒錯')
+    await sendAndWait(c, '通用助理')
+    expect(c.confirmAgentsBeforeSave()).toBe(false)
+  })
+
+  it('已經問了 Agent、還沒回答就按存檔：不直接存，提醒先回答，回答完就存檔', async () => {
+    const store = useSkillStore()
+    const c = useSkillStudioConversation()
+    c.startCreate()
+    c.chooseMethod('chat')
+    await sendAndWait(c, '我要新增一份規定')
+    await sendAndWait(c, '沒有特殊例外')
+    await sendAndWait(c, '照標準流程執行')
+    await sendAndWait(c, '對，沒錯')
+    expect(c.gateStage.value).toBe('confirmAgents')
+    expect(c.confirmAgentsBeforeSave()).toBe(true)
+    expect(c.savedSkillId.value).toBeNull()
+    await sendAndWait(c, '知識管理助理')
+    expect(store.findSkill(c.savedSkillId.value!)!.assignedAgents).toEqual(['知識管理助理'])
+  })
+
+  it('修改既有技能不攔截', () => {
+    const c = useSkillStudioConversation()
+    c.loadSkill('personal-002')
+    expect(c.confirmAgentsBeforeSave()).toBe(false)
   })
 })

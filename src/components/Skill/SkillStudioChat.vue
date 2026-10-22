@@ -133,7 +133,9 @@ const inputText = ref('')
 const inputEl = ref<HTMLInputElement | null>(null)
 const messagesEl = ref<HTMLElement | null>(null)
 
-const showSuggestions = computed(() => !props.messages.some(m => m.role === 'user'))
+// 只看訊息數判斷對話是不是還停在剛打開的乾淨狀態：開場白只有一則時才顯示建議，
+// 不管接下來多出來的是使用者回話還是 Agent 自己又講了一句
+const showSuggestions = computed(() => props.messages.length <= 1)
 
 function applySuggestion(chip: StudioSuggestion) {
   inputText.value = chip.prefill

@@ -7,6 +7,8 @@
           :key="t.id"
           type="button"
           :class="['skb-tab-btn', { 'is-active': activeTab === t.id }]"
+          :disabled="t.id === 'test' && conv.testLocked.value"
+          :title="t.id === 'test' && conv.testLocked.value ? '有未儲存的修改，先儲存再測試' : undefined"
           @click="setTab(t.id)"
         >
           <i class="material-symbols-outlined">{{ t.icon }}</i>{{ t.label }}
@@ -67,18 +69,22 @@
           v-if="blockStep === 'basics'"
           :name="conv.draft.value.name"
           :description="conv.draft.value.description"
-          :trigger-hint="conv.draft.value.triggerHint"
           :keywords="conv.draft.value.keywords"
           :capabilities="conv.draft.value.capabilities"
           :assigned-agents="conv.draft.value.assignedAgents"
           :section-ids="conv.draft.value.sectionIds"
           :name-conflict="nameConflict"
+          :exceptions="conv.draft.value.exceptions"
+          :output-format="conv.draft.value.outputFormat"
+          :applicable-scope="conv.draft.value.applicableScope"
           @update:name="v => conv.updateBlocks({ name: v })"
           @update:description="conv.updateBlockDescription"
-          @update:trigger-hint="conv.updateBlockTriggerHint"
           @update:keywords="conv.updateBlockKeywords"
           @update:capabilities="conv.updateBlockCapabilities"
           @update:assigned-agents="conv.updateBlockAssignedAgents"
+          @update:exceptions="v => conv.updateBlockOptional({ exceptions: v })"
+          @update:output-format="v => conv.updateBlockOptional({ outputFormat: v })"
+          @update:applicable-scope="v => conv.updateBlockOptional({ applicableScope: v })"
         />
         <SkillBlockComposer
           v-else
@@ -96,9 +102,9 @@
         :saved-skill-id="conv.savedSkillId.value"
         :test-skill-id="conv.testSkillId.value"
         :is-dirty="conv.isDirty.value"
+        :test-locked="conv.testLocked.value"
         :can-save="conv.canSave.value"
         :name-conflict="nameConflict"
-        :request-save-draft="conv.save"
         @save="onSave"
         @update:files="conv.updateFiles"
         @update:active-tab="setTab"
@@ -156,6 +162,11 @@ const tabs = computed<{ id: BlockTab; icon: string; label: string }[]>(() => [
   { id: 'preview', icon: 'preview', label: '預覽' },
   { id: 'test', icon: 'science', label: '測試' },
 ])
+
+// 停在「測試」tab 時又改了內容：測試 tab 會反灰，跳回預覽
+watch(() => conv.testLocked.value, locked => {
+  if (locked && activeTab.value === 'test') setTab('preview')
+})
 
 // 儲存後只提示一次「產一份報告」；再存一次會再出現
 const showRunReport = ref(false)
@@ -229,6 +240,12 @@ watch(
 )
 
 function onSave() {
+  // 新建的對話技能還沒確認過可調用 Agent：先在對話裡問，回答完由 conv 自己存檔。
+  // 對話跟預覽在畫布上是不同分頁，切到對話分頁使用者才看得到這個問題
+  if (conv.confirmAgentsBeforeSave()) {
+    setTab('chat')
+    return
+  }
   const wasCreate = conv.mode.value === 'create'
   const id = conv.save()
   if (!id) return
@@ -238,7 +255,9 @@ function onSave() {
     popDialog.toast('已儲存為個人技能，可到「測試」tab 驗證')
     setTab('test')
   } else {
-    popDialog.toast('已儲存修改')
+    // 修改存檔後技能轉成停用中：直接帶到「測試」，啟用按鈕在那裡
+    popDialog.toast('已儲存修改，技能目前停用中，到「測試」重新測試後再啟用')
+    setTab('test')
   }
 }
 

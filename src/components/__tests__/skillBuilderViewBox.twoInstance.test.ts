@@ -65,6 +65,12 @@ describe('two skillBuilderViewBox instances on one block', () => {
       await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
 
+      // 新建技能存檔前要先確認可調用 Agent
+      await input.setValue('通用助理')
+      await input.trigger('keydown.enter')
+      await vi.advanceTimersByTimeAsync(800)
+      await flushPromises()
+
       expect(block.data.data.snapshot.draft.name).toBe('查 ERP 庫存')
 
       const B = mountOn(id, block) // fullscreen instance, hydrates A's state
@@ -95,15 +101,20 @@ describe('two skillBuilderViewBox instances on one block', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
       const store = useAiviewerStore()
-      const id = store.addSkillBuilderBlock({ prefill: { name: '查庫存', instructions: '1. 查' } })
+      const id = store.addSkillBuilderBlock({ prefill: { name: '查庫存', instructions: '1. 查', steps: ['查'] } })
       const block = store.aiViewerBlocks.find((b: any) => b.id === id)
       const A = mountOn(id, block)
       store.updateSkillBuilderBlock(id, { activeTab: 'preview' })
       await flushPromises()
-      await A.find('.ssp-save-btn').trigger('click') // A saves -> edit mode
+      await A.find('.ssp-save-btn').trigger('click') // 新建技能：先被攔下來、切到對話分頁問可調用 Agent
       await flushPromises()
-      store.updateSkillBuilderBlock(id, { activeTab: 'chat' })
+      expect(block.data.data.activeTab).toBe('chat')
+      const aInput = A.find('.SkillStudioChat input.custom-input')
+      await aInput.setValue('通用助理') // 回答完 A 自己存檔 -> edit mode
+      await aInput.trigger('keydown.enter')
+      await vi.advanceTimersByTimeAsync(800)
       await flushPromises()
+      expect(block.data.data.snapshot.savedSkillId).not.toBeNull()
 
       const B = mountOn(id, block)
       await flushPromises()

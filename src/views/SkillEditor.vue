@@ -52,54 +52,28 @@
             />
             <p class="se-hint">簡短精確，讓 Agent 在選用時能快速識別。</p>
           </div>
-          <div class="se-section">
-            <div class="se-label-row">
-              <label class="se-label">技能描述</label>
-              <span class="se-ai-badge">
-                <i class="material-symbols-outlined">auto_awesome</i>AI 自動生成
-              </span>
-            </div>
-            <div class="se-ai-desc">
-              <template v-if="existingSkill?.description">{{ existingSkill.description }}</template>
-              <span v-else class="se-ai-desc-hint">AI 將根據技能指令自動識別並填入描述</span>
-            </div>
-          </div>
         </template>
 
-        <!-- Step 1：技能指令 -->
+        <!-- Step 1：技能內文——一個輸入框，RD 的步驟／例外或特殊情況／固定輸出格式／
+             適用範圍用 placeholder 示範格式；存檔時依標題拆成四項（見 parseSkillContentMarkdown） -->
         <template v-else-if="currentStep === 1">
           <div class="se-primary-section">
-            <label class="se-label">技能指令（Instructions）</label>
+            <label class="se-label">技能內文 <span class="se-required">*</span></label>
             <p class="se-hint">
-              定義此技能的角色、行為規則與限制。Agent 執行此技能時依照這份指令運作。
-              可使用 Markdown，支援條列式規則與範例。
+              Agent 執行此技能時依照這份內文運作。請依範例的標題填寫步驟（必填）、例外或特殊情況、固定輸出格式、適用範圍。
             </p>
             <div class="se-editor-wrap">
               <textarea
-                v-model="form.instructions"
+                v-model="form.content"
                 class="custom-input se-textarea-lg se-mono"
-                :placeholder="instructionsPlaceholder"
+                :placeholder="contentPlaceholder"
               />
-              <div class="se-char-count">{{ form.instructions.length }} 字元</div>
+              <div class="se-char-count">{{ form.content.length }} 字元</div>
             </div>
           </div>
 
           <div class="se-section">
-            <div class="se-secondary-section">
-              <label class="se-label">觸發時機（選填）</label>
-              <p class="se-hint">描述 Agent 在什麼情境下應優先選用此技能，幫助路由判斷更準確。</p>
-              <textarea
-                v-model="form.triggerHint"
-                class="custom-input se-textarea-sm"
-                placeholder="例：當用戶詢問庫存數量、倉庫存量、缺貨狀態等相關問題時使用"
-                rows="3"
-                maxlength="300"
-              />
-            </div>
-          </div>
-
-          <div class="se-section">
-            <label class="se-label">覆蓋能力（選填）</label>
+            <label class="se-label">覆蓋能力 <span class="se-required">*</span></label>
             <p class="se-hint">拆解這個技能具體涵蓋哪些能力，例如「問題分類」「情緒分析」，方便之後在技能詳情快速掌握技能範圍。</p>
             <SkillCapabilityEditor v-model="form.capabilities" />
           </div>
@@ -120,16 +94,44 @@
               <div class="se-confirm-group-hd">
                 <i class="material-symbols-outlined lively-icon">description</i>內容摘要
               </div>
+              <!-- 技能描述不給使用者填，建立與編輯都顯示；由 AI 生成的掛「AI 建立」tag -->
               <div class="se-confirm-row">
-                <span class="se-confirm-key">指令</span>
+                <span class="se-confirm-key">技能描述</span>
                 <span class="se-confirm-val">
-                  <span v-if="form.instructions">{{ form.instructions.length }} 字元</span>
+                  <span v-if="finalDescription">{{ finalDescription }}</span>
+                  <span v-else class="se-empty">（填寫步驟後由 Agent 生成）</span>
+                  <span v-if="descriptionIsGenerated && finalDescription" class="se-generated-tag">
+                    <i class="material-symbols-outlined">auto_awesome</i>AI 建立
+                  </span>
+                </span>
+              </div>
+              <div class="se-confirm-row">
+                <span class="se-confirm-key">步驟</span>
+                <span class="se-confirm-val">
+                  <span v-if="parsedContent.steps.length">{{ parsedContent.steps.length }} 步</span>
                   <span v-else class="se-empty">（未填寫）</span>
                 </span>
               </div>
-              <div v-if="form.triggerHint" class="se-confirm-row">
-                <span class="se-confirm-key">觸發時機</span>
-                <span class="se-confirm-val">{{ form.triggerHint }}</span>
+              <div class="se-confirm-row">
+                <span class="se-confirm-key">例外或特殊情況</span>
+                <span class="se-confirm-val">
+                  <span v-if="parsedContent.exceptions.length">{{ parsedContent.exceptions.length }} 項</span>
+                  <span v-else class="se-empty">（未填寫）</span>
+                </span>
+              </div>
+              <div class="se-confirm-row">
+                <span class="se-confirm-key">固定輸出格式</span>
+                <span class="se-confirm-val">
+                  <span v-if="parsedContent.outputFormat">{{ parsedContent.outputFormat }}</span>
+                  <span v-else class="se-empty">（未填寫）</span>
+                </span>
+              </div>
+              <div class="se-confirm-row">
+                <span class="se-confirm-key">適用範圍</span>
+                <span class="se-confirm-val">
+                  <span v-if="parsedContent.applicableScope">{{ parsedContent.applicableScope }}</span>
+                  <span v-else class="se-empty">（未填寫）</span>
+                </span>
               </div>
               <div class="se-confirm-row">
                 <span class="se-confirm-key">覆蓋能力</span>
@@ -179,7 +181,7 @@
 
       <!-- 底部導覽 -->
       <div class="se-footer">
-        <button v-if="canGoBack" class="custom-btn" @click="currentStep--">
+        <button v-if="canGoBack" class="custom-btn" @click="goBack">
           <i class="material-symbols-outlined">arrow_back</i>上一步
         </button>
         <span v-else />
@@ -199,9 +201,10 @@
           <button
             v-else-if="isTestStep"
             class="custom-btn custom-main-btn"
+            :disabled="testDoneDisabled"
             @click="router.push('/view/Skills')"
           >
-            <i class="material-symbols-outlined">check</i>完成
+            <i class="material-symbols-outlined">check</i>{{ testDoneLabel }}
           </button>
           <button
             v-else
@@ -233,7 +236,9 @@ import AgentAssignGrid from '@/components/Skill/AgentAssignGrid.vue'
 import SkillEnableFlow from '@/components/Skill/SkillEnableFlow.vue'
 import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
 import { useSkillStore } from '@/stores/skillStore'
-import type { DraftSkill, SkillFile, SkillCapability } from '@/stores/skillStore'
+import { generateSkillDescription } from '@/utils/skillDescription'
+import { buildSkillContentMarkdown, parseSkillContentMarkdown } from '@/utils/skillMarkdown'
+import type { DraftSkill, SkillFile, SkillCapability, SkillRdFields } from '@/stores/skillStore'
 
 const router = useRouter()
 const route = useRoute()
@@ -248,20 +253,39 @@ const isDraftMode = !!draftId
 const isNewCreate = !isEditMode && !isDraftMode
 
 const STEPS = isNewCreate
-  ? (['基本資訊', '技能指令', '確認', '測試'] as const)
-  : (['基本資訊', '技能指令', '確認'] as const)
+  ? (['基本資訊', '技能內文', '確認', '測試'] as const)
+  : (['基本資訊', '技能內文', '確認'] as const)
 const currentStep = ref(0)
 // 離開「確認」步驟那一刻才真的呼叫 createPersonalSkill()，拿到 id 才能把
 // SkillTestAI 綁到這顆剛建立的技能上
 const createdSkillId = ref<string | null>(null)
 const isTestStep = computed(() => isNewCreate && currentStep.value === STEPS.length - 1)
-// 技能建立後，「基本資訊」「技能指令」的欄位內容已經跟已建立的技能脫勾——
+// 技能建立後，「基本資訊」「技能內文」的欄位內容已經跟已建立的技能脫勾——
 // 不讓使用者點回去改，避免改了欄位卻忘記其實沒有寫回技能，測試結果跟畫面對不起來。
 // 「確認」「測試」都是唯讀畫面，兩者之間可以互看
 function isStepLocked(i: number) {
   return createdSkillId.value !== null && i < 2
 }
 const canGoBack = computed(() => currentStep.value > 0 && !isStepLocked(currentStep.value - 1))
+
+// 測試步驟的「完成」按鈕：沒生成過測試情境就是單純的「略過測試」捷徑，一律可按；
+// 生成過之後文字換成「測試完成，建立完成」，但要全部題目都作答完才能按，逼使用者
+// 真的把這輪測試跑完，不能生成題目後又放著不管就直接完成
+const hasGeneratedTestScenarios = computed(() =>
+  store.aiTestScenariosSkillId === createdSkillId.value && store.aiTestScenarios.length > 0
+)
+const allTestScenariosAnswered = computed(() =>
+  hasGeneratedTestScenarios.value && store.aiTestScenarios.every(s => s.status !== 'pending')
+)
+const testDoneLabel = computed(() => hasGeneratedTestScenarios.value ? '測試完成，建立完成' : '不啟用，建立完成')
+const testDoneDisabled = computed(() => hasGeneratedTestScenarios.value && !allTestScenariosAnswered.value)
+
+// 從測試步驟按「上一步」回確認步驟：清掉這輪的測試情境／報告，使用者再往前進測試
+// 步驟時得重新點「生成測試情境」，不能延用舊的作答紀錄
+function goBack() {
+  if (isTestStep.value) store.resetAITestState()
+  currentStep.value--
+}
 
 const existingSkill = editSkillId ? store.findSkill(editSkillId) : null
 const existingDraft = draftId ? (store.myDrafts as DraftSkill[]).find(d => d.id === draftId) ?? null : null
@@ -280,8 +304,8 @@ const conflictSourceName = computed(() => {
 
 const form = reactive({
   name: existingSkill?.name ?? existingDraft?.name ?? '',
-  instructions: existingSkill?.instructions ?? existingDraft?.instructions ?? '',
-  triggerHint: existingSkill?.triggerHint ?? existingDraft?.triggerHint ?? '',
+  // 精靈不提供描述欄位（由 Agent 生成，見 finalDescription）；編輯既有技能／草稿時沿用原本的值，不要被清空
+  description: existingSkill?.description ?? existingDraft?.description ?? '',
   assignedAgents: existingSkill?.assignedAgents
     ? [...existingSkill.assignedAgents]
     : existingDraft?.assignedAgents
@@ -290,7 +314,33 @@ const form = reactive({
   isEnabled: existingSkill?.isEnabled ?? true,
   files: existingSkill?.files ?? existingDraft?.files ?? [] as SkillFile[],
   capabilities: existingSkill?.capabilities ?? [] as SkillCapability[],
+  // 技能內文：既有技能有 RD 四項就用四項組回標題格式（拆得回去），沒有才退回原本的
+  // instructions 自由文字；新建是空的，格式看 placeholder
+  content: existingSkill && hasRdFields(existingSkill)
+    ? buildSkillContentMarkdown(existingSkill)
+    : existingDraft && hasRdFields(existingDraft)
+      ? buildSkillContentMarkdown(existingDraft)
+      : existingSkill?.instructions ?? existingDraft?.instructions ?? '',
 })
+
+function hasRdFields(src: SkillRdFields): boolean {
+  return !!(src.steps?.length || src.exceptions?.length || src.outputFormat || src.applicableScope)
+}
+
+// 技能內文依標題拆出的 RD 四項：確認頁、Agent 生成描述、存檔都讀這份
+const parsedContent = computed(() => parseSkillContentMarkdown(form.content))
+
+// 技能描述不給使用者填，由 Agent 依名稱／步驟／適用範圍／輸出格式生成：
+// 全新建立一律生成；編輯既有技能／草稿沿用原本的描述，原本是空的才生成
+const descriptionIsGenerated = computed(() => isNewCreate || !form.description.trim())
+const finalDescription = computed(() => descriptionIsGenerated.value
+  ? generateSkillDescription({
+      name: form.name,
+      steps: parsedContent.value.steps,
+      applicableScope: parsedContent.value.applicableScope,
+      outputFormat: parsedContent.value.outputFormat,
+    })
+  : form.description.trim())
 
 const fillWidth = computed(() => `${(currentStep.value / (STEPS.length - 1)) * 100}%`)
 
@@ -302,37 +352,45 @@ const willGoThroughEnableFlow = computed(() =>
   isEditMode && !!existingSkill && form.isEnabled && !existingSkill.isEnabled
 )
 
-// 唯一的必填限制（名稱）只卡在能不能往下一步走；指派 Agent 必填只卡在真正送出
-// （建立技能／儲存變更）那一刻，中途步驟之間可以留白
+// 唯一不受「只卡最終送出」限制的必填（名稱）卡在能不能往下一步走；步驟／覆蓋能力／
+// 指派 Agent 必填只卡在真正送出（建立技能／儲存變更）那一刻，中途步驟之間可以留白
 const missingRequiredFields = computed(() => {
   const missing: string[] = []
   if (!form.name.trim()) missing.push('技能名稱')
+  if (!parsedContent.value.steps.length) missing.push('技能內文的「步驟」')
+  if (!form.capabilities.length) missing.push('覆蓋能力')
   if (!willGoThroughEnableFlow.value && !form.assignedAgents.length) missing.push('指派 Agent')
   return missing
 })
 const canSubmit = computed(() => missingRequiredFields.value.length === 0)
 
-const instructionsPlaceholder = `你是一個專門處理 ERP 庫存查詢的助理。
+const contentPlaceholder = `## 步驟
+1. 確認使用者提供的產品 ID
+2. 查詢各倉庫即時庫存
+3. 彙總數量並標示低於安全存量的品項
 
-## 行為規則
-- 收到庫存查詢請求時，先確認產品 ID 格式正確（格式：SKU-XXXXX）
-- 查詢範圍涵蓋所有倉庫，預設返回總庫存量
-- 若庫存低於安全存量（50 件），主動提示補貨建議
+## 例外或特殊情況
+- 查無此 SKU 時，提示使用者確認產品 ID
+- ERP 系統維護中時，回覆最後一次同步的庫存並註明時間
 
-## 輸出格式
-以條列式呈現各倉庫庫存，最後附上總計。`
+## 固定輸出格式
+表格：倉庫／現有庫存／安全存量／狀態
+
+## 適用範圍
+企業內部 ERP 系統中的所有倉庫`
 
 function buildPayload() {
   return {
     name: form.name.trim(),
-    instructions: form.instructions.trim(),
-    triggerHint: form.triggerHint.trim(),
+    instructions: form.content.trim(),
+    description: finalDescription.value,
     assignedAgents: [...form.assignedAgents],
     isEnabled: form.isEnabled,
     files: [...form.files],
     // 過濾掉空字串（理論上不會發生，SkillCapabilityEditor 不會送出空白標籤，
     // 這裡只是防呆)
     capabilities: form.capabilities.map(c => c.trim()).filter(Boolean),
+    ...parsedContent.value,
   }
 }
 
@@ -344,14 +402,6 @@ async function handleSubmit() {
   if (isEditMode && editSkillId && existingSkill && form.isEnabled && !existingSkill.isEnabled) {
     const outcome = await enableFlowRef.value!.requestEnable(existingSkill, form.assignedAgents)
     if (outcome.type === 'cancelled') return
-    if (outcome.type === 'revise') {
-      router.push({ name: 'SkillManagement', query: { skillId: editSkillId } })
-      return
-    }
-    if (outcome.type === 'goToTest') {
-      router.push({ name: 'SkillManagement', query: { skillId: editSkillId, tab: 'test' } })
-      return
-    }
     form.assignedAgents = outcome.agents
     store.updateSkill(editSkillId, { ...buildPayload(), isEnabled: true })
     router.push('/view/Skills')

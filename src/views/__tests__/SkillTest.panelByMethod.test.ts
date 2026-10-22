@@ -20,7 +20,7 @@ describe('SkillTest 測試面板：依建立方式切換元件', () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
     const id = store.createPersonalSkill({
-      name: '行銷週報', instructions: '依序產出以下章節：\n1. a', triggerHint: '當使用者要求產出行銷報告時', assignedAgents: [],
+      name: '行銷週報', instructions: '依序產出以下章節：\n1. a', description: '當使用者要求產出行銷報告時', assignedAgents: [],
       composition: { sectionIds: ['promo_kpi'] },
     })
     const wrapper = mountPage()
@@ -35,7 +35,7 @@ describe('SkillTest 測試面板：依建立方式切換元件', () => {
     setActivePinia(createPinia())
     const store = useSkillStore()
     const id = store.createPersonalSkill({
-      name: '一般技能', instructions: 'x', triggerHint: 'y', assignedAgents: [],
+      name: '一般技能', instructions: 'x', description: 'y', assignedAgents: [],
     })
     const wrapper = mountPage()
     store.setSelectedSkill(id)

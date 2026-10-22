@@ -338,8 +338,9 @@
     }
   }
 
-  // ── 技能定義：直接 render 技能指令／覆蓋能力／實際使用情境組成的
-  //    markdown（見 buildSkillDefinitionMarkdown），套用專案既有的
+  // ── 技能定義：直接 render RD 六段（技能描述／步驟／例外或特殊情況／
+  //    固定輸出格式／適用範圍／覆蓋能力）組成的 markdown
+  //    （見 buildSkillDefinitionMarkdown），套用專案既有的
   //    markdown-body 覆寫慣例（跟 _KnowledgeDetail.scss 同一套做法：
   //    背景/文字色/字級都改用 inherit，維持跟抽屜其他區塊一致，
   //    dark mode 不需要另外處理）────────────────────
@@ -871,6 +872,31 @@
       }
     }
   }
+}
+
+// 啟用時確認可調用 Agent：chip 跟對話框其他內容一樣置中，最後一排跟下方按鈕
+// 留出間距——不然 chip 淡入上浮的動畫期間會疊到「確認並啟用」上
+.drawer-confirm-dialog.enable-agent-dialog .se-agent-grid {
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+// 啟用閘門對話框「立即測試」：就地嵌入 SkillTestAI，對話框放寬、內容區自己捲動
+.drawer-confirm-dialog.enable-gate-dialog.is-testing {
+  width: 640px;
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+
+  .enable-gate-test {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    text-align: left;
+    margin: 4px 0 16px;
+  }
+
+  .confirm-actions { justify-content: flex-end; }
 }
 
 .confirm-fade-enter-active { transition: opacity 0.15s; }

@@ -47,3 +47,32 @@ describe('PersonalSkillGroup：skillIconName（怎麼來的一眼圖示）', () 
     expect(derived.find('.tile-icon .material-symbols-outlined').text()).toBe('person')
   })
 })
+
+describe('PersonalSkillGroup：狀態文字', () => {
+  it('後端技能只顯示有沒有測過，不顯示版本號', () => {
+    const w = mountTile(baseSkill({ backendVersion: { version: 3, tested: true } } as Partial<Skill>))
+    const text = w.find('.status-text').text()
+    expect(text).toBe('測過')
+    expect(w.text()).not.toContain('第 3 版')
+  })
+})
+
+describe('PersonalSkillGroup：狀態標籤', () => {
+  it('草稿不貼「草稿」標籤，由狀態文字表達（沒測過＝尚未測試）', () => {
+    const w = mountTile(baseSkill({ personalStatus: 'draft', isEnabled: false, aiTestPassRate: null }))
+    expect(w.find('.skill-tag').exists()).toBe(false)
+    expect(w.text()).not.toContain('草稿')
+    expect(w.find('.status-text').text()).toBe('尚未測試')
+  })
+
+  it('草稿測過但沒啟用：狀態文字是「停用中」', () => {
+    const w = mountTile(baseSkill({ personalStatus: 'draft', isEnabled: false, aiTestPassRate: 0.5 }))
+    expect(w.text()).not.toContain('草稿')
+    expect(w.find('.status-text').text()).toBe('停用中')
+  })
+
+  it('審核中仍然貼「審核中」標籤', () => {
+    const w = mountTile(baseSkill({ personalStatus: 'reviewing' }))
+    expect(w.find('.skill-tag').text()).toBe('審核中')
+  })
+})

@@ -121,6 +121,7 @@
     background: var(--surface);
   }
 
+
   .se-secondary-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -128,13 +129,6 @@
     margin-bottom: 22px;
 
     @media (max-width: $breakpoint-tablet) { grid-template-columns: 1fr; }
-  }
-
-  .se-secondary-section {
-    border: 1px solid var(--divider-a50);
-    border-radius: 12px;
-    padding: 14px 16px;
-    background: var(--surface);
   }
 
   .se-label {
@@ -168,7 +162,8 @@
   .se-textarea-lg {
     width: 100%;
     resize: vertical;
-    min-height: 280px;
+    // placeholder 是 RD 四項的完整範例（16 行），高度要讓它整份看得到，不用捲動
+    min-height: 420px;
     font-size: 13px;
     line-height: 1.7;
   }
@@ -253,6 +248,23 @@
 
   .se-empty { color: var(--text-faint); font-style: italic; }
 
+  // 技能描述是 Agent 生成的（不是使用者填的），在確認頁標出來
+  .se-generated-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 9999px;
+    background: var(--accent-soft);
+    color: var(--primary);
+    font-size: 11px;
+    font-weight: 600;
+    vertical-align: middle;
+
+    .material-symbols-outlined { font-size: 13px; }
+  }
+
   .se-confirm-note {
     display: flex;
     align-items: center;
@@ -297,46 +309,6 @@
       background: var(--primary);
       &::after { transform: translateX(16px); }
     }
-  }
-
-  // AI 自動生成描述
-  .se-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 6px;
-    .se-label { margin-bottom: 0; }
-  }
-
-  .se-ai-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--primary-hover);
-    background: var(--accent-soft);
-    border: 1px solid var(--accent);
-    padding: 2px 8px;
-    border-radius: 5px;
-    .material-symbols-outlined { font-size: 13px; }
-  }
-
-  .se-ai-desc {
-    background: var(--page-bg);
-    border: 1px dashed var(--divider-a50);
-    border-radius: 9px;
-    padding: 12px 14px;
-    font-size: 13px;
-    color: var(--text-muted);
-    min-height: 64px;
-    line-height: 1.6;
-  }
-
-  .se-ai-desc-hint {
-    color: var(--text-faint);
-    font-style: italic;
-    font-size: 12.5px;
   }
 
   // 底部導覽

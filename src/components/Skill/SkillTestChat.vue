@@ -1,16 +1,9 @@
 <template>
   <div class="SkillTestChat">
-    <div class="chat-toolbar">
-      <span class="system-hint">模擬 User 與 Agent 的真實對話，觀察技能觸發行為</span>
-      <button class="custom-btn" @click="resetAll">
-        <i class="material-symbols-outlined">restart_alt</i>重置對話
-      </button>
-    </div>
-
     <div class="chat-messages" ref="messagesEl">
       <div v-if="!store.testConversationHistory.length" class="chat-empty">
-        <i class="material-symbols-outlined">chat_bubble_outline</i>
-        <p>輸入訊息開始測試對話</p>
+        <i class="material-symbols-outlined">forum</i>
+        <p>輸入訊息開始測試技能</p>
       </div>
 
       <template v-for="msg in store.testConversationHistory" :key="msg.id">
@@ -55,7 +48,7 @@
       <input
         v-model="inputText"
         class="custom-input"
-        placeholder="輸入測試訊息，模擬用戶..."
+        placeholder="輸入測試訊息，模擬用戶發話..."
         :disabled="store.testIsRunning"
         @keydown.enter.prevent="handleSend"
         @input="pendingAutoRun = []"
@@ -96,6 +89,9 @@ function resetAll() {
   pendingAutoRun.value = []
   inputText.value = ''
 }
+
+// 重置按鈕在 SkillTest 的面板標題列，透過 ref 呼叫
+defineExpose({ resetAll })
 
 async function handleSend() {
   const msg = inputText.value.trim()

@@ -42,7 +42,7 @@ describe('SkillEditor 放棄/取消按鈕文字', () => {
 
   it('編輯模式：按鈕顯示「放棄修改」，點擊導向技能管理頁、不寫回任何變更', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '原本名稱', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '原本名稱', instructions: 'x', description: 'y', assignedAgents: [] })
     const { wrapper, router } = await mountEditorFor({ skillId: id })
     const nameInput = wrapper.find('input.custom-input')
     await nameInput.setValue('亂改的名字')

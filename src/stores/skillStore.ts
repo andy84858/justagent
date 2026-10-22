@@ -35,8 +35,11 @@ export interface SkillVersion {
   name: string
   description: string
   instructions?: string
-  triggerHint?: string
   capabilities?: SkillCapability[]
+  steps?: string[]
+  exceptions?: string[]
+  outputFormat?: string
+  applicableScope?: string
   createdAt: string
   createdBy?: string
   updateNote?: string
@@ -85,7 +88,6 @@ export interface SkillSuggestionEntry {
   id: string
   name: string
   description: string
-  triggerHint: string
   steps: string[]
   reason: string
   conversationId: string
@@ -120,8 +122,13 @@ export interface Skill {
   forkSourceId?: string
   forkSourceVersion?: string
   instructions?: string
-  triggerHint?: string
   capabilities?: SkillCapability[]
+  // RD 技能定義的其餘四段（技能描述＝description、覆蓋能力＝capabilities）。步驟必填
+  // （建立／編輯流程擋存檔），其餘三項選填，沒有的段落技能定義就不顯示
+  steps?: string[]
+  exceptions?: string[]
+  outputFormat?: string
+  applicableScope?: string
   keywords?: string[]          // 只有積木組裝必填；對話方式不會有這個欄位
   functionType?: SkillFunctionType   // 探索頁分類/篩選用，選填不影響既有消費者
   usageScenarios?: UsageScenario[]
@@ -140,6 +147,9 @@ export interface Skill {
   hasLibraryUpdate?: boolean
   submitNote?: string
   submitMode?: 'version_update' | 'new_skill'
+  // 「更新版本」送審時使用者選定要更新的 Library 技能；預設帶入 derivedFrom，
+  // 但使用者可以改選其他技能（或手寫建立、沒有來源的技能也能指定要更新哪一個）
+  updateTargetId?: string
   targetScope?: 'enterprise' | 'team'
   targetTeamName?: string
   submittedBy?: string
@@ -151,6 +161,19 @@ export interface Skill {
   aiAnalysis?: string[]
   files?: SkillFile[]
   composition?: { sectionIds: string[] }  // 由行銷積木組裝建立的技能；有這欄位就走積木方式
+}
+
+// RD 技能定義另外四段：建立／編輯／版本快照都要整組帶著走，集中成一個型別跟複製函式，
+// 避免哪條路徑漏抄一個欄位
+export type SkillRdFields = Pick<Skill, 'steps' | 'exceptions' | 'outputFormat' | 'applicableScope'>
+
+export function copyRdFields(src: SkillRdFields): SkillRdFields {
+  return {
+    steps: src.steps ? [...src.steps] : [],
+    exceptions: src.exceptions ? [...src.exceptions] : [],
+    outputFormat: src.outputFormat ?? '',
+    applicableScope: src.applicableScope ?? '',
+  }
 }
 
 export interface SkillFile {
@@ -165,7 +188,6 @@ export interface CreateSkillPayload {
   name: string
   description?: string
   instructions: string
-  triggerHint: string
   // 選填：createPersonalSkill() 不讀這個欄位（個人技能一律以停用落地，見該函式註解）；
   // createSkill()（Library／企業技能發佈用）才會用到，沒帶時預設 true。
   isEnabled?: boolean
@@ -176,24 +198,31 @@ export interface CreateSkillPayload {
   keywords?: string[]
   creationMethod?: 'ai_assisted' | 'manual'
   composition?: { sectionIds: string[] }
+  steps?: string[]
+  exceptions?: string[]
+  outputFormat?: string
+  applicableScope?: string
 }
 
 export interface UpdateSkillPayload {
   name: string
   description?: string
   instructions: string
-  triggerHint: string
   isEnabled: boolean
   assignedAgents: string[]
   files?: SkillFile[]
   capabilities?: SkillCapability[]
   keywords?: string[]
+  steps?: string[]
+  exceptions?: string[]
+  outputFormat?: string
+  applicableScope?: string
 }
 
 // AI 賦能對話修改用：只允許動這幾個內容欄位，不碰狀態／版本／來源關係。
 // assignedAgents／keywords 只有積木方式的「基本設定」步驟會帶到；對話方式不傳這兩個
 // 欄位（composable 的 save() 傳 undefined），維持原本「指派 Agent 只能透過啟用流程調整」的行為
-export type StudioPatch = Partial<Pick<Skill, 'name' | 'description' | 'instructions' | 'triggerHint' | 'capabilities' | 'assignedAgents' | 'keywords' | 'composition'>>
+export type StudioPatch = Partial<Pick<Skill, 'name' | 'description' | 'instructions' | 'capabilities' | 'assignedAgents' | 'keywords' | 'composition' | 'steps' | 'exceptions' | 'outputFormat' | 'applicableScope'>>
 
 export interface DraftSkill {
   id: string
@@ -204,9 +233,12 @@ export interface DraftSkill {
   forkSourceId?: string
   createdAt: string
   updatedAt: string
-  triggerHint?: string
   assignedAgents?: string[]
   files?: SkillFile[]
+  steps?: string[]
+  exceptions?: string[]
+  outputFormat?: string
+  applicableScope?: string
 }
 
 export interface ChatMessage {
@@ -223,9 +255,11 @@ export interface AITestScenario {
   tag: AITestTag
   input: string
   expectedBehavior: string
-  expectedTrigger: boolean   // 正確答案：這句話該不該觸發這顆技能
-  status: 'pending' | 'correct' | 'incorrect'
-  userAnswer?: boolean       // 使用者選了「該」還是「不該」
+  expectedTrigger: boolean   // 出題時的參考答案（模擬 Agent 作答的依據），不是最終判定——正確答案由使用者標註
+  agentAnswer: boolean       // 答題 Agent 的判斷：這句話要不要觸發這顆技能
+  agentReasoning: string     // 答題 Agent 給出這個判斷的理由
+  status: 'pending' | 'correct' | 'incorrect'   // Agent 的判斷對不對（跟使用者標註的正確答案比）
+  userAnswer?: boolean       // 使用者標註的正確答案：該觸發還是不該觸發
 }
 
 export interface AITestReport {
@@ -252,6 +286,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.96,
     avgLatencyMs: 280,
     instructions: '你是一個專業的客服助理，負責處理客戶的訂單查詢、退換貨、付款方式等常見問題。回覆時語氣親切且專業，優先比對知識庫給出準確答案。遇到情緒激動或複雜投訴時，主動轉接人工客服。支援繁體中文、簡體中文、英文回覆。',
+    steps: ['辨識客戶問題類型（訂單、退換貨、付款、其他）', '比對知識庫找出對應答案', '以親切專業的語氣回覆，必要時附上操作步驟', '確認客戶問題是否已解決'],
+    exceptions: ['客戶情緒激動或提出正式投訴時，主動轉接人工客服', '知識庫查無答案時，不自行推測，改為建立客服單'],
+    outputFormat: '先一句話回答重點，再條列補充說明；結尾詢問是否還有其他問題',
+    applicableScope: '電商平台的一般客戶諮詢，支援繁體中文、簡體中文、英文',
     capabilities: [
       '問題分類',
       'FAQ查詢',
@@ -277,6 +315,10 @@ const MOCK_SKILLS: Skill[] = [
         status: 'reviewing' as SkillVersionStatus,
         name: '通用客服機器人',
         description: '處理客戶諮詢與 FAQ，支援多語言與情緒分析',
+        steps: ['辨識客戶問題類型（訂單、退換貨、付款、其他）', '比對知識庫找出對應答案', '以親切專業的語氣回覆，必要時附上操作步驟', '辨識客戶情緒，依情緒調整回覆語氣', '確認客戶問題是否已解決'],
+        exceptions: ['客戶情緒激動或提出正式投訴時，主動轉接人工客服', '知識庫查無答案時，不自行推測，改為建立客服單'],
+        outputFormat: '先一句話回答重點，再條列補充說明；結尾詢問是否還有其他問題',
+        applicableScope: '電商平台的一般客戶諮詢，支援繁體中文、簡體中文、英文',
         instructions: '你是一個專業客服助理，使用親切且專業的語氣，處理各類客戶諮詢。',
         reviewNote: '新增情緒分析能力，優化回覆語氣',
         updateNote: '優化 Prompt 語氣',
@@ -291,6 +333,10 @@ const MOCK_SKILLS: Skill[] = [
         status: 'active' as SkillVersionStatus,
         name: '通用客服機器人',
         description: '處理客戶諮詢與 FAQ，支援多語言與情緒分析',
+        steps: ['辨識客戶問題類型（訂單、退換貨、付款、其他）', '比對知識庫找出對應答案', '以親切專業的語氣回覆，必要時附上操作步驟', '確認客戶問題是否已解決'],
+        exceptions: ['客戶情緒激動或提出正式投訴時，主動轉接人工客服', '知識庫查無答案時，不自行推測，改為建立客服單'],
+        outputFormat: '先一句話回答重點，再條列補充說明；結尾詢問是否還有其他問題',
+        applicableScope: '電商平台的一般客戶諮詢，支援繁體中文、簡體中文、英文',
         instructions: '你是一個客服助理，處理各類客戶諮詢與 FAQ。',
         createdAt: '2026-06-01T10:00:00Z',
       },
@@ -319,7 +365,10 @@ const MOCK_SKILLS: Skill[] = [
         forkSourceVersion: '初始客服版',
         upstreamUpdateStatus: 'update_available' as const,
         instructions: '你是專門處理退貨問題的客服助理。\n\n當客戶提出退貨請求時：\n1. 查詢訂單狀態確認購買日期\n2. 確認是否在 30 天退貨期限內\n3. 依據退貨政策給出具體建議\n4. 如有疑問轉接人工客服',
-        triggerHint: '退貨、換貨、退款、品質問題',
+        steps: ['查詢訂單狀態，確認購買日期', '確認是否在 30 天退貨期限內', '依退貨政策給出具體處理建議', '需要退貨時提供退貨申請連結'],
+        exceptions: ['商品已拆封或屬客製品時，說明不適用退貨並提供替代方案'],
+        outputFormat: '退貨判定結果（可退／不可退）＋理由＋下一步操作',
+        applicableScope: '僅處理退貨相關問題，一般諮詢交給通用客服機器人',
         capabilities: [
           '訂單狀態查詢',
           '退貨資格判斷',
@@ -352,8 +401,11 @@ const MOCK_SKILLS: Skill[] = [
             status: 'active',
             name: '客服機器人 (退貨版)',
             description: '針對退貨問題，依設定的服務原則回應退貨政策與審核',
+            steps: ['查詢訂單狀態，確認購買日期', '確認是否在 30 天退貨期限內', '依退貨政策給出具體處理建議', '需要退貨時提供退貨申請連結'],
+            exceptions: ['商品已拆封或屬客製品時，說明不適用退貨並提供替代方案'],
+            outputFormat: '退貨判定結果（可退／不可退）＋理由＋下一步操作',
+            applicableScope: '僅處理退貨相關問題，一般諮詢交給通用客服機器人',
             instructions: '你是專門處理退貨問題的客服助理。\n\n當客戶提出退貨請求時：\n1. 查詢訂單狀態確認購買日期\n2. 確認是否在 30 天退貨期限內\n3. 依據退貨政策給出具體建議\n4. 如有疑問轉接人工客服',
-            triggerHint: '退貨、換貨、退款、品質問題',
             capabilities: [
               '訂單狀態查詢',
               '退貨資格判斷',
@@ -373,8 +425,11 @@ const MOCK_SKILLS: Skill[] = [
             status: 'reviewing',
             name: '客服機器人 (退貨版)',
             description: '針對退貨問題，依設定的服務原則回應退貨政策與審核，新增超保固期彈性處理',
+            steps: ['查詢訂單狀態，確認購買日期', '確認是否在 30 天退貨期限內', '依退貨政策給出具體處理建議', '需要退貨時提供退貨申請連結'],
+            exceptions: ['商品已拆封或屬客製品時，說明不適用退貨並提供替代方案', '超過退貨期限但有正當理由時，提供「主管特批申請」流程', '商品瑕疵不受期限限制，隨時可申請', 'VIP 客戶享有 45 天退貨優惠期'],
+            outputFormat: '退貨判定結果（可退／不可退）＋理由＋下一步操作',
+            applicableScope: '僅處理退貨相關問題，一般諮詢交給通用客服機器人',
             instructions: '你是專門處理退貨問題的客服助理。\n\n當客戶提出退貨請求時：\n1. 查詢訂單狀態確認購買日期\n2. 確認是否在 30 天退貨期限內\n3. 依據退貨政策給出具體建議\n4. 若超過期限但有正當理由，提供「主管特批申請」流程\n5. 如有疑問轉接人工客服\n\n特殊規則：\n- 商品瑕疵不受期限限制，隨時可申請\n- VIP 客戶享有 45 天退貨優惠期',
-            triggerHint: '退貨、換貨、退款、品質問題、保固、瑕疵、VIP',
             capabilities: [
               '訂單狀態查詢',
               '退貨資格判斷',
@@ -411,6 +466,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.91,
     avgLatencyMs: 450,
     instructions: '你是文件摘要助理，負責解析使用者上傳的長篇文件，提取重點與關鍵字，並依需求輸出條列式、段落式或 JSON 結構化摘要。優先保留原文的關鍵數據與結論，避免遺漏重要決策資訊。',
+    steps: ['解析上傳的文件內容', '擷取重點段落、關鍵數據與結論', '依使用者指定格式整理摘要', '列出文件關鍵字'],
+    exceptions: ['文件為掃描圖檔且無法辨識文字時，提示使用者改上傳文字版', '文件超過 200 頁時，先依章節分段摘要'],
+    outputFormat: '條列式（預設）、段落式或 JSON 結構化摘要，三擇一',
+    applicableScope: 'PDF、Word、Markdown 格式的長篇文件',
     files: [
       {
         id: 'sf-sys-doc-001-1',
@@ -444,6 +503,10 @@ const MOCK_SKILLS: Skill[] = [
         status: 'history',
         name: '文件摘要生成',
         description: '自動摘要長文件，支援 PDF / Word',
+        steps: ['解析上傳的文件內容', '擷取重點段落、關鍵數據與結論', '依使用者指定格式整理摘要', '列出文件關鍵字'],
+        exceptions: ['文件為掃描圖檔且無法辨識文字時，提示使用者改上傳文字版', '文件超過 200 頁時，先依章節分段摘要'],
+        outputFormat: '條列式摘要',
+        applicableScope: 'PDF、Word 格式的長篇文件',
         instructions: '你是文件摘要助理，負責解析使用者上傳的長篇文件，提取重點並輸出條列式摘要。',
         createdAt: '2026-03-10T09:00:00Z',
         createdBy: '平台團隊',
@@ -455,6 +518,10 @@ const MOCK_SKILLS: Skill[] = [
         status: 'active',
         name: '文件摘要生成',
         description: '自動摘要長文件，支援 PDF / Word / Markdown',
+        steps: ['解析上傳的文件內容', '擷取重點段落、關鍵數據與結論', '依使用者指定格式整理摘要', '列出文件關鍵字'],
+        exceptions: ['文件為掃描圖檔且無法辨識文字時，提示使用者改上傳文字版', '文件超過 200 頁時，先依章節分段摘要'],
+        outputFormat: '條列式（預設）、段落式或 JSON 結構化摘要，三擇一',
+        applicableScope: 'PDF、Word、Markdown 格式的長篇文件',
         instructions: '你是文件摘要助理，負責解析使用者上傳的長篇文件，提取重點與關鍵字，並依需求輸出條列式、段落式或 JSON 結構化摘要。優先保留原文的關鍵數據與結論，避免遺漏重要決策資訊。',
         createdAt: '2026-05-20T09:00:00Z',
         createdBy: '平台團隊',
@@ -476,6 +543,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.88,
     avgLatencyMs: 520,
     instructions: '你是會議記錄助理，負責將會議錄音轉換為逐字稿，並自動生成結構化摘要，包含重點決策與 action items。輸出時明確標示每個待辦事項的負責人與預計完成日期。',
+    steps: ['將會議錄音轉為逐字稿', '歸納討論主題與重點決策', '擷取 action items', '為每個 action item 標示負責人與預計完成日期'],
+    exceptions: ['錄音品質不佳無法辨識時，標示不確定的段落', '未明確指派負責人的 action item，標示為「待指派」'],
+    outputFormat: '會議主題／重點決策／Action Items（負責人、到期日）三段式',
+    applicableScope: '一般內部會議與客戶會議',
     capabilities: [
       '語音轉文字',
       '摘要生成',
@@ -499,6 +570,10 @@ const MOCK_SKILLS: Skill[] = [
         status: 'history',
         name: '會議摘要',
         description: '會議錄音轉文字並生成摘要',
+        steps: ['將會議錄音轉為逐字稿', '歸納討論主題與重點決策'],
+        exceptions: ['錄音品質不佳無法辨識時，標示不確定的段落'],
+        outputFormat: '會議主題／重點決策 兩段式',
+        applicableScope: '一般內部會議與客戶會議',
         instructions: '你是會議記錄助理，負責將會議錄音轉換為逐字稿，並生成摘要。',
         createdAt: '2026-04-15T09:00:00Z',
         createdBy: '平台團隊',
@@ -510,6 +585,10 @@ const MOCK_SKILLS: Skill[] = [
         status: 'active',
         name: '會議摘要',
         description: '會議錄音轉文字並生成摘要與 action items',
+        steps: ['將會議錄音轉為逐字稿', '歸納討論主題與重點決策', '擷取 action items', '為每個 action item 標示負責人與預計完成日期'],
+        exceptions: ['錄音品質不佳無法辨識時，標示不確定的段落', '未明確指派負責人的 action item，標示為「待指派」'],
+        outputFormat: '會議主題／重點決策／Action Items（負責人、到期日）三段式',
+        applicableScope: '一般內部會議與客戶會議',
         instructions: '你是會議記錄助理，負責將會議錄音轉換為逐字稿，並自動生成結構化摘要，包含重點決策與 action items。輸出時明確標示每個待辦事項的負責人與預計完成日期。',
         createdAt: '2026-06-05T09:00:00Z',
         createdBy: '平台團隊',
@@ -535,6 +614,10 @@ const MOCK_SKILLS: Skill[] = [
         forkSourceVersion: '初始版本',
         upstreamUpdateStatus: 'update_available' as const,
         instructions: '你是工程團隊的會議記錄助理，負責將站立會議與架構討論的錄音轉換為摘要，並自動將識別出的 action items 建立為 Jira Issue，同時保留技術決策記錄與相關 PR 連結。',
+        steps: ['將站立會議或架構討論錄音轉為摘要', '擷取技術決策與相關 PR 連結', '識別 action items', '將 action items 建立為 Jira Issue'],
+        exceptions: ['Jira 連線失敗時，改在摘要中列出待建立的 Issue 清單', '討論內容涉及資安或未公開資訊時，不寫入 Jira 描述'],
+        outputFormat: '摘要＋技術決策記錄＋已建立的 Jira Issue 連結',
+        applicableScope: '工程部的站立會議與架構討論',
         capabilities: [
           'Jira整合',
           '工程格式輸出',
@@ -555,6 +638,10 @@ const MOCK_SKILLS: Skill[] = [
             status: 'active',
             name: '會議摘要 (工程版)',
             description: '工程會議格式，自動標記 action items 至 Jira',
+            steps: ['將站立會議或架構討論錄音轉為摘要', '擷取技術決策與相關 PR 連結', '識別 action items', '將 action items 建立為 Jira Issue'],
+            exceptions: ['Jira 連線失敗時，改在摘要中列出待建立的 Issue 清單', '討論內容涉及資安或未公開資訊時，不寫入 Jira 描述'],
+            outputFormat: '摘要＋技術決策記錄＋已建立的 Jira Issue 連結',
+            applicableScope: '工程部的站立會議與架構討論',
             instructions: '你是工程團隊的會議記錄助理，負責將站立會議與架構討論的錄音轉換為摘要，並自動將識別出的 action items 建立為 Jira Issue，同時保留技術決策記錄與相關 PR 連結。',
             createdAt: '2026-06-01T09:00:00Z',
             createdBy: 'jocelyn.tseng',
@@ -579,7 +666,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.99,
     avgLatencyMs: 120,
     instructions: '你是 ERP 庫存查詢助理。\n根據 SKU 查詢各倉庫即時庫存量。\n\n支援功能：\n- 指定倉庫查詢\n- 多倉庫匯總\n- 低於安全存量自動標示',
-    triggerHint: '庫存、SKU、倉庫、庫存查詢',
+    steps: ['確認使用者提供的產品 ID（SKU）', '查詢指定倉庫或全部倉庫的即時庫存', '多倉庫時彙總總量', '標示低於安全存量的品項'],
+    exceptions: ['查無此 SKU 時，提示使用者確認產品 ID', 'ERP 系統維護中時，回覆最後一次同步的庫存並註明時間'],
+    outputFormat: '表格：倉庫／現有庫存／安全存量／狀態',
+    applicableScope: '企業內部 ERP 系統中的所有倉庫',
     files: [
       {
         id: 'sf-ext-erp-001-1',
@@ -611,8 +701,11 @@ const MOCK_SKILLS: Skill[] = [
         status: 'history',
         name: 'ERP 庫存查詢',
         description: '根據產品 ID 查詢即時庫存量',
+        steps: ['確認使用者提供的產品 ID（SKU）', '查詢即時庫存並回報'],
+        exceptions: ['查無此 SKU 時，提示使用者確認產品 ID'],
+        outputFormat: '一句話回報庫存量',
+        applicableScope: '企業內部 ERP 系統中的所有倉庫',
         instructions: '你是 ERP 庫存查詢助理。\n根據 SKU 查詢即時庫存量並回報。',
-        triggerHint: '庫存、SKU、庫存查詢',
         capabilities: [
           '即時庫存查詢',
         ],
@@ -630,8 +723,11 @@ const MOCK_SKILLS: Skill[] = [
         status: 'active',
         name: 'ERP 庫存查詢',
         description: '根據產品 ID 查詢即時庫存量，支援多個倉庫',
+        steps: ['確認使用者提供的產品 ID（SKU）', '查詢指定倉庫或全部倉庫的即時庫存', '多倉庫時彙總總量', '標示低於安全存量的品項'],
+        exceptions: ['查無此 SKU 時，提示使用者確認產品 ID', 'ERP 系統維護中時，回覆最後一次同步的庫存並註明時間'],
+        outputFormat: '表格：倉庫／現有庫存／安全存量／狀態',
+        applicableScope: '企業內部 ERP 系統中的所有倉庫',
         instructions: '你是 ERP 庫存查詢助理。\n根據 SKU 查詢各倉庫即時庫存量。\n\n支援功能：\n- 指定倉庫查詢\n- 多倉庫匯總\n- 低於安全存量自動標示',
-        triggerHint: '庫存、SKU、倉庫、庫存查詢',
         capabilities: [
           '即時庫存查詢',
           '多倉庫整合',
@@ -663,7 +759,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.87,
     avgLatencyMs: 410,
     instructions: '你是業務團隊的週報助理。\n\n每週根據提供的銷售數據，自動生成結構化業績週報：\n1. 本週總業績與目標達成率\n2. Top 5 商品銷售排行\n3. 各區域業績比較\n4. 下週改善建議\n\n輸出格式以 Markdown 條列式為主，數字加粗標示。',
-    triggerHint: '週報、業績、銷售報告、商品排行、達標率',
+    steps: ['讀取本週銷售數據', '計算本週總業績與目標達成率', '整理 Top 5 商品銷售排行', '比較各區域業績', '提出下週改善建議'],
+    exceptions: ['銷售數據不完整時，標示缺漏的區域或日期', '目標值未設定時，只呈現業績數字不計算達成率'],
+    outputFormat: 'Markdown 條列式，數字加粗標示',
+    applicableScope: '業務部每週例行週報',
     capabilities: [
       '銷售數據分析',
       '商品排行生成',
@@ -685,8 +784,11 @@ const MOCK_SKILLS: Skill[] = [
         status: 'active',
         name: '業績週報生成',
         description: '根據本週銷售數據自動整理業績摘要，含商品排行與目標達成率分析',
+        steps: ['讀取本週銷售數據', '計算本週總業績與目標達成率', '整理 Top 5 商品銷售排行', '比較各區域業績', '提出下週改善建議'],
+        exceptions: ['銷售數據不完整時，標示缺漏的區域或日期', '目標值未設定時，只呈現業績數字不計算達成率'],
+        outputFormat: 'Markdown 條列式，數字加粗標示',
+        applicableScope: '業務部每週例行週報',
         instructions: '你是業務團隊的週報助理。\n\n每週根據提供的銷售數據，自動生成結構化業績週報：\n1. 本週總業績與目標達成率\n2. Top 5 商品銷售排行\n3. 各區域業績比較\n4. 下週改善建議',
-        triggerHint: '週報、業績、銷售報告',
         capabilities: [
           '銷售數據分析',
           '商品排行生成',
@@ -718,7 +820,10 @@ const MOCK_SKILLS: Skill[] = [
     testPassRate: 0.91,
     avgLatencyMs: 320,
     instructions: '你是行銷文案助理，根據活動主題、目標受眾與品牌調性生成行銷文案。\n\n輸出包含：\n1. 社群貼文（Facebook / Instagram / LinkedIn 各一）\n2. EDM 主旨行（3 個選項）\n3. CTA 按鈕文案（2 個選項）\n\n語調依品牌調性調整，預設為專業但親切。',
-    triggerHint: '文案、行銷、貼文、EDM、社群、活動',
+    steps: ['確認活動主題、目標受眾與品牌調性', '產出各社群平台貼文', '產出 EDM 主旨行選項', '產出 CTA 按鈕文案選項'],
+    exceptions: ['未提供品牌調性時，預設為專業但親切', '活動涉及價格或優惠條件時，提醒使用者確認法務用語'],
+    outputFormat: '社群貼文（Facebook / Instagram / LinkedIn 各一）＋EDM 主旨行 3 選項＋CTA 文案 2 選項',
+    applicableScope: '行銷部的活動宣傳文案',
     capabilities: [
       '多平台文案生成',
       'CTA最佳化',
@@ -735,6 +840,10 @@ const MOCK_SKILLS: Skill[] = [
         status: 'history',
         name: '行銷文案生成',
         description: '根據活動主題自動生成社群文案',
+        steps: ['確認活動主題、目標受眾與品牌調性', '產出各社群平台貼文'],
+        exceptions: ['未提供品牌調性時，預設為專業但親切'],
+        outputFormat: '社群貼文（Facebook / Instagram / LinkedIn 各一）',
+        applicableScope: '行銷部的活動宣傳文案',
         createdAt: '2026-05-01T09:00:00Z',
         createdBy: 'jocelyn.tseng',
         updateNote: '初始版本',
@@ -745,6 +854,10 @@ const MOCK_SKILLS: Skill[] = [
         status: 'active',
         name: '行銷文案生成',
         description: '根據活動主題與目標受眾，自動生成社群貼文、EDM 標題與 CTA 文案',
+        steps: ['確認活動主題、目標受眾與品牌調性', '產出各社群平台貼文', '產出 EDM 主旨行選項', '產出 CTA 按鈕文案選項'],
+        exceptions: ['未提供品牌調性時，預設為專業但親切', '活動涉及價格或優惠條件時，提醒使用者確認法務用語'],
+        outputFormat: '社群貼文（Facebook / Instagram / LinkedIn 各一）＋EDM 主旨行 3 選項＋CTA 文案 2 選項',
+        applicableScope: '行銷部的活動宣傳文案',
         createdAt: '2026-06-10T09:00:00Z',
         createdBy: 'jocelyn.tseng',
         updateNote: '新增 EDM 主旨行與 CTA 選項輸出',
@@ -754,7 +867,8 @@ const MOCK_SKILLS: Skill[] = [
   },
 ]
 
-type ScenarioTemplate = Omit<AITestScenario, 'id' | 'status'>
+// confusable：搶觸發反例（競爭技能的關鍵字），答題 Agent 最容易在這裡被搞混
+type ScenarioTemplate = Omit<AITestScenario, 'id' | 'status' | 'agentAnswer' | 'agentReasoning'> & { confusable?: boolean }
 
 const MOCK_AI_SCENARIO_TEMPLATES: Record<string, ScenarioTemplate[]> = {
   'sys-cs-001': [
@@ -800,12 +914,12 @@ const MOCK_AI_SCENARIO_TEMPLATES: Record<string, ScenarioTemplate[]> = {
   ],
 }
 
-// 觸發情境是一整句話，簡單切出長度 ≥2 的詞塊當關鍵字──不是真的中文斷詞，
+// 說明是一整句話，簡單切出長度 ≥2 的詞塊當關鍵字──不是真的中文斷詞，
 // 只是要湊出幾個看起來像關鍵字的片段，跟 findSimilarSkill() 的 bigram 比對是不同用途
-function extractTriggerKeywords(triggerHint: string | undefined): string[] {
-  const hint = triggerHint?.trim()
-  if (!hint) return []
-  return hint
+function extractDescriptionKeywords(description: string | undefined): string[] {
+  const text = description?.trim()
+  if (!text) return []
+  return text
     .replace(/[，。！？、；：,.!?;:「」『』]/g, ' ')
     .split(/\s+/)
     .filter(w => w.length >= 2)
@@ -821,28 +935,137 @@ const NEGATIVE_KEYWORD_SETS = ['天氣 心情 電影', '旅遊 美食 運動', '
 // 技能的主要功能」「今天天氣真好」這類「正常流程」「邊界情況」範例句子其實跟這顆技能的
 // 實際內容完全無關，對使用者來說沒有驗證意義——那兩個標籤需要真正理解技能完整語意才寫得出
 // 有意義的題目，沒辦法無中生有。只留「觸發邊緣」：用這顆技能自己的覆蓋能力標籤（沒有的話
-// 退回觸發情境裡的關鍵字，再沒有就用技能名稱本身）組成片語輸入，測的是「關鍵字夠不夠精準
+// 退回說明裡的關鍵字，再沒有就用技能名稱本身）組成片語輸入，測的是「關鍵字夠不夠精準
 // 讓它正確判斷要不要觸發」，這點所有技能都適用、也都跟內容本身相關。
 // 題數至少 5 題：關鍵字夠多時正例最多到 4 題、反例固定 2 題；關鍵字很少（甚至只有技能名稱
 // 這一個）時正例可能只有 1 題，改從反例池多補幾題撐到底線，而不是讓題目少到沒驗證意義
-// 只收 name／triggerHint／capabilities／composition 四個欄位：草稿還沒存檔時沒有完整的
+// 只收 name／description／capabilities／composition 四個欄位：草稿還沒存檔時沒有完整的
 // Skill 物件可用，只需要這四個就能組題目關鍵字，不用整顆 Skill
-export type TriggerEdgeSource = Pick<Skill, 'name' | 'triggerHint' | 'capabilities' | 'composition'>
+// assignedAgents 只用來決定「答題 Agent 可以選誰」，不參與組題關鍵字
+export type TriggerEdgeSource = Pick<Skill, 'name' | 'capabilities' | 'composition' | 'assignedAgents'> & { description?: string }
 
-function generateDynamicTriggerEdgeScenarios(skill: TriggerEdgeSource | undefined): ScenarioTemplate[] {
+// 積木組裝的技能（有 composition）：「說明」是使用者在「基本設定」步驟手寫的必填欄位，
+// 比覆蓋能力（章節名稱拼出來的標籤）更貼近使用者自己對「什麼時候該用」的描述，優先用它
+// 抓關鍵字，沒抓到字才退回覆蓋能力。對話建立的技能說明常是使用者第一句口語需求，
+// 維持原本「覆蓋能力優先」不變
+function keywordPoolFor(source: TriggerEdgeSource | undefined): string[] {
+  const name = source?.name?.trim() || '這顆技能'
+  const fromDescription = extractDescriptionKeywords(source?.description)
+  const fromCapabilities = source?.capabilities ?? []
+  const keywords = source?.composition
+    ? (fromDescription.length ? fromDescription : fromCapabilities)
+    : (fromCapabilities.length ? fromCapabilities : fromDescription)
+  return keywords.length ? keywords : [name]
+}
+
+// 跟這顆技能「搶觸發」風險最高的候選：先看這顆技能指派給哪些 Agent，再從其他技能裡找出
+// 「也指派給至少一個同樣 Agent」的——同一個 Agent 要是能同時調用兩顆內容很像的技能，
+// 使用者講一句話時 Agent 该選哪一顆就會卡住。用 bigram 文字重疊比對（跟
+// useSkillStudioConversation.ts 的 findSimilarSkill 同一套比對邏輯，這裡不直接 import
+// 那邊的函式，避免 store 回頭依賴 composable）在這些候選裡挑重疊分數最高的最多兩顆
+function bigramOverlapScore(a: string, b: string): number {
+  if (a.length < 2 || b.length < 2) return 0
+  const gramsA = new Set<string>()
+  for (let i = 0; i < a.length - 1; i++) gramsA.add(a.slice(i, i + 2))
+  let score = 0
+  for (let i = 0; i < b.length - 1; i++) {
+    if (gramsA.has(b.slice(i, i + 2))) score++
+  }
+  return score
+}
+
+function bestTextMatch(haystack: string, candidates: Skill[]): { skill: Skill; score: number } | null {
+  let best: { skill: Skill; score: number } | null = null
+  for (const s of candidates) {
+    const score = bigramOverlapScore(haystack, `${s.name}${s.description ?? ''}${s.instructions ?? ''}`)
+    if (score > 0 && (!best || score > best.score)) best = { skill: s, score }
+  }
+  return best
+}
+
+// 跟這顆技能「搶觸發」風險最高的候選：先看這顆技能指派給哪些 Agent，再從其他技能裡找出
+// 「也指派給至少一個同樣 Agent」的——同一個 Agent 要是能同時調用兩顆內容很像的技能，
+// 使用者講一句話時 Agent 该選哪一顆就會卡住。用 bigram 文字重疊比對（跟
+// useSkillStudioConversation.ts 的 findSimilarSkill 同一套比對邏輯，這裡不直接 import
+// 那邊的函式，避免 store 回頭依賴 composable）在這些候選裡挑重疊分數最高的最多兩顆。
+//
+// 這顆技能自己還沒有指派任何 Agent 時不直接放棄：改用純內容相似度在團隊內找最像的一顆，
+// 「索引」回它指派的 Agent 當線索借來用——inferredFrom 記下是借用了哪一顆，讓呼叫端
+// 可以在敘事文字裡講清楚這個推測從哪來，不是憑空冒出一群 Agent
+//
+// answeringAgent：使用者選了哪個 Agent 來答題時，只有「這個 Agent 也能調用」的技能
+// 才會跟它搶觸發，候選範圍縮到這一個 Agent
+function findCompetingSkills(
+  skill: Skill,
+  candidates: Skill[],
+  answeringAgent?: string,
+): { competing: Skill[]; inferredFrom?: Skill } {
+  const haystack = `${skill.name}${skill.description ?? ''}${skill.instructions ?? ''}`
+  let agents = new Set(skill.assignedAgents ?? [])
+  let inferredFrom: Skill | undefined
+
+  if (agents.size === 0) {
+    const best = bestTextMatch(haystack, candidates.filter(s => s.id !== skill.id && (s.assignedAgents ?? []).length > 0))
+    if (best) {
+      inferredFrom = best.skill
+      agents = new Set(best.skill.assignedAgents ?? [])
+    }
+  }
+  if (answeringAgent) agents = new Set([answeringAgent])
+  if (agents.size === 0) return { competing: [] }
+
+  const competing = candidates
+    .filter(s => s.id !== skill.id && (s.assignedAgents ?? []).some(a => agents.has(a)))
+    .map(s => ({ skill: s, score: bigramOverlapScore(haystack, `${s.name}${s.description ?? ''}${s.instructions ?? ''}`) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2)
+    .map(x => x.skill)
+  return { competing, inferredFrom }
+}
+
+// 生成題目期間給使用者看的敘事文字，讓「生成中」不只是一顆乾乾的轉圈圈——
+// 具體講出「正在做什麼」（查 Agent、比對相似技能），每次重新生成都會照當下的
+// assignedAgents／搶觸發掃描結果重算一次，不是固定的罐頭句子
+function buildGenerationNarration(
+  source: TriggerEdgeSource | undefined,
+  skill: Skill | undefined,
+  competingSkills: Skill[],
+  inferredFrom: Skill | undefined,
+  answeringAgent: string,
+): string[] {
+  const name = source?.name?.trim() || '這顆技能'
+  const agents = skill?.assignedAgents ?? []
+  const lines: string[] = []
+  if (agents.length === 0) {
+    lines.push(
+      inferredFrom
+        ? `「${name}」目前還沒有指派 Agent，依技能內容判斷，推測與團隊內的「${inferredFrom.name}」相似，索引回它指派的 Agent：${(inferredFrom.assignedAgents ?? []).join('、')}，抓來作為測試，避免搶著被觸發。`
+        : `「${name}」目前還沒有指派 Agent，團隊內也找不到內容相近的技能，先用技能本身的內容出題。`,
+    )
+  } else {
+    lines.push(`正在查看「${name}」可調用的 Agent：${agents.join('、')}。`)
+    lines.push(
+      competingSkills.length > 0
+        ? `發現 ${competingSkills.length} 個同樣被這些 Agent 調用、內容相近的技能：${competingSkills.map(s => s.name).join('、')}，一併納入測試避免搶著被觸發。`
+        : '沒有發現其他搶著被觸發的相似技能。',
+    )
+  }
+  lines.push(`由「${answeringAgent}」逐題判斷該不該觸發這顆技能。`)
+  lines.push('正在產生測試情境...')
+  return lines
+}
+
+// 「觸發邊緣」的反例優先用搶觸發風險最高的競爭技能自己的關鍵字——這比「天氣 心情 電影」
+// 這種隨便湊的無關詞更有鑑別度，因為這才是真的可能被搞混、答錯的情境；競爭技能不夠湊滿
+// 最低題數時，才用無關關鍵字池補滿
+function generateDynamicTriggerEdgeScenarios(
+  skill: TriggerEdgeSource | undefined,
+  competingSkills: TriggerEdgeSource[] = [],
+): ScenarioTemplate[] {
   const MIN_TOTAL = 5
   const name = skill?.name?.trim() || '這顆技能'
-  const fromTriggerHint = extractTriggerKeywords(skill?.triggerHint)
-  const fromCapabilities = skill?.capabilities ?? []
-  // 積木組裝的技能（有 composition）：「觸發情境」是使用者在「基本設定」步驟手寫、
-  // 專門描述「什麼時候該觸發」的必填欄位，比覆蓋能力（偏「這顆技能做什麼」而非
-  // 「什麼時候該用」）更貼近是非題要驗證的東西，優先用它抓關鍵字，沒抓到字才退回
-  // 覆蓋能力。對話建立的技能沒有這層區分（兩個欄位都是 AI 推導或口語補充的，沒有
-  // 「哪個更權威」的差異），維持原本「覆蓋能力優先」不變
-  const keywords = skill?.composition
-    ? (fromTriggerHint.length ? fromTriggerHint : fromCapabilities)
-    : (fromCapabilities.length ? fromCapabilities : fromTriggerHint)
-  const pool = keywords.length ? keywords : [name]
+  const pool = keywordPoolFor(skill)
 
   const positives: ScenarioTemplate[] = pool.slice(0, 3).map(kw => ({
     tag: 'trigger_edge',
@@ -862,14 +1085,61 @@ function generateDynamicTriggerEdgeScenarios(skill: TriggerEdgeSource | undefine
   }
 
   const negativeCount = Math.max(2, MIN_TOTAL - positives.length)
-  const negatives: ScenarioTemplate[] = NEGATIVE_KEYWORD_SETS.slice(0, negativeCount).map(kws => ({
-    tag: 'trigger_edge',
-    input: kws,
-    expectedTrigger: false,
-    expectedBehavior: `這些關鍵字跟「${name}」的能力範圍無關，不應該觸發。`,
-  }))
+  const positiveInputs = new Set(positives.map(p => p.input))
+  const competingNegatives: ScenarioTemplate[] = competingSkills
+    .map(other => {
+      const otherName = other.name?.trim() || '另一顆技能'
+      const otherKeywords = keywordPoolFor(other).slice(0, 2).join(' ')
+      return {
+        tag: 'trigger_edge' as const,
+        input: otherKeywords,
+        expectedTrigger: false,
+        expectedBehavior: `這些關鍵字其實是「${otherName}」的，不是「${name}」的——同一個 Agent 也能調用「${otherName}」，不該被「${name}」搶走觸發。`,
+        confusable: true,
+      }
+    })
+    // 競爭技能的關鍵字剛好跟這顆技能自己的某個正例一字不差時（例如兩顆技能不小心標了
+    // 同一個覆蓋能力標籤），同一句輸入會同時出現在正例跟反例、答案互相矛盾，這題直接丟掉
+    .filter(neg => !positiveInputs.has(neg.input))
+  const negatives = competingNegatives.length >= negativeCount
+    ? competingNegatives.slice(0, negativeCount)
+    : [...competingNegatives, ...NEGATIVE_KEYWORD_SETS.slice(0, negativeCount - competingNegatives.length).map(kws => ({
+        tag: 'trigger_edge' as const,
+        input: kws,
+        expectedTrigger: false,
+        expectedBehavior: `這些關鍵字跟「${name}」的能力範圍無關，不應該觸發。`,
+      }))]
 
   return [...positives, ...negatives]
+}
+
+// 模擬答題 Agent 的作答：大部分照參考答案判斷，但不會每題都對，不然測試永遠 100%
+// 沒有意義——搶觸發反例（confusable）是最容易被搞混的情境，第一題固定答錯；其餘依
+// Agent 名稱＋題目算一個固定雜湊，大約每 7 題錯 1 題。換一個 Agent 答題結果就會不同，
+// 選誰來答題才有差別；同一個 Agent 重新生成同一批題目，答案維持一致
+function hashString(text: string): number {
+  let h = 0
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) >>> 0
+  return h
+}
+
+function simulateAgentAnswers(
+  templates: ScenarioTemplate[],
+  answeringAgent: string,
+  skillName: string,
+): Pick<AITestScenario, 'agentAnswer' | 'agentReasoning'>[] {
+  const firstConfusable = templates.findIndex(t => t.confusable)
+  return templates.map((t, i) => {
+    const misjudged = i === firstConfusable || hashString(`${answeringAgent}${t.input}`) % 7 === 0
+    if (!misjudged) return { agentAnswer: t.expectedTrigger, agentReasoning: t.expectedBehavior }
+    const agentAnswer = !t.expectedTrigger
+    return {
+      agentAnswer,
+      agentReasoning: agentAnswer
+        ? `判斷這句話跟「${skillName}」的能力範圍相關，選擇觸發。`
+        : `判斷這句話不在「${skillName}」的能力範圍內，選擇不觸發。`,
+    }
+  })
 }
 
 const MOCK_PERSONAL_SKILLS: Skill[] = [
@@ -890,8 +1160,12 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['會議記錄助理', '業務分析助理'],
     instructions: '你是一個週報助理，協助使用者根據本週資料自動生成結構化週報。',
-    triggerHint: '週報、會議紀錄、任務清單、彙整',
+    steps: ['收集本週會議記錄與任務清單', '整理本週完成事項', '列出進行中與延遲的任務', '整理下週計畫'],
+    exceptions: ['本週沒有會議記錄時，只依任務清單產出', '任務狀態不明時，標示「待確認」'],
+    outputFormat: '本週完成／進行中／下週計畫 三段條列',
+    applicableScope: '個人每週工作週報',
     capabilities: [
       '資料整合',
       '週報格式輸出',
@@ -944,7 +1218,12 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['客服中心助理'],
     instructions: '你是客服品質評估助理，分析客服對話品質。',
+    steps: ['讀取客服對話紀錄', '評估回答是否正確、完整', '評估語氣與客戶滿意度', '給出評分與改善建議'],
+    exceptions: ['對話過短無法判斷時，標示「樣本不足」', '涉及客訴爭議的對話，標記給主管複核'],
+    outputFormat: '評分（1–5 分）＋扣分原因＋改善建議',
+    applicableScope: '客服團隊的文字對話紀錄',
     capabilities: [
       '多輪對話分析',
       '情緒辨識',
@@ -978,7 +1257,12 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['知識管理助理'],
     instructions: '你是合約審核助理，負責擷取合約中的關鍵條款並評估潛在法律風險。請以條列方式輸出摘要，並標示高風險條款。',
+    steps: ['讀取合約全文', '擷取關鍵條款（金額、期限、違約、保密、管轄）', '評估各條款的潛在法律風險', '產出審核建議'],
+    exceptions: ['合約為非中英文時，提示需人工翻譯後再審', '發現缺少必要條款時，列在風險摘要最前面'],
+    outputFormat: '條列式摘要，高風險條款以【高風險】標示',
+    applicableScope: '一般商業合約與合作協議',
     capabilities: [
       '關鍵條款擷取',
       '風險等級標示',
@@ -1012,7 +1296,12 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['會議記錄助理'],
     instructions: '你是會議記錄助理，根據逐字稿整理結構化會議記錄，包含主題、決議、行動項目與負責人。',
+    steps: ['讀取會議逐字稿或音訊', '整理會議主題', '列出決議事項', '列出行動項目與負責人'],
+    exceptions: ['逐字稿缺少發言人資訊時，行動項目負責人標示「待確認」', '會議沒有決議時，該段標示「本次無決議」'],
+    outputFormat: '主題／決議／行動項目（負責人）三段式',
+    applicableScope: '內部會議的會後記錄',
     capabilities: [
       '多發言人識別',
       '行動項目配對',
@@ -1041,7 +1330,12 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['客服中心助理', '電商小幫手'],
     instructions: '你是產品 FAQ 助理，根據內部文件與常見問題資料庫回答用戶問題，無法回答時請引導至人工客服。',
+    steps: ['理解使用者提問', '比對產品文件與常見問題資料庫', '依文件內容回答', '附上參考文件連結'],
+    exceptions: ['資料庫查無答案時，引導至人工客服', '提問涉及未公開產品資訊時，不回答並說明原因'],
+    outputFormat: '簡答一句＋詳細說明＋參考連結',
+    applicableScope: '已上架產品的使用與規格問題',
     capabilities: [
       'FAQ比對回覆',
       '無法回答時導流',
@@ -1067,7 +1361,12 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     usageCount: 0,
     testPassRate: 0,
     avgLatencyMs: 0,
+    assignedAgents: ['業務分析助理', '倉儲管理助理'],
     instructions: '你是 ERP 報表助理，整合多系統數據生成週期性報表。',
+    steps: ['從 ERP 系統擷取指定期間數據', '整合多系統數據並校對', '計算各項指標', '產出週期性報表'],
+    exceptions: ['數據來源之間不一致時，標示差異並以 ERP 為準', '指定期間無數據時，提示使用者調整期間'],
+    outputFormat: '表格＋重點摘要',
+    applicableScope: '週報、月報等週期性營運報表',
     capabilities: [
       '多系統資料彙整',
       '週期性報表產出',
@@ -1078,7 +1377,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
   },
   {
     // 用「AI 賦能」(SkillStudio) 的「用行銷積木組裝」方式建立——composition
-    // 記錄選了哪些章節積木，instructions/triggerHint/capabilities 都是
+    // 記錄選了哪些章節積木，instructions/capabilities 都是
     // deriveFromSections() 依選中的章節依序組出來的內容，格式要跟那份邏輯一致
     id: 'personal-007',
     name: '行銷週報快篩',
@@ -1095,8 +1394,11 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     testPassRate: 0,
     avgLatencyMs: 0,
     instructions: '依序產出以下章節：\n1. 會員人物誌：性別 × 年齡層 × 主力購買品類 × RFM 行為分群的四維輪廓。\n2. 活動排行：各促銷活動帶動效果排行，並自動生成圖表。\n3. 渠道別流量與收益貢獻：各渠道流量佔比與收益貢獻對照，圖表自動生成。',
-    triggerHint: '當使用者要求產出行銷報告，或提到「TA 用戶畫像、行銷活動成效、渠道績效」相關分析時',
-    assignedAgents: [],
+    steps: ['產出會員人物誌：性別 × 年齡層 × 主力購買品類 × RFM 行為分群', '產出各促銷活動帶動效果排行，並自動生成圖表', '產出各渠道流量佔比與收益貢獻對照，並自動生成圖表'],
+    exceptions: ['某渠道無數據時，該渠道從圖表中排除並註記', '活動期間不足一週時，標示資料可能不具代表性'],
+    outputFormat: '三大章節（會員人物誌／活動排行／渠道貢獻），每章節附圖表',
+    applicableScope: '行銷部每週成效檢視',
+    assignedAgents: ['業務分析助理'],
     capabilities: [
       '會員人物誌',
       '活動排行',
@@ -1111,7 +1413,7 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     // 閘門對話框——demo 時不用先去找哪顆技能符合條件
     id: 'personal-008',
     name: '待測試新流程示範（demo）',
-    description: '示範項目：尚未通過 AI 快速測試，點「啟用技能」會先看到測試閘門對話框',
+    description: '示範項目：尚未通過 AI 快速測試，點「啟用」會先看到測試閘門對話框',
     type: 'extension',
     origin: 'manually_created',
     creationMethod: 'manual',
@@ -1127,8 +1429,11 @@ const MOCK_PERSONAL_SKILLS: Skill[] = [
     // routeIntent 的 findSimilarSkill 是全域 bigram 比對沒有門檻，一有共同的
     // 兩字重疊就可能被誤判成「找到相近技能」，見 useSkillStudioConversation.ts
     instructions: '這是示範用的一顆項目，內容可以隨時調整，主要用來展示啟用前的測試流程。',
-    triggerHint: '示範用途，沒有特定觸發情境',
-    assignedAgents: [],
+    steps: ['讀取使用者輸入', '依示範流程回覆'],
+    exceptions: ['尚未通過 AI 快速測試時，啟用前會先出現測試閘門'],
+    outputFormat: '一般文字回覆',
+    applicableScope: '僅供展示啟用前的測試流程',
+    assignedAgents: ['通用助理'],
     capabilities: [
       '示範能力',
     ],
@@ -1181,9 +1486,9 @@ export function canEnableSkill(skill: Skill): boolean {
   return isSkillTested(skill)
 }
 
-// 啟用前的檢查沒過時，決策對話框要顯示的說明文字
+// 啟用前還沒測過時，決策對話框要顯示的說明文字：建議先測，但不強制——使用者可以不測試直接啟用
 export function describeAiTestGateReason(): string {
-  return '這顆技能這一版還沒測過。請先做一次 AI 快速測試，交卷就算測過，不用全部答對。'
+  return '這顆技能這一版還沒測過。建議先做一次 AI 快速測試（交卷就算測過，不用全部答對）；也可以不測試，直接啟用。'
 }
 
 export const useSkillStore = defineStore('skillStore', () => {
@@ -1214,11 +1519,16 @@ export const useSkillStore = defineStore('skillStore', () => {
   const aiTestScenarios = ref<AITestScenario[]>([])
   const aiTestReport = ref<AITestReport | null>(null)
   const aiTestScenariosSkillId = ref<string | null>(null)
-  // 產生題目當下用來組關鍵字的 name／triggerHint／capabilities 快照（JSON 字串）：
+  // 產生題目當下用來組關鍵字的 name／description／capabilities 快照（JSON 字串）：
   // 跟「目前的草稿內容」比對，用來判斷題目是不是已經跟不上最新的編輯內容，
   // 跟存不存檔無關——草稿還沒存檔也一樣可能需要提醒「重新生成」
   const aiTestScenariosSnapshot = ref<string | null>(null)
   const aiTestIsGenerating = ref(false)
+  // 生成題目期間給使用者看的敘事文字（掃可調用 Agent／找搶觸發的相似技能／出題），
+  // 讓「生成中」不只是一顆乾乾的轉圈圈——每次 generateAITestScenarios() 都會重算
+  const aiTestGenerationNarration = ref<string[]>([])
+  // 這一批題目是由哪個 Agent 作答（使用者生成前選的）；重新測試沒有另外指定時沿用
+  const aiTestAnsweringAgent = ref<string | null>(null)
 
   const flatSkills = computed<Skill[]>(() => {
     const result: Skill[] = []
@@ -1301,7 +1611,7 @@ export const useSkillStore = defineStore('skillStore', () => {
       testPassRate: 0,
       avgLatencyMs: 0,
       instructions: draft.instructions,
-      triggerHint: draft.triggerHint,
+      ...copyRdFields(draft),
       assignedAgents: draft.assignedAgents,
       forkSourceId: draft.forkSourceId,
     }
@@ -1422,12 +1732,12 @@ export const useSkillStore = defineStore('skillStore', () => {
       testPassRate: 0,
       avgLatencyMs: 0,
       instructions: data.instructions,
-      triggerHint: data.triggerHint,
       assignedAgents: data.assignedAgents,
       files: data.files ?? [],
       capabilities: data.capabilities ?? [],
       keywords: data.keywords ?? [],
       composition: data.composition ? { sectionIds: [...data.composition.sectionIds] } : undefined,
+      ...copyRdFields(data),
     })
     return id
   }
@@ -1444,11 +1754,14 @@ export const useSkillStore = defineStore('skillStore', () => {
     }
     if (patch.description !== undefined) skill.description = patch.description
     if (patch.instructions !== undefined) skill.instructions = patch.instructions
-    if (patch.triggerHint !== undefined) skill.triggerHint = patch.triggerHint
     if (patch.capabilities !== undefined) skill.capabilities = [...patch.capabilities]
     if (patch.assignedAgents !== undefined) skill.assignedAgents = [...patch.assignedAgents]
     if (patch.keywords !== undefined) skill.keywords = [...patch.keywords]
     if (patch.composition !== undefined) skill.composition = patch.composition ? { sectionIds: [...patch.composition.sectionIds] } : undefined
+    if (patch.steps !== undefined) skill.steps = [...patch.steps]
+    if (patch.exceptions !== undefined) skill.exceptions = [...patch.exceptions]
+    if (patch.outputFormat !== undefined) skill.outputFormat = patch.outputFormat
+    if (patch.applicableScope !== undefined) skill.applicableScope = patch.applicableScope
     if (
       skill.personalStatus === 'draft' &&
       skill.instructions !== findSkill(skill.derivedFrom ?? '')?.instructions
@@ -1464,7 +1777,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       name: data.name,
       description: data.description ?? '',
       instructions: data.instructions,
-      triggerHint: data.triggerHint,
       assignedAgents: data.assignedAgents,
       type: 'extension',
       origin: 'manually_created',
@@ -1476,6 +1788,7 @@ export const useSkillStore = defineStore('skillStore', () => {
       avgLatencyMs: 0,
       files: data.files ?? [],
       capabilities: data.capabilities ?? [],
+      ...copyRdFields(data),
     })
   }
 
@@ -1485,12 +1798,12 @@ export const useSkillStore = defineStore('skillStore', () => {
     skill.name = data.name
     if (data.description !== undefined) skill.description = data.description
     skill.instructions = data.instructions
-    skill.triggerHint = data.triggerHint
     skill.isEnabled = data.isEnabled
     skill.assignedAgents = data.assignedAgents
     skill.files = data.files ?? []
     skill.capabilities = data.capabilities ?? []
     skill.keywords = data.keywords ?? []
+    Object.assign(skill, copyRdFields(data))
     if (skill.personalStatus === 'draft' && skill.instructions !== findSkill(skill.derivedFrom ?? '')?.instructions) {
       skill.personalStatus = 'available'
     }
@@ -1647,13 +1960,16 @@ export const useSkillStore = defineStore('skillStore', () => {
     note: string,
     versionName: string,
     targetScope: 'enterprise' | 'team' = 'enterprise',
-    targetTeamName?: string
+    targetTeamName?: string,
+    updateTargetId?: string
   ): void {
     const skill = myPersonalSkillsRef.value.find(s => s.id === id)
     if (!skill) return
     skill.personalStatus = 'reviewing'
     skill.submitNote = note
     skill.submitMode = mode
+    const targetId = mode === 'version_update' ? (updateTargetId ?? skill.derivedFrom) : undefined
+    skill.updateTargetId = targetId
     skill.targetScope = targetScope
     skill.targetTeamName = targetScope === 'team' ? targetTeamName : undefined
     skill.submittedBy = 'jocelyn.tseng'
@@ -1661,8 +1977,8 @@ export const useSkillStore = defineStore('skillStore', () => {
     // 更新版本模式：在來源 Library 技能的版本歷史新增一筆「審核中」版本，
     // 內容是這顆個人技能目前的快照。「建立新技能」模式的技能還不存在於
     // Library，沒有版本歷史可以掛
-    if (mode === 'version_update' && skill.derivedFrom) {
-      const target = _findAny(skill.derivedFrom)
+    if (targetId) {
+      const target = _findAny(targetId)
       if (target) {
         target.versions ??= []
         const now = new Date().toISOString()
@@ -1675,8 +1991,8 @@ export const useSkillStore = defineStore('skillStore', () => {
           name: skill.name,
           description: skill.description,
           instructions: skill.instructions,
-          triggerHint: skill.triggerHint,
           capabilities: skill.capabilities,
+          ...copyRdFields(skill),
           createdAt: now,
           createdBy: skill.submittedBy,
           updateNote: note,
@@ -1708,8 +2024,12 @@ export const useSkillStore = defineStore('skillStore', () => {
     target.name = ver.name
     target.description = ver.description
     if (ver.instructions !== undefined) target.instructions = ver.instructions
-    if (ver.triggerHint !== undefined) target.triggerHint = ver.triggerHint
     if (ver.capabilities !== undefined) target.capabilities = ver.capabilities
+    // 舊版本快照沒有 RD 四段（欄位加進來之前建的），沒有就保留技能現有內容，不清空
+    if (ver.steps !== undefined) target.steps = [...ver.steps]
+    if (ver.exceptions !== undefined) target.exceptions = [...ver.exceptions]
+    if (ver.outputFormat !== undefined) target.outputFormat = ver.outputFormat
+    if (ver.applicableScope !== undefined) target.applicableScope = ver.applicableScope
 
     target.auditLog ??= []
     target.auditLog.unshift({
@@ -1757,8 +2077,8 @@ export const useSkillStore = defineStore('skillStore', () => {
       testPassRate: 0,
       avgLatencyMs: 0,
       instructions: source.instructions,
-      triggerHint: source.triggerHint,
       capabilities: source.capabilities ? [...source.capabilities] : undefined,
+      ...copyRdFields(source),
       // 來源若是用行銷積木組裝出來的技能，複本要保留 composition——否則複本重開時
       // 會被 draftFromSkill() 誤判成對話建立，只給對話編輯介面，跟來源的建立方式不一致
       composition: source.composition ? { sectionIds: [...source.composition.sectionIds] } : undefined,
@@ -1817,7 +2137,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       id: 'demo-weekly-report-digest',
       name: '週報摘要整理',
       description: '整理本週對話中的重點需求，套用固定格式產出週報摘要',
-      triggerHint: '偵測到「彙整本週重點＋套用週報格式」類型的整理需求',
       steps: ['彙整本週對話重點', '套用週報格式產出摘要'],
       reason: '示範用資料，方便直接看到「AI 建議建立的技能」的樣子',
       conversationId: 'demo',
@@ -1826,7 +2145,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       id: 'demo-complaint-triage',
       name: '客訴分類彙整',
       description: '將客服對話中的客訴內容自動分類，彙整成週期性報表',
-      triggerHint: '偵測到「客服對話標記＋客訴週報彙整」類型的整理需求',
       steps: ['標記對話中的客訴類別', '彙整成客訴分類週報'],
       reason: '示範用資料，方便直接看到複數建議同時存在的樣子',
       conversationId: 'demo',
@@ -1835,7 +2153,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       id: 'demo-inventory-alert',
       name: '庫存異常示警',
       description: '偵測庫存數量低於安全水位時，自動整理成示警清單',
-      triggerHint: '偵測到「庫存低於安全水位＋自動示警」類型的整理需求',
       steps: ['查詢各品項庫存數量', '篩選低於安全水位的品項並示警'],
       reason: '示範用資料，方便直接看到複數建議同時存在的樣子',
       conversationId: 'demo',
@@ -1844,7 +2161,6 @@ export const useSkillStore = defineStore('skillStore', () => {
       id: 'demo-meeting-action-items',
       name: '會議行動項目追蹤',
       description: '從會議記錄中擷取行動項目，整理成待辦追蹤清單',
-      triggerHint: '偵測到「會議記錄整理＋行動項目追蹤」類型的整理需求',
       steps: ['擷取會議記錄中的行動項目', '整理成待辦追蹤清單並標註負責人'],
       reason: '示範用資料，方便直接看到複數建議同時存在的樣子',
       conversationId: 'demo',
@@ -1871,9 +2187,9 @@ export const useSkillStore = defineStore('skillStore', () => {
         name: draft.name,
         description: draft.description,
         instructions: draft.instructions,
-        triggerHint: draft.triggerHint ?? '',
         isEnabled: true,
         assignedAgents: draft.assignedAgents ?? [],
+        ...copyRdFields(draft),
       })
     }
     // 'version_update' → patch forkSourceId skill with new SkillVersion + submitSkillForReview
@@ -1922,6 +2238,7 @@ export const useSkillStore = defineStore('skillStore', () => {
     aiTestScenariosSkillId.value = null
     aiTestScenariosSnapshot.value = null
     aiTestIsGenerating.value = false
+    aiTestGenerationNarration.value = []
   }
 
   // SkillTestAI.vue 可能被掛載在不同技能的畫面（獨立測試頁 / 抽屜內的測試 tab），
@@ -1933,11 +2250,33 @@ export const useSkillStore = defineStore('skillStore', () => {
       aiTestReport.value = null
       aiTestScenariosSkillId.value = null
       aiTestScenariosSnapshot.value = null
+      aiTestGenerationNarration.value = []
     }
   }
 
+  // 手動建立精靈的「測試」步驟：使用者從測試步驟按「上一步」回到確認步驟時呼叫，
+  // 無條件清空目前的測試情境／報告——下次再進測試步驟要重新點「生成測試情境」，
+  // 不能延用舊的作答紀錄（跟 ensureAITestStateForSkill 不同，那個只在「換了一顆技能」
+  // 時才清，這裡是同一顆技能也要清，因為使用者明確離開了這個測試回合）
+  function resetAITestState(): void {
+    aiTestScenarios.value = []
+    aiTestReport.value = null
+    aiTestScenariosSkillId.value = null
+    aiTestScenariosSnapshot.value = null
+    aiTestIsGenerating.value = false
+    aiTestGenerationNarration.value = []
+  }
+
+  // 技能內容改過並存檔：舊的測試紀錄是測舊版本的，不能拿來啟用新版本——
+  // 清掉「測過」記號，畫面上這顆技能的測試報告也一併清掉，要重新出題作答才能啟用
+  function invalidateAITest(skillId: string): void {
+    const skill = findSkill(skillId)
+    if (skill) skill.aiTestPassRate = null
+    if (aiTestScenariosSkillId.value === skillId) resetAITestState()
+  }
+
   // draftContext：還沒存檔的草稿想先測試時，store 裡找不到這顆技能（或還是舊版本），
-  // 用呼叫端目前編輯中的 name／triggerHint／capabilities 當作組題關鍵字的來源
+  // 用呼叫端目前編輯中的 name／description／capabilities 當作組題關鍵字的來源
   // 還沒存檔的草稿先測試過，存檔那一刻才拿到真正的技能 id：測試結果是同一份草稿
   // 測出來的，不該因為 id 從佔位的草稿 id 換成真正的技能 id，就被
   // ensureAITestStateForSkill 誤判成「換了一顆技能」而清掉。已經有完整報告的話，
@@ -1953,22 +2292,67 @@ export const useSkillStore = defineStore('skillStore', () => {
     skill.aiTestPassRate = rate
   }
 
-  async function generateAITestScenarios(skillId: string, draftContext?: TriggerEdgeSource): Promise<void> {
-    aiTestIsGenerating.value = true
+  // 「答題 Agent」的候選：可以調用這顆技能的 Agent（使用者不選，generateAITestScenarios 自動挑）。
+  // 還沒指派 Agent 時，比照搶觸發掃描借用團隊內最相似技能的 Agent（source: 'inferred'）；
+  // 連借都借不到（全新草稿、團隊內沒有相近技能）才退回所有 Agent
+  function getAITestCallableAgents(
+    skillId: string,
+    draftContext?: TriggerEdgeSource,
+  ): { agents: string[]; source: 'assigned' | 'inferred' | 'all'; inferredFrom?: string } {
+    const skill = findSkill(skillId)
+    const assigned = skill?.assignedAgents?.length ? skill.assignedAgents : (draftContext?.assignedAgents ?? [])
+    if (assigned.length) return { agents: [...assigned], source: 'assigned' }
+    if (skill) {
+      const { inferredFrom } = findCompetingSkills(skill, [...myPersonalSkills.value, ...flatSkills.value])
+      if (inferredFrom?.assignedAgents?.length) {
+        return { agents: [...inferredFrom.assignedAgents], source: 'inferred', inferredFrom: inferredFrom.name }
+      }
+    }
+    return { agents: [...AVAILABLE_AGENTS], source: 'all' }
+  }
+
+  async function generateAITestScenarios(
+    skillId: string,
+    draftContext?: TriggerEdgeSource,
+    answeringAgent?: string,
+  ): Promise<void> {
     aiTestScenarios.value = []
     aiTestReport.value = null
     aiTestScenariosSkillId.value = skillId
-    await new Promise(r => setTimeout(r, 900))
+
+    // 沒指定答題 Agent（例如對話裡點「重新測試」）：沿用上一次選的，上一次的不在
+    // 這顆技能的候選裡才退回第一個候選
+    const callable = getAITestCallableAgents(skillId, draftContext).agents
+    const agent = answeringAgent
+      ?? (aiTestAnsweringAgent.value && callable.includes(aiTestAnsweringAgent.value) ? aiTestAnsweringAgent.value : callable[0])
+    aiTestAnsweringAgent.value = agent
+
+    // 敘事文字要在「生成中」那段時間就看得到，所以搶觸發的掃描（查可調用 Agent、
+    // 找相似技能）要在這裡先算好，不是等 900ms 的模擬延遲結束後才算
     const skill = findSkill(skillId)
     const source: TriggerEdgeSource | undefined = skill ?? draftContext
+    const { competing: competingSkills, inferredFrom } = skill
+      ? findCompetingSkills(skill, [...myPersonalSkills.value, ...flatSkills.value], agent)
+      : { competing: [], inferredFrom: undefined }
+    aiTestGenerationNarration.value = MOCK_AI_SCENARIO_TEMPLATES[skillId]
+      ? [`正在為「${source?.name?.trim() || '這顆技能'}」產生測試情境，由「${agent}」逐題判斷...`]
+      : buildGenerationNarration(source, skill, competingSkills, inferredFrom, agent)
+    aiTestIsGenerating.value = true
+
+    await new Promise(r => setTimeout(r, 900))
     aiTestScenariosSnapshot.value = JSON.stringify({
       name: source?.name ?? '',
-      triggerHint: source?.triggerHint ?? '',
+      description: source?.description ?? '',
       capabilities: source?.capabilities ?? [],
     })
-    const templates = MOCK_AI_SCENARIO_TEMPLATES[skillId] ?? generateDynamicTriggerEdgeScenarios(source)
+    const templates = MOCK_AI_SCENARIO_TEMPLATES[skillId] ?? generateDynamicTriggerEdgeScenarios(source, competingSkills)
+    const agentAnswers = simulateAgentAnswers(templates, agent, source?.name?.trim() || '這顆技能')
     aiTestScenarios.value = templates.map((t, i) => ({
-      ...t,
+      tag: t.tag,
+      input: t.input,
+      expectedBehavior: t.expectedBehavior,
+      expectedTrigger: t.expectedTrigger,
+      ...agentAnswers[i],
       id: `ai-sc-${skillId}-${i}`,
       status: 'pending',
     }))
@@ -2000,12 +2384,13 @@ export const useSkillStore = defineStore('skillStore', () => {
 
     const rate = total > 0 ? correct / total : 0
     let summary: string
+    const agent = aiTestAnsweringAgent.value ? `「${aiTestAnsweringAgent.value}」` : 'Agent'
     if (rate === 1) {
-      summary = '全部答對！你對這顆技能該不該觸發的時機掌握得很準確。'
+      summary = `${agent}全部判斷正確，這顆技能的說明描述得夠清楚。`
     } else if (rate >= 0.7) {
-      summary = `答對 ${correct} / ${total} 題，整體掌握不錯，可以再看看答錯的題目，確認 triggerHint 有沒有需要補充的地方。`
+      summary = `${agent}判斷對 ${correct} / ${total} 題，整體不錯；看看判斷錯的題目，補強說明，讓 Agent 更容易分辨。`
     } else {
-      summary = `答對 ${correct} / ${total} 題，建議重新檢視這顆技能的 triggerHint 與說明，再挑戰一次。`
+      summary = `${agent}只判斷對 ${correct} / ${total} 題，建議重新檢視這顆技能的說明，修改後再測一次。`
     }
 
     aiTestReport.value = { total, correct, byTag, summary }
@@ -2017,15 +2402,29 @@ export const useSkillStore = defineStore('skillStore', () => {
     }
   }
 
-  // 使用者對某一題作答：這句話該不該觸發這顆技能？依 expectedTrigger 立刻計分。
-  // 已作答過的題目不再改動（one-shot，避免改答案影響報告）
+  // 使用者對某一題標註正確答案：這句話該不該觸發這顆技能？拿來跟答題 Agent 的判斷
+  // （agentAnswer）比，立刻算出 Agent 對不對。已標註過的題目不再改動（one-shot，避免改答案影響報告）
   function answerAITestScenario(skillId: string, scenarioId: string, userAnswer: boolean): void {
     const scenario = aiTestScenarios.value.find(s => s.id === scenarioId)
     if (!scenario || scenario.status !== 'pending') return
 
     scenario.userAnswer = userAnswer
-    scenario.status = userAnswer === scenario.expectedTrigger ? 'correct' : 'incorrect'
+    scenario.status = userAnswer === scenario.agentAnswer ? 'correct' : 'incorrect'
 
+    _computeAITestReport(skillId)
+  }
+
+  // 統一送答案：使用者先把每一題的正確答案都標好（還沒送出前都算 pending，不逐題判分），
+  // 按「送出答案」才一次跟 Agent 的判斷比對、只算一次報告。answers 沒涵蓋到的題目（理論上
+  // 不該發生，呼叫端要先確定全部選過才能按送出）維持 pending，不會被誤判
+  function submitAITestAnswers(skillId: string, answers: Record<string, boolean>): void {
+    for (const scenario of aiTestScenarios.value) {
+      if (scenario.status !== 'pending') continue
+      const userAnswer = answers[scenario.id]
+      if (userAnswer === undefined) continue
+      scenario.userAnswer = userAnswer
+      scenario.status = userAnswer === scenario.agentAnswer ? 'correct' : 'incorrect'
+    }
     _computeAITestReport(skillId)
   }
 
@@ -2053,7 +2452,7 @@ export const useSkillStore = defineStore('skillStore', () => {
       role: 'agent',
       content: `（Mock）已依「${name}」的技能指令處理您的問題：「${message}」${capsText}，正在產生結果...`,
       toolTrace: [
-        { name: 'match-trigger-hint', latencyMs: 156 },
+        { name: 'match-skill-description', latencyMs: 156 },
         { name: 'apply-instructions', latencyMs: 234 },
       ],
     })
@@ -2093,6 +2492,9 @@ export const useSkillStore = defineStore('skillStore', () => {
     aiTestScenariosSnapshot,
     migrateAITestState,
     aiTestIsGenerating,
+    aiTestGenerationNarration,
+    aiTestAnsweringAgent,
+    getAITestCallableAgents,
     flatSkills,
     enabledCount,
     enterpriseExtensionCount,
@@ -2156,7 +2558,10 @@ export const useSkillStore = defineStore('skillStore', () => {
     setSelectedSkill,
     generateAITestScenarios,
     ensureAITestStateForSkill,
+    resetAITestState,
+    invalidateAITest,
     answerAITestScenario,
+    submitAITestAnswers,
     resetConversation,
     sendChatMessage,
   }

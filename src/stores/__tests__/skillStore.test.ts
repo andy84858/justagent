@@ -256,6 +256,27 @@ describe('skillStore', () => {
       expect(newVersion).toBeDefined()
     })
 
+    it('submitPersonalSkill 在 version_update 模式下指定 updateTargetId，版本掛到使用者選的技能而不是來源技能', () => {
+      const store = useSkillStore()
+      const skill = store.myPersonalSkills.find(s => s.derivedFrom)!
+      const other = store.flatSkills.find(s => s.id !== skill.derivedFrom)!
+      const sourceBefore = store.getSkillVersions(skill.derivedFrom!).length
+      const otherBefore = store.getSkillVersions(other.id).length
+
+      store.submitPersonalSkill(skill.id, 'version_update', '', '改掛別的技能', 'enterprise', undefined, other.id)
+
+      expect(store.myPersonalSkills.find(s => s.id === skill.id)!.updateTargetId).toBe(other.id)
+      expect(store.getSkillVersions(other.id).length).toBe(otherBefore + 1)
+      expect(store.getSkillVersions(skill.derivedFrom!).length).toBe(sourceBefore)
+    })
+
+    it('submitPersonalSkill 在 new_skill 模式下不記錄 updateTargetId', () => {
+      const store = useSkillStore()
+      const skill = store.myPersonalSkills.find(s => s.derivedFrom)!
+      store.submitPersonalSkill(skill.id, 'new_skill', '', '新技能', 'enterprise', undefined, 'whatever')
+      expect(store.myPersonalSkills.find(s => s.id === skill.id)!.updateTargetId).toBeUndefined()
+    })
+
     it('suggestVersionName 有說明文字時，摘要成短標題（優先參考使用者已填的內容）', async () => {
       const store = useSkillStore()
       const skill = store.myPersonalSkills[0]
@@ -294,7 +315,7 @@ describe('skillStore', () => {
       store.createPersonalSkill({
         name: '我的新技能',
         instructions: '測試指令',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
       })
@@ -308,7 +329,7 @@ describe('skillStore', () => {
       store.createPersonalSkill({
         name: '我的新技能2',
         instructions: '測試指令',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
       })
@@ -322,7 +343,7 @@ describe('skillStore', () => {
       store.createPersonalSkill({
         name: '我的新技能3',
         instructions: '測試指令',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
       })
@@ -335,7 +356,7 @@ describe('skillStore', () => {
       store.createPersonalSkill({
         name: '我的新技能4',
         instructions: '測試指令',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
       })
@@ -496,7 +517,7 @@ describe('skillStore', () => {
       store.updateSkill(copy.id, {
         name: copy.name!,
         instructions: '已修改過的指令內容',
-        triggerHint: copy.triggerHint ?? '',
+        description: copy.description ?? '',
         isEnabled: false,
         assignedAgents: [],
       })
@@ -513,7 +534,7 @@ describe('skillStore', () => {
       store.updateSkill(copy.id, {
         name: copy.name!,
         instructions: source.instructions!, // 跟來源完全相同，代表使用者沒有真的修改內容
-        triggerHint: copy.triggerHint ?? '',
+        description: copy.description ?? '',
         isEnabled: false,
         assignedAgents: [],
       })
@@ -526,7 +547,7 @@ describe('skillStore', () => {
       store.updateSkill(skill.id, {
         name: skill.name!,
         instructions: '再次修改',
-        triggerHint: skill.triggerHint ?? '',
+        description: skill.description ?? '',
         isEnabled: skill.isEnabled ?? false,
         assignedAgents: [],
       })
@@ -541,7 +562,7 @@ describe('skillStore', () => {
       store.updateSkill(skill.id, {
         name: skill.name!,
         instructions: '再次修改',
-        triggerHint: skill.triggerHint ?? '',
+        description: skill.description ?? '',
         isEnabled: skill.isEnabled ?? false,
         assignedAgents: [],
       })
@@ -555,7 +576,7 @@ describe('skillStore', () => {
       store.updateSkill(skill!.id, {
         name: skill!.name!,
         instructions: '再次修改',
-        triggerHint: skill!.triggerHint ?? '',
+        description: skill!.description ?? '',
         isEnabled: skill!.isEnabled ?? false,
         assignedAgents: [],
       })
@@ -570,7 +591,6 @@ describe('skillStore', () => {
         name: 'ERP 庫存查詢',
         description: '查詢 ERP 即時庫存',
         instructions: '1. 釐清品項\n2. 查詢庫存',
-        triggerHint: '當使用者提到庫存時',
         isEnabled: true,
         assignedAgents: [],
         creationMethod: 'ai_assisted',
@@ -585,7 +605,7 @@ describe('skillStore', () => {
 
     it('createPersonalSkill 未帶 creationMethod 時預設 manual；連續建立兩顆 id 不重複', () => {
       const store = useSkillStore()
-      const base = { instructions: 'x', triggerHint: 'y', isEnabled: true, assignedAgents: [] as string[] }
+      const base = { instructions: 'x', description: 'y', isEnabled: true, assignedAgents: [] as string[] }
       const a = store.createPersonalSkill({ name: 'A', ...base })
       const b = store.createPersonalSkill({ name: 'B', ...base })
       expect(a).not.toBe(b)
@@ -594,7 +614,7 @@ describe('skillStore', () => {
 
     it('applyStudioPatch 合併欄位、同步 skillName，並回傳 true', () => {
       const store = useSkillStore()
-      const id = store.createPersonalSkill({ name: '舊名', instructions: '舊指令', triggerHint: '舊觸發', isEnabled: true, assignedAgents: [] })
+      const id = store.createPersonalSkill({ name: '舊名', instructions: '舊指令', description: '舊說明', isEnabled: true, assignedAgents: [] })
       const ok = store.applyStudioPatch(id, {
         name: '新名',
         instructions: '新指令',
@@ -605,7 +625,7 @@ describe('skillStore', () => {
       expect(s.name).toBe('新名')
       expect(s.skillName).toBe('新名')
       expect(s.instructions).toBe('新指令')
-      expect(s.triggerHint).toBe('舊觸發') // 未帶的欄位不動
+      expect(s.description).toBe('舊說明') // 未帶的欄位不動
       expect(s.capabilities).toEqual(['能力一'])
     })
 
@@ -630,7 +650,7 @@ describe('skillStore', () => {
       const store = useSkillStore()
       const ids = ['promo_kpi', 'ta_gender']
       const id = store.createPersonalSkill({
-        name: '行銷週報', instructions: '依序產出以下章節：\n1. 促銷核心 KPI', triggerHint: 't',
+        name: '行銷週報', instructions: '依序產出以下章節：\n1. 促銷核心 KPI', description: 't',
         isEnabled: true, assignedAgents: [], composition: { sectionIds: ids }, creationMethod: 'manual',
       })
       const s = store.findSkill(id)!
@@ -649,7 +669,7 @@ describe('skillStore', () => {
       store.createSkill({
         name: '測試技能',
         instructions: '',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
         capabilities: [cap],
@@ -663,7 +683,7 @@ describe('skillStore', () => {
       store.createSkill({
         name: '無能力技能',
         instructions: '',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
       })
@@ -677,7 +697,7 @@ describe('skillStore', () => {
       store.createPersonalSkill({
         name: '測試個人技能',
         instructions: '',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
         capabilities: [cap],
@@ -692,7 +712,7 @@ describe('skillStore', () => {
       store.updateSkill('ext-cs-return-001', {
         name: '客服機器人 (退貨版)',
         instructions: '測試指令',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
         capabilities: [cap],
@@ -705,7 +725,7 @@ describe('skillStore', () => {
       store.updateSkill('ext-cs-return-001', {
         name: '客服機器人 (退貨版)',
         instructions: '測試指令',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
       })
@@ -720,7 +740,7 @@ describe('skillStore', () => {
       store.createSkill({
         name: '測試技能',
         instructions: '',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
         files: [file],
@@ -734,7 +754,7 @@ describe('skillStore', () => {
       store.createSkill({
         name: '無附檔技能',
         instructions: '',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
       })
@@ -748,7 +768,7 @@ describe('skillStore', () => {
       store.updateSkill('ext-cs-return-001', {
         name: '客服機器人 (退貨版)',
         instructions: '測試指令',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
         files: [file],
@@ -761,7 +781,7 @@ describe('skillStore', () => {
       store.updateSkill('ext-cs-return-001', {
         name: '客服機器人 (退貨版)',
         instructions: '測試指令',
-        triggerHint: '',
+        description: '',
         isEnabled: true,
         assignedAgents: [],
       })

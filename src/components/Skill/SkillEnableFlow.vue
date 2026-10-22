@@ -2,23 +2,47 @@
   <Teleport to="body">
     <Transition name="confirm-fade">
       <div v-if="gateSkill" class="drawer-confirm-overlay" @click.self="resolveCancelled">
-        <div class="drawer-confirm-dialog enable-gate-dialog">
-          <div class="confirm-icon confirm-icon--update">
-            <i class="material-symbols-outlined">rule</i>
-          </div>
-          <h4>還不能啟用「{{ gateSkill.name }}」</h4>
-          <p>{{ describeAiTestGateReason() }}</p>
-          <div class="confirm-actions confirm-actions--column">
-            <button class="custom-btn" @click="resolveGoToTest">
-              <i class="material-symbols-outlined">science</i>前往測試
-            </button>
-            <button class="custom-btn" @click="resolveRevise">
-              <i class="material-symbols-outlined">forum</i>去修改技能內容
-            </button>
-            <button class="custom-btn" @click="resolveCancelled">
-              取消
-            </button>
-          </div>
+        <div :class="['drawer-confirm-dialog', 'enable-gate-dialog', { 'is-testing': isTesting }]">
+          <template v-if="!isTesting">
+            <div class="confirm-icon confirm-icon--update">
+              <i class="material-symbols-outlined">rule</i>
+            </div>
+            <h4>「{{ gateSkill.name }}」還沒測試過</h4>
+            <p>{{ describeAiTestGateReason() }}</p>
+            <div class="confirm-actions confirm-actions--column">
+              <button class="custom-btn custom-main-btn" @click="startTesting">
+                <i class="material-symbols-outlined">science</i>立即測試
+              </button>
+              <!-- 測試是建議、不是強制：使用者可以略過測試，直接進「確認可調用 Agent」 -->
+              <button class="custom-btn enable-skip-test-btn" @click="enterAgentStep(gateSkill)">
+                <i class="material-symbols-outlined">bolt</i>不測試，直接啟用
+              </button>
+              <button class="custom-btn" @click="resolveCancelled">
+                取消
+              </button>
+            </div>
+          </template>
+
+          <!-- 「立即測試」：就地在同一個對話框裡測，原本的選擇按鈕收起來。既然選了測試，就不再給
+               「不測試，直接啟用」：交卷（測過即可，不用全對）前「繼續啟用」反灰，不想測了按取消 -->
+          <template v-else>
+            <h4>測試「{{ gateSkill.name }}」</h4>
+            <div class="enable-gate-test">
+              <SkillTestAI :skill-id="gateSkill.id" embedded />
+            </div>
+            <div class="confirm-actions">
+              <button class="custom-btn" @click="resolveCancelled">
+                取消
+              </button>
+              <button
+                class="custom-btn custom-main-btn"
+                :disabled="!gatePassed"
+                @click="enterAgentStep(gateSkill)"
+              >
+                <i class="material-symbols-outlined">check_circle</i>繼續啟用
+              </button>
+            </div>
+          </template>
         </div>
       </div>
     </Transition>
@@ -65,21 +89,22 @@
 </template>
 
 <script setup lang="ts">
-// 啟用一顆技能的共用流程：檢查這一版測過沒有（不要求全對） → 確認可調用此技能的 Agent。
+// 啟用一顆技能的共用流程：檢查這一版測過沒有（不要求全對，沒測過可就地測試）→ 確認可調用此技能的 Agent。
 // 只負責「問使用者、回傳結果」，不負責實際呼叫 store 把技能存檔或切換狀態——
 // 三個呼叫端（SkillManagement/SkillEditor/SkillTestAI）的「啟用」動作形狀不一樣
 // （已存在技能直接切換 vs. 表單送出的一部分），拿到結果後各自決定要做什麼。
-import { ref } from 'vue'
-import { canEnableSkill, describeAiTestGateReason, AVAILABLE_AGENTS } from '@/stores/skillStore'
+import { computed, ref } from 'vue'
+import { canEnableSkill, describeAiTestGateReason, AVAILABLE_AGENTS, useSkillStore } from '@/stores/skillStore'
 import type { Skill } from '@/stores/skillStore'
+import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
 
 export type EnableFlowOutcome =
   | { type: 'confirmed'; agents: string[] }
-  | { type: 'revise' }
-  | { type: 'goToTest' }
   | { type: 'cancelled' }
 
+const store = useSkillStore()
 const gateSkill = ref<Skill | null>(null)
+const isTesting = ref(false)
 const agentSkill = ref<Skill | null>(null)
 const selectedAgents = ref<string[]>([])
 
@@ -92,26 +117,28 @@ function toggleAgent(agent: string) {
   else selectedAgents.value.splice(idx, 1)
 }
 
+// 呼叫端傳進來的 skill 可能是列表 computed 展開過的複本，測試作答時 store 只會更新
+// 原本那份的 aiTestPassRate——所以要回 store 找最新的那份判斷是否已通過
+const gatePassed = computed(() => {
+  if (!gateSkill.value) return false
+  const latest = store.findSkill(gateSkill.value.id) ?? gateSkill.value
+  return canEnableSkill(latest)
+})
+
+function startTesting() {
+  isTesting.value = true
+}
+
 function enterAgentStep(skill: Skill) {
   gateSkill.value = null
+  isTesting.value = false
   agentSkill.value = skill
   selectedAgents.value = [...pendingExistingAgents]
 }
 
-function resolveRevise() {
-  gateSkill.value = null
-  resolver?.({ type: 'revise' })
-  resolver = null
-}
-
-function resolveGoToTest() {
-  gateSkill.value = null
-  resolver?.({ type: 'goToTest' })
-  resolver = null
-}
-
 function resolveCancelled() {
   gateSkill.value = null
+  isTesting.value = false
   agentSkill.value = null
   resolver?.({ type: 'cancelled' })
   resolver = null
@@ -128,6 +155,7 @@ function requestEnable(skill: Skill, existingAgents: string[]): Promise<EnableFl
   // 若前一次呼叫的 promise 還沒 resolve（理論上不該發生，但呼叫端萬一重複呼叫，
   // 不能讓前一個 promise 永遠 pending 下去），先幫它 resolve 成 cancelled 再繼續
   resolver?.({ type: 'cancelled' })
+  isTesting.value = false
   pendingExistingAgents = existingAgents
   return new Promise(resolve => {
     resolver = resolve

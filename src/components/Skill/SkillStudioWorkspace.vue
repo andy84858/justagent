@@ -48,18 +48,22 @@
           v-if="blockStep === 'basics'"
           :name="conv.draft.value.name"
           :description="conv.draft.value.description"
-          :trigger-hint="conv.draft.value.triggerHint"
           :keywords="conv.draft.value.keywords"
           :capabilities="conv.draft.value.capabilities"
           :assigned-agents="conv.draft.value.assignedAgents"
           :section-ids="conv.draft.value.sectionIds"
           :name-conflict="nameConflict"
+          :exceptions="conv.draft.value.exceptions"
+          :output-format="conv.draft.value.outputFormat"
+          :applicable-scope="conv.draft.value.applicableScope"
           @update:name="v => conv.updateBlocks({ name: v })"
           @update:description="conv.updateBlockDescription"
-          @update:trigger-hint="conv.updateBlockTriggerHint"
           @update:keywords="conv.updateBlockKeywords"
           @update:capabilities="conv.updateBlockCapabilities"
           @update:assigned-agents="conv.updateBlockAssignedAgents"
+          @update:exceptions="v => conv.updateBlockOptional({ exceptions: v })"
+          @update:output-format="v => conv.updateBlockOptional({ outputFormat: v })"
+          @update:applicable-scope="v => conv.updateBlockOptional({ applicableScope: v })"
         />
         <SkillBlockComposer
           v-else
@@ -70,9 +74,7 @@
 
       <!-- 儲存／放棄固定在這裡，不隨右欄「技能預覽／測試」tab 切換而消失或跑到
            看不到的地方——見 SkillStudioPreview.vue 的 hideFooter。
-           有測試紀錄時（不限 100%、不管技能原本有沒有啟用、存不存過檔）這顆鍵
-           升級成「儲存並啟用」：存檔之後順便走一次啟用確認流程；沒有測試紀錄
-           就是單純存檔，不碰啟用——見 handleSaveClick -->
+           儲存歸儲存、啟用歸啟用：這顆鍵只存檔，啟用一律在測試報告的「下一步」按「啟用技能」 -->
       <div class="studio-save-footer">
         <button
           type="button"
@@ -103,7 +105,6 @@
           <i class="material-symbols-outlined">undo</i>放棄修改
         </button>
       </div>
-      <SkillEnableFlow ref="enableFlowRef" />
     </div>
     <div class="studio-side-col">
       <SkillStudioPreview
@@ -117,9 +118,9 @@
         :saved-skill-id="conv.savedSkillId.value"
         :test-skill-id="conv.testSkillId.value"
         :is-dirty="conv.isDirty.value"
+        :test-locked="conv.testLocked.value"
         :can-save="conv.canSave.value"
         :name-conflict="nameConflict"
-        :request-save-draft="conv.save"
         :backend-test="backendSave"
         :conversation-id="conv.conversationId.value"
         :tested-note="conv.testedNote.value"
@@ -139,7 +140,6 @@ import SkillStudioPreview from '@/components/Skill/SkillStudioPreview.vue'
 import SkillMethodChooser from '@/components/Skill/SkillMethodChooser.vue'
 import SkillBlockComposer from '@/components/Skill/SkillBlockComposer.vue'
 import SkillBlockBasicsForm from '@/components/Skill/SkillBlockBasicsForm.vue'
-import SkillEnableFlow from '@/components/Skill/SkillEnableFlow.vue'
 import { useSkillStore } from '@/stores/skillStore'
 import { useAiviewerStore } from '@/stores/AiViewerStore'
 import { useSkillStudioConversation } from '@/composables/useSkillStudioConversation'
@@ -165,7 +165,6 @@ const blockStep = ref<'basics' | 'compose'>('basics')
 // 方案三：conv4 的建議卡按「是」交接過來的來源；只在真的套用了交接草稿時設，
 // 換去別的技能／重新開一顆新技能後清空——「返回原對話」連結才不會誤導
 const handoffOrigin = ref<SkillHandoffOrigin | null>(null)
-const enableFlowRef = ref<InstanceType<typeof SkillEnableFlow> | null>(null)
 
 // 後端模式的對話：儲存、版本都以後端為準，不碰 skillStore 的假資料
 const backendSave = computed(() => conv.usesBackend())
@@ -176,40 +175,22 @@ const nameConflict = computed(() => {
   return !!n && store.myPersonalSkills.some(s => s.id !== conv.savedSkillId.value && s.name === n)
 })
 
-// 有沒有一份屬於目前這份草稿（不管存不存過檔）的測試紀錄——不限 100%，
-// 也不管技能原本是不是已經啟用中，只要測過就算
-const hasTestRecord = computed(() =>
-  !backendSave.value && store.aiTestScenariosSkillId === conv.testSkillId.value && !!store.aiTestReport
-)
-
 const saveButtonLabel = computed(() => {
   if (backendSave.value) return conv.backendSaveAction.value.label
-  if (hasTestRecord.value) return '儲存並啟用'
   return conv.mode.value === 'create' ? '儲存為個人技能' : '儲存修改'
 })
 
-// 「儲存並啟用」只要草稿本身是完整、可存的狀態（canSave）就能點，不用額外要求
-// isDirty——使用者可能只是重新測了一次、內容其實沒改，但仍然想走一次啟用確認
-// 流程（例如重新確認 Agent 指派）。沒有測試紀錄的一般存檔維持原本 saveEnabled
-// 的規則（要有改動才能按）
 const saveClickEnabled = computed(() => {
   if (backendSave.value) return conv.backendSaveAction.value.enabled
-  return hasTestRecord.value ? conv.canSave.value : conv.saveEnabled.value
+  return conv.saveEnabled.value
 })
 
-// AI 快速測試完成（store.aiTestReport 從 null 變成一份報告，一輪測驗只會發生一次
-// 這樣的轉換——見 _computeAITestReport 在所有題目答完前都是 no-op）：交給 conv 判斷
-// 要不要在左側對話主動引導使用者調整內容
-watch(() => store.aiTestReport, report => {
-  if (report) conv.notifyTestResult(report)
-})
+// 測試相關的提示文字（生成中的敘事、生成完成、測試結果）一律留在右側測試 tab 裡
+// （敘事泡泡／toast／測試報告），不推進左側對話河道——河道只留建立／修改技能本身的對話
 
-// 使用者在引導訊息點「重新測試」：conv 自己呼叫得到 store.generateAITestScenarios，
-// 但切不了這裡才有的 activeTab——讀到這個單次訊號就切到測試 tab，讀完歸零
-watch(() => conv.requestTestTab.value, requested => {
-  if (!requested) return
-  activeTab.value = 'test'
-  conv.requestTestTab.value = false
+// 停在「測試」tab 時又改了內容：測試 tab 會反灰，跳回預覽讓使用者看到改了什麼
+watch(() => conv.testLocked.value, locked => {
+  if (locked && activeTab.value === 'test') activeTab.value = 'preview'
 })
 
 // 修改模式下使用者確認要開始建立新技能：conv 已經把草稿悄悄重設回已儲存版本了，
@@ -310,31 +291,15 @@ function onSave() {
     popDialog.toast('已儲存為個人技能，可到「測試」tab 驗證')
     activeTab.value = 'test'
   } else {
-    popDialog.toast('已儲存修改')
+    // 修改存檔後技能轉成停用中：直接帶到「測試」，啟用按鈕在那裡
+    popDialog.toast('已儲存修改，技能目前停用中，到「測試」重新測試後再啟用')
+    activeTab.value = 'test'
   }
-}
-
-// 有測試紀錄：存檔之後順便走一次啟用確認流程，不管技能原本有沒有啟用中——
-// 已經啟用的話，confirmed 不會再把它 toggle 成停用（見下面 !skill.isEnabled），
-// 單純更新 assignedAgents／把這次測試結果透過 override 或正常流程記上去
-async function handleSaveAndEnable() {
-  const id = conv.save()
-  if (!id) return
-  const skill = store.findSkill(id)
-  if (!skill) return
-  const outcome = await enableFlowRef.value!.requestEnable(skill, skill.assignedAgents ?? [])
-  // cancelled／goToTest／revise 都是留在原地：這裡本來就是編輯畫面本身，
-  // 「去修改技能內容」「前往測試」沒有別的地方好導過去，單純關掉對話框就好
-  if (outcome.type !== 'confirmed') return
-  store.setAssignedAgents(skill.id, outcome.agents)
-  if (!skill.isEnabled) store.toggleSkill(skill.id)
 }
 
 function handleSaveClick() {
-  if (hasTestRecord.value) {
-    handleSaveAndEnable()
-    return
-  }
+  // 新建的對話技能還沒確認過可調用 Agent：先在對話裡問，回答完由 conv 自己存檔
+  if (conv.confirmAgentsBeforeSave()) return
   onSave()
 }
 

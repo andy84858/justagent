@@ -31,7 +31,8 @@ describe('SkillDetailDrawer：後端技能', () => {
     const w = mountDrawer(backendSkill)
     await flushPromises()
     expect(w.find('.dh-name').text()).toBe('週報整理')
-    expect(w.find('.dh-status').text()).toContain('第 2 版 · 沒測過')
+    expect(w.find('.dh-status').text()).toContain('沒測過')
+    expect(w.find('.dh-status').text()).not.toContain('第 2 版')
     expect(w.find('.markdown-body').text()).toContain('步驟')
   })
 

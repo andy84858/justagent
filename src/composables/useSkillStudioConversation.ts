@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
-import { useSkillStore, canEnableSkill } from '@/stores/skillStore'
-import type { ChatMessage, Skill, SkillCapability, SkillFile, AITestReport } from '@/stores/skillStore'
+import { useSkillStore, AVAILABLE_AGENTS } from '@/stores/skillStore'
+import type { ChatMessage, Skill, SkillCapability, SkillFile } from '@/stores/skillStore'
 export type { Skill }
 import { REPORT_CATEGORIES, SECTION_MAP } from '@/constants/reportSections'
 import { parseHashtags } from '@/utils/hashtags'
@@ -26,13 +26,17 @@ export interface SkillDraft {
   skillCode?: string            // 後端對話的技能代號（agent 用的英文代號）；name 放給使用者看的顯示名稱
   description: string
   instructions: string
-  triggerHint: string
   capabilities: SkillCapability[]
-  assignedAgents: string[]      // 只有積木方式會在這裡填寫；對話方式維持空陣列，走啟用時的指派流程
+  assignedAgents: string[]      // 可調用這顆技能的 Agent：積木方式在基本設定填；對話方式在「確認可調用 Agent」關卡填（新建時必填，至少一個）
   keywords: string[]            // 只有積木方式會在這裡填寫，規則同 assignedAgents
   files: SkillFile[]
   method: StudioMethod | null   // null = 尚未選擇建立方式
   sectionIds: string[]          // 積木方式的已選章節（依序）
+  // RD 技能定義的另外四段：步驟必填（後端模式除外），其餘選填
+  steps: string[]
+  exceptions: string[]
+  outputFormat: string
+  applicableScope: string
 }
 
 export interface StudioAction { id: string; label: string }
@@ -53,6 +57,11 @@ export interface StudioSnapshot {
   gatheringRawText?: string
   gatheringRound?: number
   awaitingSupplement?: boolean
+  // 可調用 Agent 問過了沒／是不是按存檔鍵被攔下來在等回答：畫布上兩個實例共用同一份
+  // 快照，不帶這兩個值的話，另一個實例會以為還沒問過、按存檔又再問一次
+  agentsAsked?: boolean
+  saveAfterAgents?: boolean
+  suggestedAgents?: string[]
 }
 
 export const DEFAULT_OPENING_MESSAGE = '你好，我是技能建立助理。描述你想讓 Agent 幫你做什麼，我會先擬一版設定放在右側。'
@@ -61,7 +70,10 @@ export const DEFAULT_OPENING_MESSAGE = '你好，我是技能建立助理。描�
 const GATE_OPENING_MESSAGE = '你好，我是技能建立助理。跟我說說你想讓 Agent 幫你做什麼，我會先幫你擬一版設定內容。'
 
 export function emptyDraft(): SkillDraft {
-  return { name: '', description: '', instructions: '', triggerHint: '', capabilities: [], assignedAgents: [], keywords: [], files: [], method: null, sectionIds: [] }
+  return {
+    name: '', description: '', instructions: '', capabilities: [], assignedAgents: [], keywords: [], files: [], method: null, sectionIds: [],
+    steps: [], exceptions: [], outputFormat: '', applicableScope: '',
+  }
 }
 
 // ── 意圖判斷與關卡分流（AI 賦能「用對話建立」路徑，接在既有解析規則之前）──
@@ -73,6 +85,7 @@ export type GateStage =
   | 'confirmKnownInfo'  // 白話摘要確認，確認後才真正產出結構化草稿
   | 'gate2'             // 建立意圖找到相近做法，問沿用/改他/另開一份/講別的
   | 'clarify'           // 多輪問答補齊草稿內容（沿用既有 interpretStudioMessage 的抽取規則）
+  | 'confirmAgents'     // 草稿產出後、最終確認前：確認哪些 Agent 可以調用這顆技能
   | 'gate3'             // 最終確認「內容如下…這樣可以嗎？」
   | 'active'            // 分流完畢，既有的 interpretStudioMessage 接手
   | 'confirmStartNew'   // 修改模式下使用者明確說要建立新技能：確認是否放下目前的修改
@@ -149,7 +162,7 @@ function classifyKnownInfoConfirm(text: string): 'confirm' | 'retry' | null {
   return null
 }
 
-// 規則式比對使用者描述跟既有個人技能的 name／triggerHint／instructions 有沒有重疊，
+// 規則式比對使用者描述跟既有個人技能的 name／description／instructions 有沒有重疊，
 // 回傳重疊分數最高的那一顆；沒有重疊回傳 null。
 //
 // 用「連續中文字元」切詞（/[一-龥]{2,}/）在這裡行不通：使用者一句話通常是一整串
@@ -164,7 +177,7 @@ export function findSimilarSkill(text: string, skills: Skill[]): Skill | null {
   for (let i = 0; i < t.length - 1; i++) textGrams.add(t.slice(i, i + 2))
   let best: { skill: Skill; score: number } | null = null
   for (const skill of skills) {
-    const haystack = `${skill.name}${skill.triggerHint ?? ''}${skill.instructions ?? ''}`
+    const haystack = `${skill.name}${skill.description ?? ''}${skill.instructions ?? ''}`
     let score = 0
     for (let i = 0; i < haystack.length - 1; i++) {
       if (textGrams.has(haystack.slice(i, i + 2))) score++
@@ -185,13 +198,28 @@ export function wantsToResume(text: string, paused: PausedDraft): boolean {
 export function formatDraftSummary(draft: SkillDraft): string {
   const lines = [
     `名稱：${draft.name || '（未命名）'}`,
-    `觸發時機：${draft.triggerHint || '（未設定）'}`,
+    `技能描述：${draft.description || '（未填寫）'}`,
     `指令：${draft.instructions || '（未撰寫）'}`,
   ]
+  if (draft.steps.length) lines.push(`步驟：${draft.steps.map((st, i) => `${i + 1}. ${st}`).join(' ')}`)
+  if (draft.exceptions.length) lines.push(`例外或特殊情況：${draft.exceptions.join('；')}`)
+  if (draft.outputFormat) lines.push(`固定輸出格式：${draft.outputFormat}`)
+  if (draft.applicableScope) lines.push(`適用範圍：${draft.applicableScope}`)
   if (draft.capabilities.length) {
     lines.push(`覆蓋能力：${draft.capabilities.map(c => `#${c}`).join(' ')}`)
   }
+  lines.push(`可調用 Agent：${draft.assignedAgents.length ? draft.assignedAgents.join('、') : '（未指派）'}`)
   return lines.join('\n')
+}
+
+// 「確認可調用 Agent」關卡：使用者可以點建議的 chip、直接打 Agent 名稱（可以好幾個），
+// 或同意用建議的。新建技能至少要指派一個 Agent，不能略過——想略過的回覆會被擋下來再問一次。
+// 規則式比對，跟這個檔案其他關卡的分類器同一種風格
+const AGENTS_SKIP_HINT = /不指派|先不|之後再|跳過|啟用時再|不用指派/
+const AGENTS_ACCEPT_HINT = /建議|可以|好|對|沒問題|就這樣|確認/
+
+export function parseAgentNames(text: string): string[] {
+  return AVAILABLE_AGENTS.filter(a => text.includes(a))
 }
 
 const CLARIFY_DONE_HINT = /沒有漏了|寫成做法|可以寫了|這樣就好/
@@ -204,35 +232,37 @@ export function draftFromSkill(s: Skill): SkillDraft {
     name: s.name,
     description: s.description ?? '',
     instructions: s.instructions ?? '',
-    triggerHint: s.triggerHint ?? '',
     capabilities: [...(s.capabilities ?? [])],
     assignedAgents: [...(s.assignedAgents ?? [])],
     keywords: [...(s.keywords ?? [])],
     files: [...(s.files ?? [])],
     method: s.composition ? 'blocks' : 'chat',
     sectionIds: [...(s.composition?.sectionIds ?? [])],
+    steps: [...(s.steps ?? [])],
+    exceptions: [...(s.exceptions ?? [])],
+    outputFormat: s.outputFormat ?? '',
+    applicableScope: s.applicableScope ?? '',
   }
 }
 
-// 積木 → 草稿：步驟＝章節依序編號，能力＝章節，觸發條件＝涵蓋到的分類
-export function deriveFromSections(sectionIds: string[]): Pick<SkillDraft, 'instructions' | 'triggerHint' | 'capabilities'> {
+// 積木 → 草稿：步驟＝章節依序編號，能力＝章節
+// RD 的「步驟」也是章節依序產出，每個章節一步，跟技能指令同一份來源一起重推導
+export function deriveFromSections(sectionIds: string[]): Pick<SkillDraft, 'instructions' | 'capabilities' | 'steps'> {
   const sections = sectionIds.map(id => SECTION_MAP[id]).filter((s): s is NonNullable<typeof s> => !!s)
-  if (sections.length === 0) return { instructions: '', triggerHint: '', capabilities: [] }
-  const lines = sections.map((s, i) => `${i + 1}. ${s.name}：${s.description}`)
-  const catIds = new Set(sections.map(s => s.categoryId))
-  const labels = REPORT_CATEGORIES.filter(c => catIds.has(c.id)).map(c => c.label).join('、')
+  if (sections.length === 0) return { instructions: '', capabilities: [], steps: [] }
+  const steps = sections.map(s => `${s.name}：${s.description}`)
+  const lines = steps.map((st, i) => `${i + 1}. ${st}`)
   return {
     instructions: `依序產出以下章節：\n${lines.join('\n')}`,
-    triggerHint: `當使用者要求產出行銷報告，或提到「${labels}」相關分析時`,
+    steps,
     // 章節名稱有些含空白（例如「TA 明細資料」），hashtag 不支援空白，轉成能力標籤時去掉
     capabilities: sections.map(s => s.name.replace(/\s+/g, '')),
   }
 }
 
-// 積木 →「說明」／「觸發情境」建議：跟 deriveFromSections 同一批分類標籤，只是拼成
-// 一句話。各自獨立成自己的函式（不塞進 deriveFromSections 的回傳物件），因為這兩項
-// 在積木流程裡改成手動必填欄位、不再隨選章節自動覆蓋，只負責「AI 建議」按鈕按下去時
-// 產生候選內容。生成 3 句不同措辭讓使用者挑一句，而不是算一句就直接套用或跳確認覆蓋——
+// 積木 →「說明」建議：用選到章節的分類標籤拼成一句話。獨立成自己的函式（不塞進
+// deriveFromSections 的回傳物件），因為說明在積木流程裡是手動必填欄位、不再隨選章節
+// 自動覆蓋，只負責「AI 建議」按鈕按下去時產生候選內容。生成 3 句不同措辭讓使用者挑一句，而不是算一句就直接套用或跳確認覆蓋——
 // 使用者主動挑中哪句，那個動作本身就是確認，不用再多一層「要覆蓋嗎」
 export function suggestDescriptionVariants(sectionIds: string[]): string[] {
   const sections = sectionIds.map(id => SECTION_MAP[id]).filter((s): s is NonNullable<typeof s> => !!s)
@@ -246,26 +276,9 @@ export function suggestDescriptionVariants(sectionIds: string[]): string[] {
   ]
 }
 
-export function suggestTriggerHintVariants(sectionIds: string[]): string[] {
-  const sections = sectionIds.map(id => SECTION_MAP[id]).filter((s): s is NonNullable<typeof s> => !!s)
-  if (sections.length === 0) return []
-  const catIds = new Set(sections.map(s => s.categoryId))
-  const labels = REPORT_CATEGORIES.filter(c => catIds.has(c.id)).map(c => c.label).join('、')
-  return [
-    `當使用者要求產出行銷報告，或提到「${labels}」相關分析時`,
-    `使用者詢問${labels}相關數據、想了解最新進度時`,
-    `需要彙整${labels}資訊、產出週期性報告時`,
-  ]
-}
-
 const ACTION_CONFIRM: StudioAction = { id: 'confirm', label: '看起來沒問題，儲存' }
-const ACTION_TRIGGER: StudioAction = { id: 'trigger', label: '觸發條件要更精準' }
+const ACTION_DESCRIPTION: StudioAction = { id: 'description', label: '技能描述要更精準' }
 const ACTION_STEP: StudioAction = { id: 'step', label: '再補一個步驟' }
-
-// 測試沒全對時的引導訊息：使用者可能是自己答錯題目（想重新測），也可能根本不在意
-// 這次沒全對（想先不改直接啟用），不是每次都真的要改技能內容
-const ACTION_RETEST: StudioAction = { id: 'retest', label: '重新測試' }
-const ACTION_FORCE_ENABLE: StudioAction = { id: 'force-enable', label: '不改，直接啟用' }
 
 // 修改模式下，使用者在對話裡明確說要建立「新」技能：要跟「只是在描述這顆技能的
 // 新能力/新步驟」區分開，所以一定要有「新」字＋建立動詞＋技能/skill 字樣，
@@ -284,14 +297,14 @@ const CREATE_SUGGESTIONS: StudioSuggestion[] = [
 function editSuggestions(draft: SkillDraft): StudioSuggestion[] {
   return [
     draft.instructions
-      ? { icon: 'terminal', label: '調整技能指令', prefill: '我想調整技能指令，' }
-      : { icon: 'terminal', label: '撰寫技能指令', prefill: '幫我撰寫技能指令，' },
+      ? { icon: 'terminal', label: '調整技能內文', prefill: '我想調整技能內文，' }
+      : { icon: 'terminal', label: '撰寫技能內文', prefill: '幫我撰寫技能內文，' },
     draft.capabilities.length
       ? { icon: 'checklist', label: '調整覆蓋能力', prefill: '我想調整覆蓋能力，' }
       : { icon: 'checklist', label: '新增覆蓋能力', prefill: '幫我新增覆蓋能力，' },
-    draft.triggerHint
-      ? { icon: 'bolt', label: '調整觸發條件', prefill: '觸發條件改成' }
-      : { icon: 'bolt', label: '設定觸發條件', prefill: '觸發條件是' },
+    draft.description
+      ? { icon: 'notes', label: '調整技能描述', prefill: '技能描述改成' }
+      : { icon: 'notes', label: '撰寫技能描述', prefill: '技能描述是' },
   ]
 }
 
@@ -318,8 +331,32 @@ export function extractSkillName(text: string): string {
   return picked.length > NAME_MAX ? picked.slice(0, NAME_MAX) : picked
 }
 
-function countSteps(instructions: string): number {
-  return instructions.split('\n').filter(line => /^\d+\.\s/.test(line.trim())).length
+// 第一次擬稿時從使用者的描述（含追問的回答，一行一則）抓出 RD 的步驟／例外：
+// 有編號的行、或帶「先…再…」這類順序字眼的行拆成步驟；帶例外字眼的行當成例外。
+// 規則式比對，不是真的語意理解，跟這個檔案其他抽取規則同一種風格
+const NUMBERED_LINE = /^\s*\d+\s*[.、)）]\s*/
+
+// rest 是沒被抓成步驟或例外的行（第一句描述一定在這裡），拿來當說明，不跟步驟／例外重複
+export function extractStepsAndExceptions(text: string): { steps: string[]; exceptions: string[]; rest: string[] } {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const steps: string[] = []
+  const exceptions: string[] = []
+  const rest: string[] = []
+  lines.forEach((line, i) => {
+    if (NUMBERED_LINE.test(line)) {
+      steps.push(line.replace(NUMBERED_LINE, '').trim())
+    } else if (i > 0 && EXCEPTION_HINT.test(line)) {
+      exceptions.push(line)
+    } else if (i > 0 && STEPS_HINT.test(line)) {
+      steps.push(...line
+        .split(/[，,；;。]|然後|接著|再來|之後/)
+        .map(part => part.replace(/^(先|再|最後|步驟是?|流程是?)/, '').trim())
+        .filter(Boolean))
+    } else {
+      rest.push(line)
+    }
+  })
+  return { steps, exceptions, rest }
 }
 
 function stripLead(text: string, lead: RegExp): string {
@@ -332,30 +369,35 @@ export function interpretStudioMessage(text: string, draft: SkillDraft, mode: St
   if (t === ACTION_CONFIRM.label) {
     return { content: '請按右側「儲存為個人技能」，儲存後就能在「測試」tab 驗證。' }
   }
-  if (t === ACTION_TRIGGER.label) {
-    return { content: '好，直接告訴我在什麼情況下要觸發這個技能，例如「觸發條件改成當使用者提到缺貨或補貨時」。' }
+  if (t === ACTION_DESCRIPTION.label) {
+    return { content: '好，直接告訴我這個技能要做什麼、什麼情況下該用，例如「技能描述改成當使用者提到缺貨或補貨時，查詢 ERP 庫存」。' }
   }
   if (t === ACTION_STEP.label) {
-    const n = countSteps(draft.instructions) + 1
     return {
-      patch: { instructions: `${draft.instructions}\n${n}. 檢查輸出結果，必要時補充說明`.trim() },
-      content: `已追加第 ${n} 步。`,
+      patch: { steps: [...draft.steps, '檢查輸出結果，必要時補充說明'] },
+      content: `已追加第 ${draft.steps.length + 1} 步。`,
     }
   }
 
   if (mode === 'create' && !draft.name) {
     const name = extractSkillName(t)
+    const extracted = extractStepsAndExceptions(t)
+    // 使用者沒講步驟就先放一組通用步驟，至少有一步才能存（步驟必填）
+    const steps = extracted.steps.length
+      ? extracted.steps
+      : ['釐清使用者的輸入與需求範圍', `執行「${name}」`, '依指定格式回覆結果']
     return {
       patch: {
         name,
-        description: t,
-        triggerHint: `當使用者提到「${name}」相關需求時`,
-        instructions: `1. 釐清使用者的輸入與需求範圍\n2. 執行「${name}」\n3. 依指定格式回覆結果`,
+        description: extracted.rest.join('\n') || t,
+        instructions: steps.map((st, i) => `${i + 1}. ${st}`).join('\n'),
+        steps,
+        exceptions: extracted.exceptions,
         // hashtag 不支援空白，技能名稱若含空白（例如使用者打「查 ERP 庫存」）轉成標籤時去掉
         capabilities: [name.replace(/\s+/g, ''), '結果格式化輸出'],
       },
-      content: '我先幫你擬了一版設定，右側可以看到。名稱、觸發條件和步驟都可以再跟我說要怎麼調。',
-      actions: [ACTION_CONFIRM, ACTION_TRIGGER, ACTION_STEP],
+      content: '我先幫你擬了一版設定，右側可以看到。名稱、技能描述和步驟都可以再跟我說要怎麼調。',
+      actions: [ACTION_CONFIRM, ACTION_DESCRIPTION, ACTION_STEP],
     }
   }
 
@@ -365,15 +407,33 @@ export function interpretStudioMessage(text: string, draft: SkillDraft, mode: St
     if (name) return { patch: { name }, content: `已把名稱改成「${name}」。` }
   }
 
-  if (t.includes('觸發')) {
-    const hint = stripLead(t, /^.*?觸發(條件)?(是|改成|改為|為|要|：|:)?/) || t
-    return { patch: { triggerHint: hint }, content: `觸發條件已更新為：${hint}` }
+  // 觸發條件已併進技能描述（跟 RD 討論後只保留技能描述），舊說法「觸發條件改成…」照樣導到技能描述
+  // 欄位正式名稱是「技能描述」；舊說法「說明…」「描述…」照樣導到同一個欄位
+  if (/(技能描述|描述|說明)(是|改成|改為|為|：|:)|觸發/.test(t)) {
+    const desc = stripLead(t, /^.*?(技能描述|描述|說明|觸發(條件)?)(是|改成|改為|為|要|：|:)?/) || t
+    return { patch: { description: desc }, content: `技能描述已更新為：${desc}` }
+  }
+
+  // RD 的例外／輸出格式／適用範圍：要在「步驟」之前判斷，「例外情況的處理步驟」這種
+  // 同時提到兩者的句子以例外為準
+  if (/例外|特殊情況|萬一/.test(t)) {
+    const body = stripLead(t, /^.*?(例外(或特殊情況|情況)?|特殊情況|萬一)(是|：|:|，)?/) || t
+    return { patch: { exceptions: [...draft.exceptions, body] }, content: '已新增一項例外或特殊情況。' }
+  }
+
+  if (/輸出格式/.test(t)) {
+    const body = stripLead(t, /^.*?輸出格式(是|改成|改為|為|：|:|，)?/) || t
+    return { patch: { outputFormat: body }, content: `固定輸出格式已更新為：${body}` }
+  }
+
+  if (/適用範圍|適用(於|在)/.test(t)) {
+    const body = stripLead(t, /^.*?(適用範圍|適用)(是|改成|改為|為|於|在|：|:|，)?/) || t
+    return { patch: { applicableScope: body }, content: `適用範圍已更新為：${body}` }
   }
 
   if (/步驟|加一步|補一步|補充步驟/.test(t)) {
-    const n = countSteps(draft.instructions) + 1
     const body = stripLead(t, /^.*?(步驟|加一步|補一步|補充步驟)(：|:|，)?/) || t
-    return { patch: { instructions: `${draft.instructions}\n${n}. ${body}`.trim() }, content: `已追加第 ${n} 步。` }
+    return { patch: { steps: [...draft.steps, body] }, content: `已追加第 ${draft.steps.length + 1} 步。` }
   }
 
   if (/能力|還能/.test(t)) {
@@ -388,12 +448,22 @@ export function interpretStudioMessage(text: string, draft: SkillDraft, mode: St
 
   return {
     patch: { instructions: `${draft.instructions}\n\n（依對話更新）${t}`.trim() },
-    content: '已根據你的描述更新技能指令，右側可以看到變更。',
+    content: '已根據你的描述更新技能內文，右側可以看到變更。',
   }
 }
 
 // method 不算「內容」，故不列入 dirty 比對：它只是建立方式的選擇，只有 startCreate()（整份
 // 草稿重置）才會再變，選了方式本身不該讓草稿變成「有未儲存變更」
+// 存檔時帶給 store 的 RD 四段：空白的步驟／例外濾掉，文字欄位去頭尾空白
+function rdFieldsOf(d: SkillDraft) {
+  return {
+    steps: d.steps.map(st => st.trim()).filter(Boolean),
+    exceptions: d.exceptions.map(ex => ex.trim()).filter(Boolean),
+    outputFormat: d.outputFormat.trim(),
+    applicableScope: d.applicableScope.trim(),
+  }
+}
+
 function serialize(d: SkillDraft): string {
   return JSON.stringify({ ...d, method: undefined, files: d.files.map(f => f.id) })
 }
@@ -478,22 +548,32 @@ export function useSkillStudioConversation() {
   const gatheringRawText = ref('')        // 從零開始建立時，累積的原始文字（第一句描述＋追問答案）
   const gatheringRound = ref(0)           // gathering 階段已經問過幾輪追問（0～2）
   const awaitingSupplement = ref(false)   // confirmKnownInfo 階段是否正在等一句開放式補充內容
-  // 測試沒全對時選「重新測試」：composable 自己呼叫得到 store.generateAITestScenarios，
-  // 但切不了外殼（SkillStudioWorkspace）自己管的 activeTab——這個旗標讓外殼知道要
-  // 切到測試 tab，讀到之後要自己歸零，單次訊號不是常駐狀態
-  const requestTestTab = ref(false)
+  // 這份草稿問過「可調用 Agent」了沒：問過一次之後，從 clarify 改完內容再回到最終確認，
+  // 不用再問一次（已經選好的 Agent 會列在最終確認的摘要裡，要改直接說）
+  const agentsAsked = ref(false)
+  const suggestedAgents = ref<string[]>([])
+  // 使用者直接按存檔鍵（不是在對話裡說「可以」）時，先攔下來問可調用 Agent，
+  // 回答完就直接存檔，不用再多走一次最終確認
+  const saveAfterAgents = ref(false)
   // 修改模式下確認要開始建立新技能：composable 自己導不了路由，這個旗標讓外殼
   // 知道要把抽屜切去全新的建立流程，讀到之後要自己歸零
   const requestNewSkillDrawer = ref(false)
 
   const isDirty = computed(() => serialize(draft.value) !== snapshot.value)
-  // 積木方式多幾項必填：說明／觸發情境／覆蓋能力／指派 Agent 都要user自己填過才能存——
-  // 這幾項不再隨選章節自動覆蓋（見 updateBlockTriggerHint 等函式），必須手動確認過一次
+  // 修改既有技能、改了還沒存：測試鎖住——測的會是改到一半的內容，跟要啟用的版本對不上，
+  // 先存（存了技能會轉成停用中，見 save()）再到測試啟用。後端模式例外：後端是先測草稿再「記下測過」
+  const testLocked = computed(() =>
+    mode.value === 'edit' && !!savedSkillId.value && isDirty.value && !usesBackend(),
+  )
+  // 積木方式多幾項必填：說明／覆蓋能力／指派 Agent 都要user自己填過才能存——
+  // 這幾項不再隨選章節自動覆蓋（見 updateBlockDescription 等函式），必須手動確認過一次
+  // 步驟必填（RD 技能定義）；後端模式例外——後端技能的內文本身就是 RD 給的整份 skill.md，
+  // 不拆成前端的步驟欄位
   const canSave = computed(() => {
     if (!draft.value.name.trim() || !draft.value.instructions.trim()) return false
+    if (!usesBackend() && !draft.value.steps.length) return false
     if (draft.value.method === 'blocks') {
       return !!draft.value.description.trim()
-        && !!draft.value.triggerHint.trim()
         && draft.value.capabilities.length > 0
         && draft.value.assignedAgents.length > 0
         && draft.value.keywords.length > 0
@@ -503,15 +583,20 @@ export function useSkillStudioConversation() {
   // 建立模式：有名稱＋指令就能存；修改模式：還要真的有改動——
   // 跟 canSave 分開是因為 canSave 只管「欄位填完了沒」，這個還管「有沒有東西要存」
   const saveEnabled = computed(() => mode.value === 'create' ? canSave.value : canSave.value && isDirty.value)
-  // 積木方式必填欄位比較多（說明／觸發情境／覆蓋能力／指派 Agent），存不了的時候
+  // 積木方式必填欄位比較多（說明／覆蓋能力／指派 Agent），存不了的時候
   // 直接列出還缺什麼，不要讓使用者自己猜按鈕為什麼反灰
   const missingFieldsHint = computed(() => {
-    if (saveEnabled.value || draft.value.method !== 'blocks') return ''
+    if (saveEnabled.value) return ''
+    // 對話方式只有步驟可能單獨漏掉（名稱／指令一擬稿就有），漏了要講，不然按鈕反灰沒人知道為什麼
+    if (draft.value.method === 'chat') {
+      return draft.value.name.trim() && draft.value.instructions.trim() && !draft.value.steps.length && !usesBackend()
+        ? '還缺：步驟' : ''
+    }
+    if (draft.value.method !== 'blocks') return ''
     const missing: string[] = []
     if (!draft.value.name.trim()) missing.push('技能名稱')
     if (!draft.value.instructions.trim()) missing.push('積木組成（至少選一個章節）')
-    if (!draft.value.description.trim()) missing.push('說明')
-    if (!draft.value.triggerHint.trim()) missing.push('觸發情境')
+    if (!draft.value.description.trim()) missing.push('技能描述')
     if (!draft.value.capabilities.length) missing.push('覆蓋能力')
     if (!draft.value.keywords.length) missing.push('關鍵字')
     if (!draft.value.assignedAgents.length) missing.push('指派 Agent')
@@ -546,6 +631,8 @@ export function useSkillStudioConversation() {
     gatheringRawText.value = text
     gatheringRound.value = 0
     awaitingSupplement.value = false
+    agentsAsked.value = false
+    saveAfterAgents.value = false
     gateStage.value = 'gathering'
     advanceGathering()
   }
@@ -600,6 +687,40 @@ export function useSkillStudioConversation() {
     push({ role: 'agent', content: '你想要記一個新做法，還是要修改現有的？直接跟我說就可以。' })
   }
 
+  // 進最終確認（gate3）前先問「可調用 Agent」；問過了就直接進最終確認
+  function proceedToFinalConfirm(): void {
+    if (!agentsAsked.value) {
+      askAgents()
+      return
+    }
+    gateStage.value = 'gate3'
+    push({
+      role: 'agent',
+      content: `我準備幫您記成這份做法，內容如下：\n${formatDraftSummary(draft.value)}\n這樣可以嗎？`,
+    })
+  }
+
+  // 建議的 Agent：在團隊內找內容最相近、而且已經有指派 Agent 的技能，借用它的 Agent；
+  // 找不到就建議「通用助理」。只是建議，使用者可以改選別的，但至少要選一個
+  function askAgents(): void {
+    agentsAsked.value = true
+    gateStage.value = 'confirmAgents'
+    const candidates = [...store.myPersonalSkills, ...store.flatSkills].filter(s => (s.assignedAgents ?? []).length > 0)
+    const haystack = `${draft.value.name}${draft.value.description}${draft.value.instructions}`
+    const similar = findSimilarSkill(haystack, candidates)
+    suggestedAgents.value = similar ? [...similar.assignedAgents!] : ['通用助理']
+    const reason = similar ? `（跟團隊內的「${similar.name}」內容相近，先參考它的設定）` : ''
+    push({
+      role: 'agent',
+      content: `這顆技能要讓哪些 Agent 可以調用？（至少一個）建議：${suggestedAgents.value.join('、')}${reason}。\n也可以直接打 Agent 名稱（可以好幾個）：${AVAILABLE_AGENTS.join('、')}。`,
+      actions: agentActions(),
+    })
+  }
+
+  function agentActions(): StudioAction[] {
+    return [{ id: 'agents-accept', label: `就用建議的：${suggestedAgents.value.join('、')}` }]
+  }
+
   // gateStage !== 'active' 時，每則訊息都先經過這裡，依目前所在的關卡分派給對應的分支處理
   function handleGateMessage(text: string): void {
     const t = text.trim()
@@ -637,11 +758,7 @@ export function useSkillStudioConversation() {
       if (k === 'confirm') {
         const reply = interpretStudioMessage(gatheringRawText.value, draft.value, mode.value)
         if (reply.patch) draft.value = { ...draft.value, ...reply.patch }
-        gateStage.value = 'gate3'
-        push({
-          role: 'agent',
-          content: `我準備幫您記成這份做法，內容如下：\n${formatDraftSummary(draft.value)}\n這樣可以嗎？`,
-        })
+        proceedToFinalConfirm()
         return
       }
       if (k === 'retry') {
@@ -725,46 +842,53 @@ export function useSkillStudioConversation() {
     }
 
     if (stage === 'clarify') {
-      // 測試沒全對引導訊息的兩個 action chip（也接受相近的自由輸入）：使用者可能是
-      // 自己答題答錯了想重新測，或根本不在意這次沒全對、先不改直接啟用——兩者都
-      // 不是要改技能內容，提早判斷掉，不要落到下面的自由文字編輯規則
-      if (t === ACTION_RETEST.label || /重新測|重測|換一批|再測一次|重新出題/.test(t)) {
-        // testSkillId：還沒存檔就用草稿佔位 id，draftContext 補上草稿目前的
-        // name／triggerHint／capabilities 當作組題關鍵字的來源（store 裡還找不到
-        // 這顆技能，或技能存在但草稿已經改過還沒存）
-        store.generateAITestScenarios(testSkillId.value, {
-          name: draft.value.name,
-          triggerHint: draft.value.triggerHint,
-          capabilities: draft.value.capabilities,
-        })
-        requestTestTab.value = true
-        gateStage.value = 'active'
-        push({ role: 'agent', content: '好，已經換一批新題目了，到「測試」tab 繼續作答。' })
-        return
-      }
-      if (t === ACTION_FORCE_ENABLE.label || /不改.{0,4}啟用|直接啟用|先不改|先不用改/.test(t)) {
-        // 已經測過就能啟用，不要求全對；沒測過的話閘門不放行，維持停用並講清楚原因
-        const saved = savedSkillId.value ? store.findSkill(savedSkillId.value) : null
-        gateStage.value = 'active'
-        if (!saved || !canEnableSkill(saved)) {
-          push({ role: 'agent', content: '這一版還沒測過，要先到「測試」tab 做一次測試（交卷就算測過，不用全對），才能啟用。' })
-          return
-        }
-        if (!saved.isEnabled) store.toggleSkill(saved.id)
-        push({ role: 'agent', content: `已啟用「${draft.value.name}」，之後想再調整的話隨時都可以跟我說。` })
-        return
-      }
       if (CLARIFY_DONE_HINT.test(t)) {
-        gateStage.value = 'gate3'
-        push({
-          role: 'agent',
-          content: `我準備幫您記成這份做法，內容如下：\n${formatDraftSummary(draft.value)}\n這樣可以嗎？`,
-        })
+        proceedToFinalConfirm()
+        return
+      }
+      // 補充內容時直接講了 Agent 名稱：當成調整可調用 Agent，不丟給一般的草稿解析
+      const namedAgents = parseAgentNames(t)
+      if (namedAgents.length) {
+        draft.value = { ...draft.value, assignedAgents: namedAgents }
+        agentsAsked.value = true
+        push({ role: 'agent', content: `好，可調用 Agent 改成：${namedAgents.join('、')}。還有要調整的嗎？沒有的話說「這樣就好」。` })
         return
       }
       const reply = interpretStudioMessage(t, draft.value, mode.value)
       if (reply.patch) draft.value = { ...draft.value, ...reply.patch }
       push({ role: 'agent', content: reply.content, actions: reply.actions })
+      return
+    }
+
+    if (stage === 'confirmAgents') {
+      // 先看有沒有直接講出 Agent 名稱（「就用建議的：A、B」這顆 chip 的文字本身也含名稱），
+      // 再擋掉想略過的回覆（至少要指派一個），最後才把「好／可以」這類泛用同意當成接受建議
+      const named = parseAgentNames(t)
+      if (!named.length && AGENTS_SKIP_HINT.test(t)) {
+        push({
+          role: 'agent',
+          content: `新建的技能至少要指派一個 Agent，不然沒有 Agent 能調用它。可以用建議的 ${suggestedAgents.value.join('、')}，或從這些裡面選：${AVAILABLE_AGENTS.join('、')}。`,
+          actions: agentActions(),
+        })
+        return
+      }
+      const agents = named.length ? named : AGENTS_ACCEPT_HINT.test(t) ? [...suggestedAgents.value] : null
+      if (!agents) {
+        push({
+          role: 'agent',
+          content: `我沒有對到 Agent 名稱，可以從這些裡面選（可以好幾個）：${AVAILABLE_AGENTS.join('、')}。`,
+          actions: agentActions(),
+        })
+        return
+      }
+      draft.value = { ...draft.value, assignedAgents: agents }
+      if (saveAfterAgents.value) {
+        saveAfterAgents.value = false
+        gateStage.value = 'active'
+        if (save()) push({ role: 'agent', content: `已存成個人技能「${draft.value.name}」，可以到「測試」tab 驗證。` })
+        return
+      }
+      proceedToFinalConfirm()
       return
     }
 
@@ -778,7 +902,7 @@ export function useSkillStudioConversation() {
           // 留在／退回 clarify 讓使用者補內容，不能悶不吭聲地轉 active（等於對話卡死）
           const missing = [
             !draft.value.name.trim() ? '名稱' : null,
-            !draft.value.instructions.trim() ? '指令內容' : null,
+            !draft.value.instructions.trim() ? '技能內文' : null,
           ].filter((x): x is string => !!x)
           gateStage.value = 'clarify'
           push({ role: 'agent', content: `這份草稿還缺${missing.join('、')}，麻煩先補齊，再跟我說一次「這樣就好」確認。` })
@@ -824,6 +948,8 @@ export function useSkillStudioConversation() {
       capabilities: [...(prefill?.capabilities ?? base.capabilities)],
       files: [...(prefill?.files ?? base.files)],
       sectionIds: [...(prefill?.sectionIds ?? base.sectionIds)],
+      steps: [...(prefill?.steps ?? base.steps)],
+      exceptions: [...(prefill?.exceptions ?? base.exceptions)],
       method: prefill ? 'chat' : null,
     }
     snapshot.value = serialize(emptyDraft())
@@ -839,6 +965,8 @@ export function useSkillStudioConversation() {
     gatheringRawText.value = ''
     gatheringRound.value = 0
     awaitingSupplement.value = false
+    agentsAsked.value = false
+    saveAfterAgents.value = false
     if (prefill) push({ role: 'agent', content: openingMessage ?? DEFAULT_OPENING_MESSAGE })
   }
 
@@ -852,16 +980,18 @@ export function useSkillStudioConversation() {
     }
   }
 
-  // 積木方式的輸入：名稱直接寫；章節變動只重推導「技能指令」——說明／觸發情境／覆蓋能力
+  // 積木方式的輸入：名稱直接寫；章節變動只重推導「技能指令」——說明／覆蓋能力
   // 改成「基本設定」步驟的手動必填欄位，不再每次選章節就被悄悄蓋掉，使用者要調整
-  // 得自己編輯，或按「AI 建議」主動套用（見 updateBlockTriggerHint 等函式）
+  // 得自己編輯，或按「AI 建議」主動套用（見 updateBlockDescription 等函式）
   function updateBlocks(patch: { name?: string; sectionIds?: string[] }): void {
     if (draft.value.method !== 'blocks') return
     const next: SkillDraft = { ...draft.value }
     if (patch.name !== undefined) next.name = patch.name
     if (patch.sectionIds !== undefined) {
       next.sectionIds = [...patch.sectionIds]
-      next.instructions = deriveFromSections(next.sectionIds).instructions
+      const derived = deriveFromSections(next.sectionIds)
+      next.instructions = derived.instructions
+      next.steps = derived.steps
     }
     draft.value = next
   }
@@ -872,10 +1002,6 @@ export function useSkillStudioConversation() {
   function updateBlockDescription(value: string): void {
     if (draft.value.method !== 'blocks') return
     draft.value = { ...draft.value, description: value }
-  }
-  function updateBlockTriggerHint(value: string): void {
-    if (draft.value.method !== 'blocks') return
-    draft.value = { ...draft.value, triggerHint: value }
   }
   function updateBlockCapabilities(value: SkillCapability[]): void {
     if (draft.value.method !== 'blocks') return
@@ -888,6 +1014,11 @@ export function useSkillStudioConversation() {
   function updateBlockKeywords(value: string[]): void {
     if (draft.value.method !== 'blocks') return
     draft.value = { ...draft.value, keywords: [...value] }
+  }
+  // RD 技能定義的選填三段（例外／固定輸出格式／適用範圍）：積木「基本設定」直接編輯
+  function updateBlockOptional(patch: Partial<Pick<SkillDraft, 'exceptions' | 'outputFormat' | 'applicableScope'>>): void {
+    if (draft.value.method !== 'blocks') return
+    draft.value = { ...draft.value, ...patch, ...(patch.exceptions ? { exceptions: [...patch.exceptions] } : {}) }
   }
 
   // intent 'edit'：從技能卡片點進來，已經知道要調整內容。
@@ -911,6 +1042,8 @@ export function useSkillStudioConversation() {
     gatheringRawText.value = ''
     gatheringRound.value = 0
     awaitingSupplement.value = false
+    agentsAsked.value = false
+    saveAfterAgents.value = false
     if (draft.value.method === 'chat') {
       const opening = intent === 'ask'
         ? `你好，我是這裡的助理。剛剛測試「${s.name}」時如果有哪裡想確認或討論，都可以直接問我，需要調整內容的話我們再一起處理。`
@@ -1064,13 +1197,13 @@ export function useSkillStudioConversation() {
         name: d.name.trim(),
         description: d.description,
         instructions: d.instructions,
-        triggerHint: d.triggerHint,
-        assignedAgents: d.method === 'blocks' ? [...d.assignedAgents] : [],
+        assignedAgents: [...d.assignedAgents],
         capabilities: [...d.capabilities],
         keywords: d.method === 'blocks' ? [...d.keywords] : [],
         files: [...d.files],
         composition: d.method === 'blocks' ? { sectionIds: [...d.sectionIds] } : undefined,
         creationMethod: d.method === 'blocks' ? 'manual' : 'ai_assisted',
+        ...rdFieldsOf(d),
       })
       mode.value = 'edit'
       // 存檔前如果已經用草稿佔位 id 測過，把測試結果轉記到這個剛拿到的真正 id 上，
@@ -1082,13 +1215,17 @@ export function useSkillStudioConversation() {
         name: d.name.trim(),
         description: d.description,
         instructions: d.instructions,
-        triggerHint: d.triggerHint,
         capabilities: d.capabilities,
         assignedAgents: d.method === 'blocks' ? [...d.assignedAgents] : undefined,
         keywords: d.method === 'blocks' ? [...d.keywords] : undefined,
         composition: d.method === 'blocks' ? { sectionIds: [...d.sectionIds] } : undefined,
+        ...rdFieldsOf(d),
       })
       store.updateSkillFiles(savedSkillId.value, d.files)
+      // 內容改過就要重新測過才能上線：存檔後一律轉成停用中、舊測試紀錄作廢，
+      // 到「測試」重新作答後再按「啟用技能」
+      if (store.findSkill(savedSkillId.value)?.isEnabled) store.toggleSkill(savedSkillId.value)
+      store.invalidateAITest(savedSkillId.value)
     }
     snapshot.value = serialize(draft.value)
     return savedSkillId.value
@@ -1096,38 +1233,6 @@ export function useSkillStudioConversation() {
 
   function updateFiles(files: SkillFile[]): void {
     draft.value = { ...draft.value, files }
-  }
-
-  // AI 快速測試結果出來：全對就主動引導去啟用（不轉關卡，純推一句訊息，跟現有
-  // save() 之後「可以到「測試」tab 驗證」是同一種寫法）；沒全對則退回既有的 clarify
-  // 補齊流程（沿用「多輪問答補齊草稿內容」的既有語意，不新增一個專門的關卡）
-  function notifyTestResult(report: AITestReport): void {
-    if (report.total === 0) return
-    if (report.correct === report.total) {
-      // 「啟用技能」要有真正存進 store、而且還沒啟用的技能才會出現（isFullPass
-      // 的條件，見 SkillTestAI.vue）——這裡的引導訊息要跟那個條件對齊，不然會叫
-      // 使用者去點一個根本不存在的按鈕：還沒存檔先引導儲存；已經是啟用中的技能
-      // （例如修改一顆早就上線的技能，這次又測到滿分）沒有按鈕可點，單純恭喜就好
-      const existingSkill = savedSkillId.value ? store.findSkill(savedSkillId.value) : null
-      let content: string
-      if (!savedSkillId.value) {
-        content = '太好了，這次全部答對了！先按左下角「儲存」，存檔後就能到測試報告點「啟用技能」了。'
-      } else if (existingSkill?.isEnabled) {
-        content = '太好了，這次全部答對了！這顆技能本來就是啟用中的狀態，不用再做其他動作。'
-      } else {
-        content = '太好了，這次全部答對了！到右側的測試報告點「啟用技能」，確認一下哪些 Agent 可以用之後就能上線了。'
-      }
-      push({ role: 'agent', content })
-      return
-    }
-    const rate = Math.round((report.correct / report.total) * 100)
-    gateStage.value = 'clarify'
-    // 不附快捷按鈕——全部靠使用者自己打字，下面 clarify 分支本來就認得
-    // 「重新測試」「不改，直接啟用」這兩種意圖（含同義的自由輸入）
-    push({
-      role: 'agent',
-      content: `剛剛的測試沒有全部通過（答對 ${report.correct}/${report.total}，${rate}%），要不要跟我說說看哪裡需要調整？我會幫你補齊或修正做法內容。也可能是你剛剛答題時選錯了，或這次先不處理也沒關係。`,
-    })
   }
 
   function toSnapshot(): StudioSnapshot {
@@ -1141,6 +1246,9 @@ export function useSkillStudioConversation() {
       gatheringRawText: gatheringRawText.value,
       gatheringRound: gatheringRound.value,
       awaitingSupplement: awaitingSupplement.value,
+      agentsAsked: agentsAsked.value,
+      saveAfterAgents: saveAfterAgents.value,
+      suggestedAgents: suggestedAgents.value,
     }))
   }
 
@@ -1148,7 +1256,8 @@ export function useSkillStudioConversation() {
     const copy: StudioSnapshot = JSON.parse(JSON.stringify(snap))
     mode.value = copy.mode
     savedSkillId.value = copy.savedSkillId
-    draft.value = copy.draft
+    // 舊快照的草稿沒有 RD 四段（步驟／例外／輸出格式／適用範圍），先鋪一層空草稿補齊欄位
+    draft.value = { ...emptyDraft(), ...copy.draft }
     messages.value = copy.messages
     // 舊快照（早於這兩個欄位存在時寫入）沒有這兩個值，退回原本的預設：gateStage 當作
     // 已經分流完畢、pendingSimilarSkillId 當作沒有待處理的相近技能
@@ -1157,6 +1266,9 @@ export function useSkillStudioConversation() {
     gatheringRawText.value = copy.gatheringRawText ?? ''
     gatheringRound.value = copy.gatheringRound ?? 0
     awaitingSupplement.value = copy.awaitingSupplement ?? false
+    agentsAsked.value = copy.agentsAsked ?? false
+    saveAfterAgents.value = copy.saveAfterAgents ?? false
+    suggestedAgents.value = copy.suggestedAgents ?? []
     // dirty 基準取自「目前已儲存的內容」而非「這份快照本身」：isDirty 才會是
     // 「跟已存的技能（或空白，若還沒存過）不一樣」，而不是「跟上次 hydrate 不一樣」
     const saved = copy.savedSkillId ? store.findSkill(copy.savedSkillId) : undefined
@@ -1172,9 +1284,32 @@ export function useSkillStudioConversation() {
     snapshot.value = serialize(emptyDraft())
   }
 
+  // 新建＋對話方式的技能，存檔前一定要跟使用者確認過可調用 Agent（至少一個）：存檔鍵
+  // 按下去時如果還沒問過、或還沒選任何 Agent，就在對話裡問，回答完才存。回傳 true 代表這次存檔被攔下來改成先問。
+  // 積木方式在基本設定就必填 Agent、後端模式由後端處理、修改既有技能不用重問
+  function confirmAgentsBeforeSave(): boolean {
+    if (mode.value !== 'create' || draft.value.method !== 'chat' || usesBackend()) return false
+    // 已經問了、還沒回答就按存檔：不能用空的 Agent 直接存，提醒先回答，回答完就存
+    if (gateStage.value === 'confirmAgents') {
+      saveAfterAgents.value = true
+      push({
+        role: 'agent',
+        content: '存檔前先告訴我哪些 Agent 可以調用這顆技能（至少一個），回答完我就幫你存檔。',
+        actions: agentActions(),
+      })
+      return true
+    }
+    // 至少要有一個 Agent 才能存；問過而且已經選好就不再攔
+    if (agentsAsked.value && draft.value.assignedAgents.length > 0) return false
+    saveAfterAgents.value = true
+    askAgents()
+    return true
+  }
+
   return {
-    mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, backendSkillId, savedVersion, loadBackendSkill, saveToBackend, usesBackend, backendSaveAction, testedNote, lastSaveKind, draftTested, adviceMode, adviceModeLocked, showAdviceModeSwitch, setAdviceMode, note, blockedReasons, errorHint, isDirty, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestTestTab, requestNewSkillDrawer,
-    startCreate, chooseMethod, updateBlocks, updateBlockDescription, updateBlockTriggerHint, updateBlockCapabilities, updateBlockAssignedAgents, updateBlockKeywords,
-    loadSkill, send, save, updateFiles, notifyTestResult, toSnapshot, hydrate, detachSavedSkill,
+    confirmAgentsBeforeSave,
+    mode, savedSkillId, testSkillId, draft, messages, isRunning, conversationId, backendSkillId, savedVersion, loadBackendSkill, saveToBackend, usesBackend, backendSaveAction, testedNote, lastSaveKind, draftTested, adviceMode, adviceModeLocked, showAdviceModeSwitch, setAdviceMode, note, blockedReasons, errorHint, isDirty, testLocked, canSave, saveEnabled, missingFieldsHint, suggestionChips, gateStage, requestNewSkillDrawer,
+    startCreate, chooseMethod, updateBlocks, updateBlockDescription, updateBlockCapabilities, updateBlockAssignedAgents, updateBlockKeywords, updateBlockOptional,
+    loadSkill, send, save, updateFiles, toSnapshot, hydrate, detachSavedSkill,
   }
 }

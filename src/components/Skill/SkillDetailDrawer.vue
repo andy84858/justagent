@@ -212,7 +212,7 @@
               <div v-if="isPersonal && hasPersonalStatusDetails" class="psv-details">
                 <div v-if="skill.submitMode || (skill.personalStatus === 'reviewing' && skill.targetScope)" class="psv-head">
                   <span v-if="skill.submitMode" class="psv-mode">
-                    {{ skill.submitMode === 'version_update' ? '更新版本' : '建立新技能' }}
+                    {{ skill.submitMode === 'version_update' ? '更新版本' : '建立新技能' }}<template v-if="updateTargetName">：{{ updateTargetName }}</template>
                   </span>
                   <span
                     v-if="skill.personalStatus === 'reviewing' && skill.targetScope"
@@ -249,8 +249,8 @@
                 {{ showMoreSkillInfo ? '收合技能資訊' : '顯示更多技能資訊' }}
               </button>
 
-              <!-- 技能定義：技能指令／覆蓋能力／實際使用情境本來就是同一份
-                   skill.md 依序組出來的內容（見 buildSkillDefinitionMarkdown），
+              <!-- 技能定義：RD 六段（技能描述／步驟／例外或特殊情況／固定輸出格式／
+                   適用範圍／覆蓋能力）依序組出來的內容（見 buildSkillDefinitionMarkdown），
                    直接 render 成 markdown——沒有的段落（例如沒有覆蓋能力）
                    就不會出現，不會有空區塊卡在那邊 -->
               <div v-if="!condensed || showMoreSkillInfo" class="drawer-section">
@@ -457,36 +457,34 @@ const isBackend = computed(() => !!props.skill?.backendVersion)
 const statusText = computed(() => {
   const s = props.skill
   if (!s) return ''
-  if (s.backendVersion) return `${s.isEnabled ? '啟用中 · ' : ''}第 ${s.backendVersion.version} 版 · ${s.backendVersion.tested ? '測過' : '沒測過'}`
+  // 「我的技能」不顯示版本號，只留啟用與測試狀態
+  if (s.backendVersion) return `${s.isEnabled ? '啟用中 · ' : ''}${s.backendVersion.tested ? '測過' : '沒測過'}`
   if (s.isEnabled) return '啟用中'
   return isPersonal.value && s.aiTestPassRate == null ? '尚未測試' : '已停用'
 })
 
 // 技能定義直接 render 成 markdown，跟 skill.md 內容共用同一份組法
-// （buildSkillDefinitionMarkdown），沒有的段落就不會出現
+// （buildSkillDefinitionMarkdown），沒有的段落就不會出現。後端技能的 content（對到
+// instructions）本身就是 RD 給的整份 skill.md 內文，原樣顯示，不再用前端欄位重組
 const skillDefinitionHtml = computed(() => {
   if (!props.skill) return ''
-  const source = buildSkillDefinitionMarkdown(props.skill)
+  const source = props.skill.backendVersion
+    ? props.skill.instructions ?? ''
+    : buildSkillDefinitionMarkdown(props.skill)
   return source ? md.render(source) : ''
 })
 
-// has_library（已核准並發布至 Library）不特別顯示標籤，退回「可使用」——
-// 這只是後台狀態，畫面上不用標出來，personalStatus 本身跟送審層級鎖定
-// 邏輯不受影響
+// 只分「審核中」跟「可使用」：草稿不另外貼標籤（草稿就是「尚未測試／停用中」，
+// 狀態文字已經表達了，跟我的技能卡片一致）；has_library（已核准並發布至 Library）
+// 也退回「可使用」——都是後台狀態，personalStatus 本身跟送審層級鎖定邏輯不受影響
 const personalStatusLabel = computed(() => {
-  const s = props.skill
-  if (!s) return null
-  if (s.personalStatus === 'draft') return '草稿'
-  if (s.personalStatus === 'reviewing') return '審核中'
-  return '可使用'
+  if (!props.skill) return null
+  return props.skill.personalStatus === 'reviewing' ? '審核中' : '可使用'
 })
 
-const personalStatusClass = computed(() => {
-  const s = props.skill?.personalStatus
-  if (s === 'draft') return 'tag--draft'
-  if (s === 'reviewing') return 'tag--reviewing'
-  return 'tag--available'
-})
+const personalStatusClass = computed(() =>
+  props.skill?.personalStatus === 'reviewing' ? 'tag--reviewing' : 'tag--available'
+)
 
 // 狀態標籤本身已經移到標頭，這裡只要判斷「除了狀態以外還有沒有別的
 // 送審脈絡可以顯示」，沒有的話（多數「可使用」的個人技能）整塊都不顯示
@@ -529,6 +527,15 @@ const activeVersion = computed(() => props.skill?.versions?.find(v => v.status =
 const reviewingVersion = computed(() =>
   props.skill?.versions?.find(v => v.status === 'reviewing')
 )
+
+// 送審「更新版本」時使用者選定要更新的 Library 技能（舊資料沒有 updateTargetId 就退回來源技能）
+const updateTargetName = computed(() => {
+  const s = props.skill
+  if (!s || s.submitMode !== 'version_update') return ''
+  const targetId = s.updateTargetId ?? s.derivedFrom
+  if (!targetId) return ''
+  return skillStore.findSkill(targetId)?.name ?? ''
+})
 
 const lineageSource = computed(() => {
   const s = props.skill

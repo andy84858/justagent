@@ -1,0 +1,96 @@
+.ws-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+.ws-pane {
+  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+}
+#ws-nav {
+  width: 220px;
+  flex-shrink: 0;
+  background: #fafafa;
+  border-right: 1px solid var(--line);
+  padding: var(--space-3);
+}
+#ws-center {
+  flex: 1;
+  background: var(--panel);
+  padding: var(--space-4);
+}
+#ws-bag {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--gem-bg);
+  border-left: 1px solid var(--gem-border);
+  padding: var(--space-3);
+}
+.ws-nav-group { margin-bottom: var(--space-2); }
+.ws-nav-npc { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; }
+.ws-nav-toggle { width: 14px; text-align: center; color: var(--muted); }
+.ws-nav-label { font-size: 13px; }
+.ws-nav-label--dim { color: var(--muted); }
+.ws-nav-variant { padding: 4px 0 4px 28px; font-size: 12px; display: flex; justify-content: space-between; cursor: pointer; }
+.ws-nav-variant--disabled { cursor: not-allowed; }
+.ws-nav-create { color: var(--accent); cursor: pointer; }
+.ws-nav-create-npc { margin-top: var(--space-3); color: var(--accent); cursor: pointer; font-size: 13px; }
+.ws-nav-form { margin-top: var(--space-2); display: flex; flex-direction: column; gap: 6px; }
+.ws-nav-form-input { padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; }
+.ws-nav-form-error { color: var(--block); font-size: 11px; }
+.ws-nav-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.ws-npc-header { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-3); }
+.ws-npc-avatar { font-size: 28px; }
+.ws-npc-name { font-size: 18px; font-weight: 600; }
+.ws-npc-field { margin-bottom: var(--space-2); font-size: 13px; }
+.ws-npc-name-input { font-size: 16px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 4px; }
+.ws-model-block { margin-bottom: var(--space-3); padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.ws-param-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; font-size: 12px; }
+.ws-param-row input, .ws-param-row select { width: 100px; padding: 2px 6px; }
+.ws-param-error { color: var(--block); font-size: 11px; margin: 4px 0; }
+.ws-reset-btn { position: fixed; top: 8px; right: 8px; z-index: 10; }
+.ws-variant-titlebar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.ws-variant-titlebar-name { font-size: 16px; font-weight: 600; }
+.ws-variant-titlebar-actions { margin-left: auto; display: flex; gap: 6px; }
+.ws-variant-tabs { display: flex; gap: var(--space-4); border-bottom: 1px solid var(--line); margin-bottom: var(--space-3); }
+.ws-variant-tab { padding-bottom: 6px; font-size: 13px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+.ws-variant-tab--active { color: var(--accent); border-bottom-color: var(--accent); }
+.ws-variant-tab-panel { min-height: 120px; }
+.ws-variant-field { margin-bottom: var(--space-2); font-size: 13px; }
+.ws-variant-field textarea, .ws-variant-field input { width: 100%; }
+.ws-ability-section { margin-bottom: var(--space-3); }
+.ws-equipped-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; font-size: 12px; }
+.ws-equipped-item .btn { margin-left: auto; padding: 2px 8px; height: auto; }
+.ws-gem-chip { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--gem-bg); border: 1px solid var(--gem-border); }
+.ws-bag-item { padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 4px; cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; }
+.ws-bag-item--active { border-color: var(--accent); background: var(--accent-soft); }
+.ws-bag-item--draft { opacity: 0.5; cursor: not-allowed; border-style: dashed; }
+.ws-bag-warning { color: var(--warn); font-size: 11px; margin: 6px 0; }
+.ws-bag-error { color: var(--block); font-size: 11px; margin: 6px 0; }
+.ws-modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 50; }
+.ws-modal-mask.ws-modal--active { display: flex; }
+.ws-modal-box { background: var(--panel); border-radius: 8px; padding: var(--space-4); width: 360px; }
+.ws-history-row { padding: 4px 0; font-size: 13px; display: flex; justify-content: space-between; }
+.ws-shell { position: relative; }
+.ws-bag-item-detail-btn { margin-left: 6px; cursor: pointer; background: none; border: none; color: var(--muted); font-size: 12px; }
+#ws-bag-detail-flyout { display: none; position: absolute; top: 0; bottom: 0; right: 300px; width: 460px; background: var(--panel); border-left: 1px solid var(--line); box-shadow: -4px 0 12px rgba(0,0,0,0.15); z-index: 40; overflow-y: auto; padding: var(--space-4); }
+#ws-bag-detail-flyout.ws-flyout--active { display: block; }
+.ws-center--dim { opacity: 0.4; }
+.ws-flyout-close { float: right; }
+.ws-flyout-header { display: flex; align-items: center; gap: 10px; margin-bottom: var(--space-3); clear: both; }
+.ws-flyout-icon { font-size: 24px; }
+.ws-flyout-type-label { font-size: 11px; color: var(--muted); }
+.ws-flyout-name { font-size: 16px; font-weight: 600; }
+.ws-flyout-level-row { display: flex; gap: 6px; margin-bottom: var(--space-3); flex-wrap: wrap; }
+.ws-flyout-level-btn { padding: 4px 10px; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; font-size: 12px; background: var(--panel); }
+.ws-flyout-level-btn--active { border-color: var(--accent); color: var(--accent); }
+.ws-flyout-level-btn--draft { border-style: dashed; }
+.ws-flyout-field { margin-bottom: var(--space-2); font-size: 13px; }
+.ws-flyout-ref-list { font-size: 12px; color: var(--muted); }
+.ws-flyout-ref-item { padding: 2px 0; }
+.ws-flyout-error { color: var(--block); font-size: 12px; margin: 6px 0; }
+.ws-flyout-actions { margin-top: var(--space-4); display: flex; gap: 8px; }
+.ws-flyout-gem-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; }
+.ws-flyout-field select[data-flyout-add-gem-select] { margin-right: 6px; }
+.ws-bag-header { display: flex; align-items: center; justify-content: space-between; margin-top: 28px; margin-bottom: var(--space-2); }

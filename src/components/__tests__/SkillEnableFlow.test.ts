@@ -25,7 +25,7 @@ describe('SkillEnableFlow', () => {
 
   it('沒過測試閘門：顯示還不能啟用對話框；「取消」resolve cancelled', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能', instructions: 'x', description: 'y', assignedAgents: [] })
     const wrapper = mountFlow()
     const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()
@@ -41,38 +41,95 @@ describe('SkillEnableFlow', () => {
     expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
   })
 
-  it('沒過測試閘門：選「去修改技能內容」resolve revise，不進 Agent 確認步驟', async () => {
+  it('沒過測試閘門：不再提供「去修改技能內容」與「視為通過」，「立即測試」是主要按鈕', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能2', instructions: 'x', description: 'y', assignedAgents: [] })
     const wrapper = mountFlow()
-    const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), [])
+    ;(wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()
 
-    const reviseBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('去修改'))!
-    await reviseBtn.trigger('click')
-    expect(await promise).toEqual({ type: 'revise' })
-    expect(new DOMWrapper(document.body).find('.enable-agent-dialog').exists()).toBe(false)
+    const buttons = new DOMWrapper(document.body).findAll('.enable-gate-dialog button')
+    expect(buttons.some(b => b.text().includes('去修改'))).toBe(false)
+    const testBtn = buttons.find(b => b.text().includes('立即測試'))!
+    expect(testBtn.classes()).toContain('custom-main-btn')
+    expect(buttons.some(b => b.text().includes('視為通過'))).toBe(false)
   })
 
-  it('沒過測試閘門：選「前往測試」resolve goToTest，不進 Agent 確認步驟', async () => {
+  it('沒過測試閘門：選「立即測試」在同一個對話框裡就地測試，原本的選擇按鈕消失；交卷後「繼續啟用」進 Agent 確認', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能2b', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能2b', instructions: 'x', description: 'y', assignedAgents: [] })
     const wrapper = mountFlow()
     const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()
 
-    const goToTestBtn = new DOMWrapper(document.body).findAll('.enable-gate-dialog button').find(b => b.text().includes('前往測試'))!
-    await goToTestBtn.trigger('click')
-    expect(await promise).toEqual({ type: 'goToTest' })
-    expect(new DOMWrapper(document.body).find('.enable-gate-dialog').exists()).toBe(false)
-    expect(new DOMWrapper(document.body).find('.enable-agent-dialog').exists()).toBe(false)
+    const body = new DOMWrapper(document.body)
+    await body.findAll('.enable-gate-dialog button').find(b => b.text().includes('立即測試'))!.trigger('click')
+
+    expect(body.find('.enable-gate-dialog.is-testing').exists()).toBe(true)
+    expect(body.find('.enable-gate-dialog .SkillTestAI').exists()).toBe(true)
+    const labels = body.findAll('.enable-gate-dialog .confirm-actions button').map(b => b.text())
+    expect(labels.some(t => t.includes('立即測試') || t.includes('視為通過'))).toBe(false)
+    // 進了測試就不再給「不測試，直接啟用」：主按鈕是「繼續啟用」，交卷前反灰
+    expect(labels.some(t => t.includes('不測試，直接啟用'))).toBe(false)
+    const mainBtn = () => body.findAll('.enable-gate-dialog .confirm-actions button').at(-1)!
+    expect(mainBtn().text()).toContain('繼續啟用')
+    expect(mainBtn().attributes('disabled')).toBeDefined()
+    const continueBtn = () => body.findAll('.enable-gate-dialog .confirm-actions button').find(b => b.text().includes('繼續啟用'))!
+
+    await store.generateAITestScenarios(id)
+    for (const sc of [...store.aiTestScenarios]) {
+      store.answerAITestScenario(id, sc.id, sc.agentAnswer)
+    }
+    await wrapper.vm.$nextTick()
+    expect(continueBtn().attributes('disabled')).toBeUndefined()
+
+    await continueBtn().trigger('click')
+    expect(body.find('.enable-gate-dialog').exists()).toBe(false)
+    expect(body.find('.enable-agent-dialog').exists()).toBe(true)
+
+    await body.findAll('.enable-agent-dialog .se-agent-chip')[0].trigger('click')
+    await body.findAll('.enable-agent-dialog button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
+    const outcome = await promise
+    expect(outcome.type).toBe('confirmed')
+  })
+
+  it('沒測過：可以按「不測試，直接啟用」略過測試，直接進 Agent 確認並啟用', async () => {
+    const store = useSkillStore()
+    const id = store.createPersonalSkill({ name: '略過測試技能', instructions: 'x', description: 'y', assignedAgents: ['工程助理'] })
+    const wrapper = mountFlow()
+    const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), ['工程助理'])
+    await wrapper.vm.$nextTick()
+
+    const body = new DOMWrapper(document.body)
+    expect(body.find('.enable-gate-dialog').text()).toContain('也可以不測試')
+    await body.findAll('.enable-gate-dialog button').find(b => b.text().includes('不測試，直接啟用'))!.trigger('click')
+    expect(body.find('.enable-gate-dialog').exists()).toBe(false)
+    expect(body.find('.enable-agent-dialog').exists()).toBe(true)
+
+    await body.findAll('.enable-agent-dialog button').find(b => b.text().includes('確認並啟用'))!.trigger('click')
+    const outcome = await promise
+    expect(outcome).toEqual({ type: 'confirmed', agents: ['工程助理'] })
+  })
+
+  it('嵌在啟用對話框裡就地測試：不顯示「答題 Agent」字樣', async () => {
+    const store = useSkillStore()
+    const id = store.createPersonalSkill({ name: '嵌入測試技能', instructions: 'x', description: 'y', assignedAgents: ['工程助理'] })
+    const wrapper = mountFlow()
+    ;(wrapper.vm as any).requestEnable(store.findSkill(id), [])
+    await wrapper.vm.$nextTick()
+    const body = new DOMWrapper(document.body)
+    await body.findAll('.enable-gate-dialog button').find(b => b.text().includes('立即測試'))!.trigger('click')
+    await store.generateAITestScenarios(id)
+    await wrapper.vm.$nextTick()
+    expect(body.find('.enable-gate-dialog .SkillTestAI').exists()).toBe(true)
+    expect(body.find('.enable-gate-dialog').text()).not.toContain('答題 Agent')
   })
 
   it('測過但沒全對：不擋，直接進 Agent 確認步驟，預填 existingAgents', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能3', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能3', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
-    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.expectedTrigger) // 全部不一致
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, !sc.agentAnswer) // 全部不一致
     expect(store.findSkill(id)!.aiTestPassRate).toBe(0)
     const wrapper = mountFlow()
     ;(wrapper.vm as any).requestEnable(store.findSkill(id), ['客服中心助理'])
@@ -87,9 +144,9 @@ describe('SkillEnableFlow', () => {
 
   it('已經 100% 通過：直接進 Agent 確認步驟，不顯示還不能啟用對話框', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '已測技能', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
-    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     const wrapper = mountFlow()
     ;(wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()
@@ -100,9 +157,9 @@ describe('SkillEnableFlow', () => {
 
   it('Agent 確認步驟：勾選數為 0 時「確認並啟用」disabled；勾 1 個以上可以送出並 resolve confirmed', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能4', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能4', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
-    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     const wrapper = mountFlow()
     const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()
@@ -120,9 +177,9 @@ describe('SkillEnableFlow', () => {
 
   it('Agent 確認步驟按「取消」：resolve cancelled', async () => {
     const store = useSkillStore()
-    const id = store.createPersonalSkill({ name: '待測技能6', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const id = store.createPersonalSkill({ name: '待測技能6', instructions: 'x', description: 'y', assignedAgents: [] })
     await store.generateAITestScenarios(id)
-    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.expectedTrigger)
+    for (const sc of [...store.aiTestScenarios]) store.answerAITestScenario(id, sc.id, sc.agentAnswer)
     const wrapper = mountFlow()
     const promise = (wrapper.vm as any).requestEnable(store.findSkill(id), [])
     await wrapper.vm.$nextTick()
@@ -132,8 +189,8 @@ describe('SkillEnableFlow', () => {
 
   it('requestEnable 被再次呼叫時，前一次還沒 resolve 的 promise 會被 resolve 成 cancelled', async () => {
     const store = useSkillStore()
-    const idA = store.createPersonalSkill({ name: '技能A', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
-    const idB = store.createPersonalSkill({ name: '技能B', instructions: 'x', triggerHint: 'y', assignedAgents: [] })
+    const idA = store.createPersonalSkill({ name: '技能A', instructions: 'x', description: 'y', assignedAgents: [] })
+    const idB = store.createPersonalSkill({ name: '技能B', instructions: 'x', description: 'y', assignedAgents: [] })
     const wrapper = mountFlow()
     const firstPromise = (wrapper.vm as any).requestEnable(store.findSkill(idA), [])
     await wrapper.vm.$nextTick()

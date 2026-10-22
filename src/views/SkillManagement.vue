@@ -434,19 +434,18 @@
             <div class="dsd-options">
               <button
                 :class="['dsd-option', submitMode === 'version_update' && 'is-selected']"
-                :disabled="!submitConfirmSkill.derivedFrom"
-                @click="submitMode = 'version_update'"
+                @click="selectVersionUpdate"
               >
                 <i class="material-symbols-outlined">update</i>
                 <div class="dsd-option-body">
                   <div class="dsd-option-title">更新版本</div>
                   <div class="dsd-option-desc">
-                    提交為原技能的新版本，審核通過後更新現有技能
-                    <span v-if="!submitConfirmSkill.derivedFrom">（此技能無來源技能）</span>
+                    提交為現有技能的新版本，審核通過後更新所選技能
                   </div>
                 </div>
                 <i v-if="submitMode === 'version_update'" class="material-symbols-outlined dsd-check">check_circle</i>
               </button>
+
 
               <button
                 :class="['dsd-option', submitMode === 'new_skill' && 'is-selected']"
@@ -487,6 +486,19 @@
                   <option v-for="t in knownTeamNames" :key="t" :value="t">{{ t }}</option>
                 </select>
               </div>
+              <!-- 更新版本要讓使用者自己選更新哪一顆 Library 技能：選項跟著上面的
+                   發布層級（團隊層級再跟著團隊）走，來源技能在範圍內就預設帶入 -->
+              <div v-if="submitMode === 'version_update'" class="dsd-team">
+                <label class="dsd-note-label">要更新的技能</label>
+                <select v-model="submitUpdateTargetId" class="dsd-team-select">
+                  <option value="" disabled>
+                    {{ updateTargetOptions.length ? '請選擇要更新的技能' : '此層級沒有可更新的技能' }}
+                  </option>
+                  <option v-for="s in updateTargetOptions" :key="s.id" :value="s.id">
+                    {{ s.name }}{{ s.id === submitConfirmSkill.derivedFrom ? '（來源技能）' : '' }}
+                  </option>
+                </select>
+              </div>
             </div>
 
             <div class="dsd-note">
@@ -497,7 +509,7 @@
                   class="custom-input"
                   maxlength="40"
                   placeholder="簡短描述這個版本，例如「VIP 退貨優惠更新」"
-                  @keydown.enter="submitVersionName.trim() && confirmSubmitSkill()"
+                  @keydown.enter="canConfirmSubmit && confirmSubmitSkill()"
                 />
                 <button
                   type="button"
@@ -528,7 +540,7 @@
               <button class="custom-btn" @click="submitConfirmSkill = null">取消</button>
               <button
                 class="custom-btn custom-main-btn"
-                :disabled="!submitVersionName.trim()"
+                :disabled="!canConfirmSubmit"
                 @click="confirmSubmitSkill"
               >
                 <i class="material-symbols-outlined">send</i>送出審核
@@ -666,7 +678,6 @@ function toTileSkill(v: BackendSkillVersion): Skill {
     creationMethod: 'ai_assisted',
     version: `第 ${v.version} 版`,
     instructions: v.content,      // 後端的 content 對到前端的 instructions
-    triggerHint: v.description,   // 後端的 description（何時用）對到 triggerHint
     isEnabled: backendStore.activatedIds.includes(v.skill_id),
     usageCount: 0,
     testPassRate: 0,
@@ -735,7 +746,40 @@ const submitTeamLocked = ref(false)
 const submitTeamName = ref('')
 const submitNote = ref('')
 const submitVersionName = ref('')
+const submitUpdateTargetId = ref('')
 const suggestingVersionName = ref(false)
+
+// 「更新版本」可選的對象跟著預計發布層級走：企業層級列系統＋企業技能，
+// 團隊層級只列所選團隊的團隊技能；來源技能在範圍內就排第一個
+const updateTargetOptions = computed<Skill[]>(() => {
+  const sourceId = submitConfirmSkill.value?.derivedFrom
+  const list = store.flatSkills.filter(s =>
+    submitScope.value === 'team'
+      ? s.scope === 'team' && s.teamName === submitTeamName.value
+      : s.scope === 'system' || s.scope === 'enterprise'
+  )
+  return list.sort((a, b) => Number(b.id === sourceId) - Number(a.id === sourceId))
+})
+
+// 換層級／換團隊後原本選的技能可能不在範圍內了：清掉，來源技能在新範圍內就改帶它
+watch(updateTargetOptions, options => {
+  if (options.some(s => s.id === submitUpdateTargetId.value)) return
+  const sourceId = submitConfirmSkill.value?.derivedFrom
+  submitUpdateTargetId.value = options.some(s => s.id === sourceId) ? sourceId! : ''
+})
+
+const canConfirmSubmit = computed(() =>
+  !!submitVersionName.value.trim() &&
+  (submitMode.value !== 'version_update' || !!submitUpdateTargetId.value)
+)
+
+function selectVersionUpdate() {
+  submitMode.value = 'version_update'
+  if (!submitUpdateTargetId.value) {
+    const sourceId = submitConfirmSkill.value?.derivedFrom
+    if (updateTargetOptions.value.some(s => s.id === sourceId)) submitUpdateTargetId.value = sourceId!
+  }
+}
 
 // 送審 dialog 的團隊選單：彙整目前 Library 團隊技能與其他個人技能已填寫過的團隊名稱
 const knownTeamNames = computed(() => {
@@ -895,6 +939,7 @@ function handlePersonalSubmit(skill: Skill) {
   submitTeamLocked.value = teamAlreadyPublished
   submitScope.value = teamAlreadyPublished ? 'enterprise' : (skill.targetScope ?? 'enterprise')
   submitTeamName.value = skill.targetTeamName ?? knownTeamNames.value[0] ?? ''
+  submitUpdateTargetId.value = updateTargetOptions.value.some(s => s.id === skill.derivedFrom) ? skill.derivedFrom! : ''
   submitNote.value = ''
   submitVersionName.value = ''
   // 開啟 dialog 就先給一個 AI 建議草稿（此時說明通常還沒填，用泛用建議打底），
@@ -917,14 +962,15 @@ async function suggestVersionNameNow() {
 }
 
 function confirmSubmitSkill() {
-  if (!submitConfirmSkill.value || !submitVersionName.value.trim()) return
+  if (!submitConfirmSkill.value || !canConfirmSubmit.value) return
   store.submitPersonalSkill(
     submitConfirmSkill.value.id,
     submitMode.value,
     submitNote.value,
     submitVersionName.value.trim(),
     submitScope.value,
-    submitScope.value === 'team' ? submitTeamName.value : undefined
+    submitScope.value === 'team' ? submitTeamName.value : undefined,
+    submitMode.value === 'version_update' ? submitUpdateTargetId.value : undefined
   )
   submitConfirmSkill.value = null
   submitNote.value = ''
@@ -965,14 +1011,6 @@ async function handleToggle(skill: Skill) {
   }
   const outcome = await enableFlowRef.value!.requestEnable(skill, skill.assignedAgents ?? [])
   if (outcome.type === 'cancelled') return
-  if (outcome.type === 'revise') {
-    router.push({ query: { skillId: skill.id } })
-    return
-  }
-  if (outcome.type === 'goToTest') {
-    router.push({ query: { skillId: skill.id, tab: 'test' } })
-    return
-  }
   store.setAssignedAgents(skill.id, outcome.agents)
   store.toggleSkill(skill.id)
 }

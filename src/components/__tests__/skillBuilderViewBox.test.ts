@@ -70,7 +70,7 @@ describe('skillBuilderViewBox', () => {
 
   it('預填 block：hydrate 後預覽顯示名稱；有 origin 時對話 tab 顯示脈絡條', async () => {
     const { wrapper } = mountBlock({
-      prefill: { name: '產品銷售報告整理', instructions: '1. 查詢\n2. 套用' },
+      prefill: { name: '產品銷售報告整理', instructions: '1. 查詢\n2. 套用', steps: ['查詢', '套用'] },
       openingMessage: '來自對話的開場',
       origin: { conversationId: 'conv4', reason: '查詢銷售資料＋套用部門報告規範' },
     })
@@ -114,8 +114,9 @@ describe('skillBuilderViewBox', () => {
     }
   })
 
-  it('儲存：建立個人技能、toast、自動切到測試 tab；「在 AI 賦能開啟」儲存前 disabled、儲存後導頁', async () => {
-    const { wrapper, block, router } = mountBlock({ prefill: { name: '查庫存', instructions: '1. 查' } })
+  it('儲存：新建技能先切到對話分頁確認可調用 Agent，回答後才建立個人技能；「在 AI 賦能開啟」儲存前 disabled、儲存後導頁', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { wrapper, block, router } = mountBlock({ prefill: { name: '查庫存', instructions: '1. 查', steps: ['查'] } })
     const skillStore = useSkillStore()
     const before = skillStore.myPersonalSkills.length
     const openBtn = wrapper.find('.skb-open-studio')
@@ -124,8 +125,16 @@ describe('skillBuilderViewBox', () => {
     await wrapper.findAll('.skb-tab-btn')[1].trigger('click')
     await wrapper.find('.ssp-save-btn').trigger('click')
     await flushPromises()
+    expect(skillStore.myPersonalSkills.length).toBe(before) // 還沒存，先問 Agent
+    expect(block.data.data.activeTab).toBe('chat')
+    const input = wrapper.find('.SkillStudioChat input.custom-input')
+    await input.setValue('工程助理')
+    await input.trigger('keydown.enter')
+    await vi.advanceTimersByTimeAsync(800)
+    await flushPromises()
+    vi.useRealTimers()
     expect(skillStore.myPersonalSkills.length).toBe(before + 1)
-    expect(block.data.data.activeTab).toBe('test')
+    expect(skillStore.myPersonalSkills[0].assignedAgents).toEqual(['工程助理'])
     expect(block.data.data.snapshot.savedSkillId).toBe(skillStore.myPersonalSkills[0].id)
 
     const push = vi.spyOn(router, 'push')
@@ -137,7 +146,7 @@ describe('skillBuilderViewBox', () => {
   it('snapshot 指到的技能已被刪除：顯示提示、退回建立模式', async () => {
     const skillStore = useSkillStore()
     const store = useAiviewerStore()
-    const id = store.addSkillBuilderBlock({ prefill: { name: '查庫存', instructions: '1. 查' } })
+    const id = store.addSkillBuilderBlock({ prefill: { name: '查庫存', instructions: '1. 查', steps: ['查'] } })
     const block = store.aiViewerBlocks.find((b: any) => b.id === id)
     block.data.data.snapshot.mode = 'edit'
     block.data.data.snapshot.savedSkillId = 'personal-gone'
@@ -178,7 +187,7 @@ describe('skillBuilderViewBox', () => {
     expect(block.data.data.snapshot.draft.sectionIds).toEqual(['promo_kpi', 'ch_kpi'])
     expect(block.blockName).toBe('行銷週報')
 
-    // 回「基本設定」填其餘必填欄位：說明手打，觸發情境按「AI 建議」開出 3 句候選選一句，
+    // 回「基本設定」填其餘必填欄位：說明手打，
     // 關鍵字手打，覆蓋能力用「AI 建議」套用依章節算出的建議（欄位目前是空的，直接套用
     // 不會跳確認對話框），指派 Agent 至少勾一個
     await stepTabs[0].trigger('click')
@@ -186,10 +195,7 @@ describe('skillBuilderViewBox', () => {
     await wrapper.find('.sce-tag-input').trigger('keydown.enter') // 關鍵字：AI 建議要先有關鍵字才給產生
     await wrapper.find('.sbbf-textarea').setValue('每週一產出的行銷週報')
     const aiBtns = wrapper.findAll('.sbbf-ai-btn')
-    await aiBtns[1].trigger('click') // 觸發情境：開出 3 句候選
-    await flushPromises()
-    await wrapper.findAll('.sbbf-suggestion-chip')[0].trigger('click') // 選第一句套用
-    await aiBtns[2].trigger('click') // 覆蓋能力
+    await aiBtns[1].trigger('click') // 覆蓋能力
     await wrapper.find('.se-agent-chip').trigger('click')
     await flushPromises()
 
@@ -220,7 +226,7 @@ describe('skillBuilderViewBox', () => {
   })
 
   it('conv4 預填 block（prefill）直接是對話 tab，沒有方式選擇畫面', () => {
-    const { wrapper } = mountBlock({ prefill: { name: 'x', instructions: '1. a' }, openingMessage: '開場' })
+    const { wrapper } = mountBlock({ prefill: { name: 'x', instructions: '1. a', steps: ['a'] }, openingMessage: '開場' })
     expect(wrapper.find('.SkillMethodChooser').exists()).toBe(false)
     expect(wrapper.find('.SkillStudioChat').exists()).toBe(true)
   })

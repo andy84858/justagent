@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="skill-admin/tokens.css">
   <link rel="stylesheet" href="skill-admin/layout.css">
   <link rel="stylesheet" href="skill-admin/components.css">
+  <link rel="stylesheet" href="agent-setup-demo/css/tokens.css">
+  <link rel="stylesheet" href="skill-admin/agent-setup-embed.css">
 </head>
 <body>
   <aside class="sidebar">
@@ -594,87 +596,17 @@ This product is broken, I need help
       </div>
     </div>
 
-    <!-- ========== AGENT 配置 ========== -->
+    <!-- ========== AGENT 配置（Agent 基礎設定：Agent／人物卡工作區） ========== -->
     <div class="page" id="page-agents">
       <div class="page-header"><h2>Agent 配置</h2></div>
       <div class="page-content">
-        <div class="search-bar">
-          <label>Agent名稱</label><input type="text" placeholder="輸入名稱">
-          <label>狀態</label><select><option value="">ALL</option><option>運行中</option><option>停止</option></select>
-          <button class="btn btn-primary">查詢</button><button class="btn btn-default">清除</button>
-        </div>
-        <div class="table-wrap">
-          <div class="table-toolbar"><div class="left"><span style="font-size:12px;color:var(--gray-400);">共 3 筆</span></div><div class="right"><button class="btn btn-primary btn-sm" onclick="openModal('modal-create-agent')">+ 新增 Agent</button></div></div>
-          <table>
-            <thead><tr><th>Agent 名稱</th><th>啟用 Skills</th><th>綁定 Tools/MCP</th><th>狀態</th><th>最後活躍</th><th class="center">動作</th></tr></thead>
-            <tbody>
-              <tr>
-                <td><strong>客服機器人</strong><br><span style="font-size:11px;color:var(--gray-400);">處理客戶線上諮詢</span></td>
-                <td>
-                  <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                    <span class="tag tag-blue">通用客服答覆</span>
-                    <span class="tag tag-blue">會議摘要</span>
-                    <span class="tag tag-indigo">客服答覆 (退貨版)</span>
-                    <span class="tag tag-blue">文件摘要生成</span>
-                    <span class="disabled-chip" title="此 Skill 已停用">情緒分析</span>
-                    <span class="disabled-note">⚠ 停用</span>
-                  </div>
-                </td>
-                <td>
-                  <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                    <span class="tag tag-cyan">knowledge-base-search</span>
-                    <span class="tag tag-purple">sentiment-analysis/analyze</span>
-                  </div>
-                </td>
-                <td><span class="tag tag-green">✓ 運行中</span></td>
-                <td>剛剛</td>
-                <td class="center"><div style="display:flex;gap:6px;justify-content:center;"><button class="btn btn-default btn-sm" onclick="openModal('modal-create-agent')">編輯</button><button class="btn btn-default btn-sm">複製連結</button></div></td>
-              </tr>
-              <tr>
-                <td><strong>內部助理</strong><br><span style="font-size:11px;color:var(--gray-400);">企業內部員工助理</span></td>
-                <td>
-                  <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                    <span class="tag tag-blue">文件摘要生成</span>
-                    <span class="tag tag-blue">數據可視化</span>
-                    <span class="tag tag-indigo">內部知識庫搜尋</span>
-                    <span class="tag tag-blue">會議摘要</span>
-                    <span class="tag tag-indigo">ERP 庫存查詢</span>
-                    <span class="tag tag-blue">法規查詢</span>
-                    <span class="tag tag-teal">工程會議紀錄</span>
-                    <span class="tag tag-indigo">競品分析</span>
-                  </div>
-                </td>
-                <td>
-                  <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                    <span class="tag tag-cyan">knowledge-base-search</span>
-                    <span class="tag tag-purple">erp-server/query_inventory</span>
-                  </div>
-                </td>
-                <td><span class="tag tag-green">✓ 運行中</span></td>
-                <td>2 分鐘前</td>
-                <td class="center"><div style="display:flex;gap:6px;justify-content:center;"><button class="btn btn-default btn-sm" onclick="openModal('modal-create-agent')">編輯</button><button class="btn btn-default btn-sm">複製連結</button></div></td>
-              </tr>
-              <tr>
-                <td><strong>銷售助手</strong><br><span style="font-size:11px;color:var(--gray-400);">協助業務員查詢客戶資料</span></td>
-                <td>
-                  <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                    <span class="tag tag-indigo">競品分析</span>
-                    <span class="tag tag-indigo">ERP 庫存查詢</span>
-                    <span class="tag tag-blue">數據可視化</span>
-                    <span class="tag tag-blue">通用客服答覆</span>
-                  </div>
-                </td>
-                <td>
-                  <div style="display:flex;flex-wrap:wrap;gap:4px;">
-                    <span class="tag tag-purple">erp-server/query_inventory</span>
-                  </div>
-                </td>
-                <td><span class="tag tag-green">✓ 運行中</span></td>
-                <td>15 分鐘前</td>
-                <td class="center"><div style="display:flex;gap:6px;justify-content:center;"><button class="btn btn-default btn-sm" onclick="openModal('modal-create-agent')">編輯</button><button class="btn btn-default btn-sm">複製連結</button></div></td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="ws-embed-root">
+          <div id="app" class="ws-shell">
+            <div id="ws-nav" class="ws-pane"></div>
+            <div id="ws-center" class="ws-pane"></div>
+            <div id="ws-bag" class="ws-pane"></div>
+            <div id="ws-bag-detail-flyout"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1129,6 +1061,24 @@ This product is broken, I need help
     </div>
   </div>
 
+  <!-- Agent 基礎設定（agent-setup-demo）的發布／公開記錄彈窗，與其 index.html 放置方式一致 -->
+  <div class="ws-modal-mask" id="modal-publish-variant">
+    <div class="ws-modal-box">
+      <div id="modal-publish-variant-body"></div>
+    </div>
+  </div>
+  <div class="ws-modal-mask" id="modal-variant-history">
+    <div class="ws-modal-box">
+      <div id="modal-variant-history-body"></div>
+      <div class="ws-variant-titlebar-actions" style="margin-top:12px;">
+        <button class="btn" data-variant-history-close onclick="wsCloseVariantHistoryModal()">關閉</button>
+      </div>
+    </div>
+  </div>
+
   <script src="skill-admin/app.js"></script>
+  <script src="agent-setup-demo/js/data.js"></script>
+  <script src="agent-setup-demo/js/workspace.js"></script>
+  <script src="agent-setup-demo/js/app.js"></script>
 </body>
 </html>

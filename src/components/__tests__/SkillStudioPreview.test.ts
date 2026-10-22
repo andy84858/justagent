@@ -33,27 +33,42 @@ function mountPreview(over: Partial<Record<string, unknown>> = {}, beforeMount?:
 }
 
 describe('SkillStudioPreview', () => {
-  it('空白草稿：六個區塊標籤都在，並顯示各自的空狀態文案與「未儲存草稿」badge', () => {
+  it('空白草稿：五個區塊標籤都在，並顯示各自的空狀態文案與「未儲存草稿」badge', () => {
     const w = mountPreview()
     const text = w.text()
     expect(text).toContain('尚未命名的技能')
     expect(text).toContain('跟 Agent 描述這個技能要做什麼')
-    expect(text).toContain('尚未設定觸發條件')
-    expect(text).toContain('尚未撰寫技能指令')
+    expect(text).not.toContain('觸發條件')
+    expect(text).toContain('尚未撰寫技能內文')
     expect(text).toContain('尚未拆解覆蓋能力項目')
     expect(w.find('.ssp-status-badge').text()).toBe('未儲存草稿')
-    expect(w.findAll('.ssp-section-label').length).toBe(5) // 說明／觸發條件／技能指令／覆蓋能力／附加檔案
+    expect(text).toContain('尚未指派 Agent')
+    // 技能描述／技能內文／步驟／例外或特殊情況／固定輸出格式／適用範圍／覆蓋能力／指派 Agent／附加檔案
+    expect(w.findAll('.ssp-section-label').length).toBe(9)
+    expect(w.findAll('.ssp-section-label')[0].text()).toBe('技能描述')
+    expect(text).toContain('尚未列出步驟（必填）')
   })
 
-  it('hideFiles：不顯示「附加檔案」區塊，只剩四個區塊標籤', () => {
+  it('hideFiles：不顯示「附加檔案」區塊，只剩八個區塊標籤', () => {
     const w = mountPreview({ hideFiles: true })
     expect(w.text()).not.toContain('附加檔案')
-    expect(w.findAll('.ssp-section-label').length).toBe(4)
+    expect(w.findAll('.ssp-section-label').length).toBe(8)
   })
 
-  it('有內容時渲染名稱、觸發、markdown 指令與能力 chip', () => {
+  it('RD 四段：有內容時步驟編號、例外條列；後端模式不顯示這四段', () => {
+    const draft = { ...emptyDraft(), name: 'x', method: 'chat' as const, steps: ['查詢', '彙總'], exceptions: ['查無資料'], outputFormat: '表格', applicableScope: '倉庫' }
+    const w = mountPreview({ draft })
+    expect(w.findAll('ol.ssp-text li').map(li => li.text())).toEqual(['查詢', '彙總'])
+    expect(w.find('ul.ssp-text li').text()).toBe('查無資料')
+    expect(w.text()).toContain('表格')
+    expect(w.text()).toContain('倉庫')
+    const backend = mountPreview({ draft, backendTest: true })
+    expect(backend.text()).not.toContain('例外或特殊情況')
+  })
+
+  it('有內容時渲染名稱、技能描述、markdown 指令與能力 chip', () => {
     const w = mountPreview({
-      draft: { ...emptyDraft(), name: '查庫存', triggerHint: '提到庫存時', instructions: '1. **釐清**\n2. 查詢', capabilities: ['能力A'] },
+      draft: { ...emptyDraft(), name: '查庫存', description: '提到庫存時', instructions: '1. **釐清**\n2. 查詢', capabilities: ['能力A'] },
     })
     expect(w.find('.ssp-title').text()).toBe('查庫存')
     expect(w.text()).toContain('提到庫存時')
@@ -144,7 +159,7 @@ describe('SkillStudioPreview', () => {
       () => {
         const store = useSkillStore()
         store.aiTestScenariosSkillId = 'draft-xyz'
-        store.aiTestScenariosSnapshot = JSON.stringify({ name: '舊名稱', triggerHint: '', capabilities: [] })
+        store.aiTestScenariosSnapshot = JSON.stringify({ name: '舊名稱', description: '', capabilities: [] })
         store.aiTestReport = { total: 3, correct: 3, byTag: { normal: { total: 1, correct: 1 }, boundary: { total: 1, correct: 1 }, trigger_edge: { total: 1, correct: 1 } }, summary: '' }
       }
     )
@@ -157,7 +172,7 @@ describe('SkillStudioPreview', () => {
       () => {
         const store = useSkillStore()
         store.aiTestScenariosSkillId = 'draft-xyz'
-        store.aiTestScenariosSnapshot = JSON.stringify({ name: '同名稱', triggerHint: '', capabilities: [] })
+        store.aiTestScenariosSnapshot = JSON.stringify({ name: '同名稱', description: '', capabilities: [] })
         store.aiTestReport = { total: 3, correct: 3, byTag: { normal: { total: 1, correct: 1 }, boundary: { total: 1, correct: 1 }, trigger_edge: { total: 1, correct: 1 } }, summary: '' }
       }
     )
@@ -199,7 +214,7 @@ describe('SkillStudioPreview', () => {
     const filled = mountPreview({
       draft: {
         ...emptyDraft(), method: 'blocks', name: '行銷週報', instructions: '1. a',
-        description: 'd', triggerHint: 't', capabilities: ['x'], assignedAgents: ['通用助理'],
+        description: 'd', capabilities: ['x'], assignedAgents: ['通用助理'],
       },
       canSave: true,
     })

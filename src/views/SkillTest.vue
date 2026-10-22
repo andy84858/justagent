@@ -7,13 +7,19 @@
           <AppBreadcrumb />
           <div class="banner-title">技能測試沙盒</div>
         </div>
+        <div class="banner-right">
+          <SkillTestVersionSwitch />
+          <span class="banner-hint">
+            <i class="material-symbols-outlined">info</i>可在下方模擬 User 與 Agent 的真實對話，觀察技能觸發行為。
+          </span>
+        </div>
       </div>
 
       <div class="skill-test-layout">
 
         <!-- 左側：技能選擇 -->
         <div class="test-sidebar">
-          <div class="sidebar-head">測試的技能</div>
+          <div class="sidebar-head">技能清單</div>
           <div class="sidebar-list lively-stagger">
 
             <template v-if="personalSkills.length">
@@ -26,30 +32,25 @@
                 :class="['sidebar-item', { 'is-active': store.selectedSkillId === skill.id }]"
                 @click="store.setSelectedSkill(skill.id)"
               >
+                <!-- 個人技能沒有版本概念，不顯示版號 -->
                 <span class="si-name">{{ skill.name }}</span>
-                <SkillVersionPicker
-                  :versions="store.getVersionOptions(skill.id)"
-                  :model-value="displayVersionName(skill)"
-                  @update:model-value="v => store.setSelectedSkill(skill.id, v)"
-                />
               </div>
             </template>
 
             <template v-if="librarySubgroups.some(g => g.skills.length)">
-              <div class="section-badge-row">
-                <span class="section-badge section-badge--library">Library 技能</span>
-              </div>
+              <div class="section-label">Library 技能</div>
 
               <template v-for="group in librarySubgroups" :key="group.key">
                 <template v-if="group.skills.length">
-                  <div :class="['subgroup-label', `subgroup-label--${group.key}`]">{{ group.label }}</div>
+                  <div class="section-badge-row">
+                    <span :class="['subgroup-label', `subgroup-label--${group.key}`]">{{ group.label }}</span>
+                  </div>
                   <div
                     v-for="skill in group.skills"
                     :key="skill.id"
                     :class="['sidebar-item', { 'is-active': store.selectedSkillId === skill.id }]"
                     @click="store.setSelectedSkill(skill.id)"
                   >
-                    <span :class="['skill-dot', `dot--${group.key}`]"></span>
                     <span class="si-name">{{ skill.name }}</span>
                     <span v-if="skill.scope === 'system'" class="version-inline">{{ displayVersionName(skill) }}</span>
                     <SkillVersionPicker
@@ -70,17 +71,14 @@
         <div class="test-panel">
           <template v-if="selectedSkill">
             <div class="test-panel-head">
-              <div class="panel-title">
-                {{ selectedSkill.name }}
-                <span class="skill-tag tag--version">{{ displayVersionName(selectedSkill) }}</span>
-              </div>
+              <div class="panel-title">{{ selectedSkill.name }}</div>
               <div class="test-panel-head-actions">
                 <button
-                  v-if="selectedSkill.zone === 'personal'"
-                  class="custom-btn ask-studio-btn"
-                  @click="askAboutSkill(selectedSkill.id)"
+                  v-if="!selectedSkill.composition"
+                  class="custom-btn reset-chat-btn"
+                  @click="chatRef?.resetAll()"
                 >
-                  <i class="material-symbols-outlined">auto_awesome</i>詢問技能助理
+                  <i class="material-symbols-outlined">refresh</i>重置對話
                 </button>
                 <button class="custom-btn info-toggle-btn" @click="isContextOpen = true">
                   <i class="material-symbols-outlined">info</i>技能資訊
@@ -91,7 +89,7 @@
             <!-- 積木組裝的技能：對話模擬在這裡沒有意義（見 SkillTestChat 的既有行為），
                  改用跟 SkillStudio 工作區一致的是非題 AI 快速測試 -->
             <SkillTestAI v-if="selectedSkill.composition" :skill-id="selectedSkill.id" />
-            <SkillTestChat v-else :skill-id="selectedSkill.id" />
+            <SkillTestChat v-else ref="chatRef" :skill-id="selectedSkill.id" />
           </template>
 
           <div v-else class="panel-empty">
@@ -118,14 +116,10 @@
             </div>
             <div class="st-drawer-body">
               <div v-if="selectedSkill.instructions" class="context-card">
-                <div class="context-card-title">技能指令</div>
+                <div class="context-card-title">技能內文</div>
                 <p class="context-instructions">{{ selectedSkill.instructions }}</p>
               </div>
 
-              <div v-if="selectedSkill.triggerHint" class="context-card">
-                <div class="context-card-title">觸發時機</div>
-                <p class="context-instructions">{{ selectedSkill.triggerHint }}</p>
-              </div>
             </div>
           </div>
         </div>
@@ -136,8 +130,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import AppBreadcrumb from '@/components/AppBreadcrumb.vue'
+import SkillTestVersionSwitch from '@/components/Skill/SkillTestVersionSwitch.vue'
 import SkillTestChat from '@/components/Skill/SkillTestChat.vue'
 import SkillTestAI from '@/components/Skill/SkillTestAI.vue'
 import SkillVersionPicker from '@/components/Skill/SkillVersionPicker.vue'
@@ -145,9 +140,10 @@ import { useSkillStore } from '@/stores/skillStore'
 import type { Skill } from '@/stores/skillStore'
 
 const route = useRoute()
-const router = useRouter()
 const store = useSkillStore()
 const isContextOpen = ref(false)
+// 「重置對話」按鈕放在面板標題列，實際的重置邏輯（含中斷測試案例自動串跑）留在 SkillTestChat
+const chatRef = ref<InstanceType<typeof SkillTestChat> | null>(null)
 
 const selectedSkill = computed(() =>
   store.selectedSkillId ? store.findSkill(store.selectedSkillId) ?? null : null
@@ -161,12 +157,6 @@ const librarySubgroups = computed(() => [
   { key: 'enterprise', label: '企業擴充', skills: enabledLibrarySkills.value.filter(s => s.scope === 'enterprise') },
   { key: 'team', label: '團隊擴充', skills: enabledLibrarySkills.value.filter(s => s.scope === 'team') },
 ])
-
-// 帶著 intent=ask 開技能管理頁的抽屜——一樣是編輯模式（loadSkill），只是開場白
-// 換一句不預設「要改」的問句，見 useSkillStudioConversation.ts 的 loadSkill(id, 'ask')
-function askAboutSkill(skillId: string) {
-  router.push({ path: '/view/Skills', query: { skillId, intent: 'ask' } })
-}
 
 function displayVersionName(skill: Skill): string {
   if (store.selectedSkillId === skill.id && store.selectedVersionName) {
